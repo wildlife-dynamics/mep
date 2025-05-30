@@ -1,0 +1,51 @@
+[project]
+name = "mep"
+channels = [
+    'https://repo.prefix.dev/ecoscope-workflows/',
+    'https://repo.prefix.dev/ecoscope-workflows-custom/',
+    "file:///tmp/ecoscope-workflows-custom/release/artifacts/",
+    'conda-forge',
+]
+platforms = ['linux-64', 'osx-arm64']
+
+[dependencies]
+curl = "*"
+rattler-build = "*"
+yq = "*"
+hatch = "*"
+
+[dependencies.ecoscope-workflows-core]
+channel = 'https://repo.prefix.dev/ecoscope-workflows/'
+version = '0.2.4.*'
+
+[feature.compile.dependencies]
+
+[feature.compile.dependencies.ecoscope-workflows-ext-mep]
+version = "*"
+channel = "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
+
+[environments]
+compile = { features = [
+    "compile",
+], solve-group = "compile", no-default-feature = true }
+
+[tasks]
+[tasks.build-release]
+cmd = './publish/build.sh'
+
+[tasks.pytest-310]
+cmd = './dev/pytest-task.sh 310'
+
+[tasks.pytest-311]
+cmd = './dev/pytest-task.sh 311'
+
+[tasks.pytest-312]
+cmd = './dev/pytest-task.sh 312'
+
+[tasks.compile-mep-monthly-report]
+cmd = './dev/recompile.sh mep-monthly-report --install'
+depends-on = ["build-release"]
+
+[tasks.recompile-mep-monthly-report]
+cmd = './dev/recompile.sh mep-monthly-report --update'
+depends-on = ["build-release"]

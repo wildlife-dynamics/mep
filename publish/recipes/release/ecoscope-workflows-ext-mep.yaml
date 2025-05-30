@@ -1,0 +1,34 @@
+context:
+  name: ecoscope-workflows-ext-mep
+  version: 0.0.0 # todo
+
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+
+source:
+  path: ../../..  # get back to root of repo
+
+build:
+  noarch: python
+  script: SETUPTOOLS_SCM_PRETEND_VERSION=${{ version }} python -m pip install src/ecoscope-workflows-ext-mep -vv --no-deps
+  number: 0
+
+requirements:
+  host:
+    - python
+    - hatchling
+    - hatch-vcs
+    - pip
+  run:
+    - python
+    - ecoscope-workflows-core
+
+about:
+  license: BSD-3-Clause
+
+extra:
+  recipe-maintainers:
+    - yun-wu
