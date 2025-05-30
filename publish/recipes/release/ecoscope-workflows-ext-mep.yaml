@@ -1,6 +1,6 @@
 context:
   name: ecoscope-workflows-ext-mep
-  version: 0.0.0 # todo
+  version: ${{ env.get("HATCH_VCS_VERSION") }}
 
 
 package:
