@@ -1,6 +1,7 @@
 [project]
 name = "mep"
 channels = [
+    "file:///tmp/ecoscope-workflows/release/artifacts/",
     "file:///tmp/ecoscope-workflows-custom/release/artifacts/",
     'https://repo.prefix.dev/ecoscope-workflows/',
     'https://repo.prefix.dev/ecoscope-workflows-custom/',
@@ -15,12 +16,13 @@ yq = "*"
 hatch = "*"
 
 [feature.compile.dependencies]
-ecoscope-workflows-core = "0.2.4.*"
+ecoscope-workflows-core = "0.2.9.*"
 ecoscope-workflows-ext-mep = "*"
 
 # Here we don't specify the channel on purpose, as we want to use the local channel if it exists,
 # otherwise we fall back to the default channel.
 # If you want to ensure a specific channel to incorporate your local changes, you can uncomment the line below.
+# ecoscope-workflows-core = { version = "*", channel = "file:///tmp/ecoscope-workflows/release/artifacts/" }
 # ecoscope-workflows-ext-mep = { version = "*", channel = "file:///tmp/ecoscope-workflows-custom/release/artifacts/" }
 
 [environments]

@@ -58,21 +58,27 @@ Now you can use these tasks in your workflow by including the local channel
 
 2. Run the following command to compile your workflow:
    ```bash
-   ./dev/recompile.sh mep-monthly-report --install
+   pixi run compile-mep-monthly-report
    ```
    
    This will generate a folder called `ecoscope-workflows-mep-monthly-report-workflow` with your compiled workflow.
 
    Later on if you update the workflow spec you can recompile it using:
    ```bash
-   ./dev/recompile mep-monthly-report --update
+   pixi run recompile-mep-monthly-report
    ```
 
-3. Test your workflow with this command:
+3. Test your workflow. First set up your output directory by
+   ```bash
+   mkdir -p /tmp/workflows/mep-monthly-report/output
+   export ECOSCOPE_WORKFLOWS_RESULTS=file:///tmp/workflows/mep-monthly-report/output
+   ```
+   Then run your workflow by
    ```bash
    cd workflows/mep-monthly-report/ecoscope-workflows-mep-monthly-report-workflow
-   pixi run ecoscope-workflows-mep-monthly-report run --config-file ../param.yaml --execution-mode sequential --mock-io
+   pixi run ecoscope-workflows-mep-monthly-report-workflow run --config-file ../param.yaml --execution-mode sequential --mock-io
    ```
+   You can find the results in your output folder in `/tmp/workflows/mep-monthly-report/output/result.json`
    
 ## Publish Your Changes
 
@@ -85,7 +91,7 @@ Now you can use these tasks in your workflow by including the local channel
 
 2. Build your task package again
    ```bash
-   ./publish/build.sh
+   pixi run build-release
    ```
 
 3. Publish your task package
