@@ -61,7 +61,7 @@ py-rattler = ">=0.7.0,<0.8"
 "ruamel.yaml" = "*"
 ruff = "*"
 tomli-w = "*"
-ecoscope-workflows-core = ">=0.2.2"
+ecoscope-workflows-core = ">=0.3.1"
 
 # additional dependencies added by this extension
 

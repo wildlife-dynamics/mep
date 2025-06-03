@@ -4,6 +4,7 @@
 import functools
 import hashlib
 import io
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Coroutine, Generator, Literal, Iterator
@@ -31,6 +32,7 @@ SNAPSHOT_DIFF_OUTPUT_DIRNAME = ARTIFACTS.parent / "__diff_output__"
 TEST_CASES_YAML = ARTIFACTS.parent / "test-cases.yaml"
 ENTRYPOINT = "pixi run -e default ecoscope-workflows-mep-monthly-report-workflow"
 MATCHSPEC_OVERRIDE = "ecoscope-workflows-mep-monthly-report-workflow"
+IO_TASKS_IMPORTABLE_REFERENCES = []
 
 yaml = ruamel.yaml.YAML(typ="safe")
 
@@ -102,7 +104,9 @@ class CustomJSONSnapshot(CustomSnapshotDirnameMixin, JSONSnapshotExtension):
         execution_mode = next(
             s for s in original_name.split("-") if s in ["async", "sequential"]
         )
-        return test_name + (f"[{execution_mode}]" if "failure" in test_name else "")
+        hasdata = "nodata" if "nodata" in original_name else "data"
+        specifier = hasdata + (f"-{execution_mode}" if "failure" in test_name else "")
+        return test_name + f"[{specifier}]"
 
 
 def _png_bytes_to_array(png_bytes: bytes) -> np.ndarray:
@@ -247,10 +251,20 @@ def _run_test_case(
     case: Case,
     results_dir: Path,
     matchspec_override: str,
+    data_connections_env_vars: dict | None = None,
+    no_data: bool | None = None,
 ) -> Generator[dict, None, None]:
-    results_subdir = (
-        results_dir / run_params.subdir_name / case.name.lower().replace(" ", "-")
-    )
+    match no_data:
+        case None:
+            hasdata = ""
+        case True:
+            hasdata = "-nodata"
+        case False:
+            hasdata = "-data"
+        case _:
+            raise ValueError(f"Unknown no_data value: {no_data}")
+    name = case.name.lower().replace(" ", "-") + hasdata
+    results_subdir = results_dir / run_params.subdir_name / name / uuid.uuid4().hex
     results_subdir.mkdir(parents=True)
     case_runner = CaseRunner(
         execution_mode=run_params.execution_mode,
@@ -264,7 +278,9 @@ def _run_test_case(
                 "os.environ",
                 {"ECOSCOPE_WORKFLOWS_MATCHSPEC_OVERRIDE": matchspec_override},
             ):
-                yield case_runner.run_app(app)
+                yield case_runner.run_app(
+                    app, data_connections_env_vars=data_connections_env_vars
+                )
         case "cli":
             if case.raises:
                 pytest.skip("CLI tests do not yet support error handling.")
@@ -278,14 +294,47 @@ def matchspec_override() -> str:
     return MATCHSPEC_OVERRIDE
 
 
+@pytest.fixture(scope="session", params=[True, False], ids=["nodata", "data"])
+def no_data(request: pytest.FixtureRequest) -> bool:
+    """Fixture to control whether data is null or not."""
+    return request.param
+
+
+@pytest.fixture(scope="session")
+def io_tasks_importable_references() -> list[str]:
+    """Fixture to provide importable references for all io tasks in this workflow."""
+    return IO_TASKS_IMPORTABLE_REFERENCES
+
+
 @pytest.fixture(scope="session")
 def response_json_success(
     run_params: RunParams,
     success_case: Case,
     results_dir: Path,
     matchspec_override: str,
+    no_data: bool,
+    tmp_path_factory: pytest.TempPathFactory,
+    io_tasks_importable_references: list[str],
 ) -> Generator[dict, None, None]:
-    yield from _run_test_case(run_params, success_case, results_dir, matchspec_override)
+    data_connections_env_vars = None
+    if no_data:
+        import pandas as pd
+
+        mock_io_dir = tmp_path_factory.mktemp("mock-io")
+        example_return_path = mock_io_dir.joinpath("empty.parquet")
+        pd.DataFrame().to_parquet(example_return_path)
+        data_connections_env_vars = {
+            f"ECOSCOPE_WORKFLOWS_MOCK_IO__{ref.replace('.', '_').upper()}": example_return_path.as_posix()
+            for ref in io_tasks_importable_references
+        }
+    yield from _run_test_case(
+        run_params,
+        success_case,
+        results_dir,
+        matchspec_override,
+        data_connections_env_vars,
+        no_data,
+    )
 
 
 @pytest.fixture(scope="session")

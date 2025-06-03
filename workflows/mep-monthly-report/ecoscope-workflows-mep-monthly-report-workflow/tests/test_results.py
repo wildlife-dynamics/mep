@@ -25,14 +25,19 @@ def test_failure_response(
     assert response_json_failure == snapshot_json(matcher=matcher)
 
 
-def test_dashboard_json(response_json_success: dict, snapshot_json: SnapshotAssertion):
-    exclude_results_data = {
-        f"result.views.{key}.{i}.data": (str,)
-        for key in response_json_success["result"]["views"]
-        for i, _ in enumerate(response_json_success["result"]["views"][key])
-    }
-    matcher = path_type(exclude_results_data)
-    assert response_json_success == snapshot_json(matcher=matcher)
+def test_dashboard_json(
+    no_data: bool, response_json_success: dict, snapshot_json: SnapshotAssertion
+):
+    if no_data:
+        kws = {}
+    else:
+        exclude_results_data = {
+            f"result.views.{key}.{i}.data": (str,)
+            for key in response_json_success["result"]["views"]
+            for i, _ in enumerate(response_json_success["result"]["views"][key])
+        }
+        kws = {"matcher": path_type(exclude_results_data)}
+    assert response_json_success == snapshot_json(**kws)
 
 
 @pytest.mark.asyncio

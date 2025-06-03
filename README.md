@@ -43,11 +43,16 @@ or pytest-311/pytest-312 depending on your desired python version.
    pixi run build-release
    ```
 
-Now you can use these tasks in your workflow by including the local channel
+   Now you can use these tasks in your workflow by including the local channel
    ```toml
-   [dependencies.ecoscope-workflows-ext-mep]
-   channel = 'file:///tmp/ecoscope-workflows-custom/release/artifacts'
-   version = '*'
+   [project]
+   channels = [
+      "file:///tmp/ecoscope-workflows-custom/release/artifacts/",
+      ...
+   ]
+   ...
+   [feature.compile.dependencies]
+   ecoscope-workflows-ext-mep = { version = "*", channel = "file:///tmp/ecoscope-workflows-custom/release/artifacts/" }
    ```
 
 ## Workflow Development
