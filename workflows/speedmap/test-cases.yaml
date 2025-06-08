@@ -14,7 +14,7 @@ all-grouper:
       since: "2025-05-01T00:00:00Z"
       until: "2025-05-31T23:59:59Z"
     subject_obs:
-      subject_group_name: "Ecoscope"
+      subject_group_name: "MEP_Elephants_Ecoscope_Mt_Elgon"
       include_inactive: false
     subject_traj:
       trajectory_segment_filter:
@@ -50,7 +50,7 @@ month-grouper:
       since: "2025-05-01T00:00:00Z"
       until: "2025-05-31T23:59:59Z"
     subject_obs:
-      subject_group_name: "Ecoscope"
+      subject_group_name: "MEP_Elephants_Ecoscope_Mt_Elgon"
       include_inactive: false
     subject_traj:
       trajectory_segment_filter:
@@ -84,7 +84,7 @@ value-grouper:
       since: "2025-05-01T00:00:00Z"
       until: "2025-05-31T23:59:59Z"
     subject_obs:
-      subject_group_name: "Ecoscope"
+      subject_group_name: "MEP_Elephants_Ecoscope_Mt_Elgon"
       include_inactive: false
     subject_traj:
       trajectory_segment_filter:
