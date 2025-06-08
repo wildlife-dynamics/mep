@@ -1,0 +1,524 @@
+{
+  "properties": {
+    "workflow_details": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Workflow Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Workflow Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "description": "Add information that will help to differentiate this workflow from another.",
+      "title": "Set Workflow Details"
+    },
+    "gee_client": {
+      "additionalProperties": false,
+      "properties": {
+        "data_source": {
+          "$ref": "#/$defs/GoogleEarthEngineConnection",
+          "title": "",
+          "description": "Select one of your configured data sources."
+        }
+      },
+      "required": [
+        "data_source"
+      ],
+      "type": "object",
+      "title": "Select Google Earth Engine Data Source"
+    },
+    "time_range": {
+      "additionalProperties": false,
+      "properties": {
+        "since": {
+          "format": "date-time",
+          "title": "Since",
+          "type": "string",
+          "description": "The start time"
+        },
+        "until": {
+          "format": "date-time",
+          "title": "Until",
+          "type": "string",
+          "description": "The end time"
+        }
+      },
+      "required": [
+        "since",
+        "until"
+      ],
+      "type": "object",
+      "description": "Choose the period of time to analyze.",
+      "title": "Time Range"
+    },
+    "groupers": {
+      "additionalProperties": false,
+      "properties": {
+        "groupers": {
+          "default": null,
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ValueGrouper"
+              },
+              {
+                "$ref": "#/$defs/TemporalGrouper"
+              }
+            ],
+            "title": "Group by"
+          },
+          "title": " ",
+          "type": "array",
+          "description": "            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            "
+        }
+      },
+      "type": "object",
+      "required": [],
+      "title": "Set Groupers"
+    },
+    "roi": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string",
+          "description": "The path to ROI gpkg file"
+        },
+        "roi_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "name",
+          "title": "Roi Column",
+          "description": "The column name of the ROI name"
+        },
+        "roi_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Roi Name",
+          "description": "The ROI name"
+        },
+        "layer_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Layer Name",
+          "description": "The layer name"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object",
+      "title": "Load ROI"
+    },
+    "calculate_ndvi": {
+      "additionalProperties": false,
+      "properties": {
+        "band": {
+          "default": "NDVI",
+          "title": "Band",
+          "type": "string",
+          "description": "The band name"
+        },
+        "scale_factor": {
+          "default": 0.0001,
+          "title": "Scale Factor",
+          "type": "number",
+          "description": "The scale factor"
+        },
+        "analysis_scale": {
+          "default": 500.0,
+          "title": "Analysis Scale",
+          "type": "number",
+          "description": "The analysis scale"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Calculate NDVI"
+    },
+    "draw_ndvi": {
+      "additionalProperties": false,
+      "properties": {
+        "historic_band_title": {
+          "default": "Historic Min-Max",
+          "title": "Historic Band Title",
+          "type": "string",
+          "description": "The title shown in the plot legend for historic band"
+        },
+        "historic_mean_title": {
+          "default": "Historic Mean",
+          "title": "Historic Mean Title",
+          "type": "string",
+          "description": "The title shown in the plot legend for historic mean values"
+        },
+        "layout_style": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/LayoutStyle"
+            }
+          ],
+          "default": null,
+          "title": "Layout Style",
+          "description": "Additional kwargs passed to plotly.go.Figure(layout).",
+          "ecoscope:advanced": true
+        },
+        "upper_lower_band_style": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PlotStyle"
+            }
+          ],
+          "default": null,
+          "title": "Upper Lower Band Style",
+          "description": "Additional kwargs for upper_lower_band passed to plotly.graph_objects.Scatter.",
+          "ecoscope:advanced": true
+        },
+        "historic_mean_style": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PlotStyle"
+            }
+          ],
+          "default": null,
+          "title": "Historic Mean Style",
+          "description": "Additional kwargs passed for historic_mean to plotly.graph_objects.Scatter.",
+          "ecoscope:advanced": true
+        },
+        "current_value_style": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PlotStyle"
+            }
+          ],
+          "default": null,
+          "title": "Current Value Style",
+          "description": "Additional kwargs for current_value passed to plotly.graph_objects.Scatter.",
+          "ecoscope:advanced": true
+        },
+        "time_column": {
+          "default": "img_date",
+          "title": "Time Column",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Draw NDVI"
+    }
+  },
+  "$defs": {
+    "GoogleEarthEngineConnection": {
+      "properties": {
+        "name": {
+          "title": "Data Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "GoogleEarthEngineConnection",
+      "type": "object"
+    },
+    "TemporalGrouper": {
+      "oneOf": [
+        {
+          "const": "%Y",
+          "title": "Year (example: 2024)"
+        },
+        {
+          "const": "%B",
+          "title": "Month (example: September)"
+        },
+        {
+          "const": "%Y-%m",
+          "title": "Year and Month (example: 2023-01)"
+        },
+        {
+          "const": "%j",
+          "title": "Day of the year as a number (example: 365)"
+        },
+        {
+          "const": "%d",
+          "title": "Day of the month as a number (example: 31)"
+        },
+        {
+          "const": "%A",
+          "title": "Day of the week (example: Sunday)"
+        },
+        {
+          "const": "%H",
+          "title": "Hour (24-hour clock) as number (example: 22)"
+        },
+        {
+          "const": "%Y-%m-%d",
+          "title": "Date (example: 2025-01-31)"
+        }
+      ],
+      "title": "Time",
+      "type": "string"
+    },
+    "ValueGrouper": {
+      "oneOf": [
+        {
+          "const": "name",
+          "title": "ROI Name"
+        }
+      ],
+      "title": "Category",
+      "type": "string"
+    },
+    "AxisStyle": {
+      "properties": {
+        "title": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Title",
+          "type": "string"
+        },
+        "range": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "items": {
+            "type": "number"
+          },
+          "title": "Range",
+          "type": "array"
+        }
+      },
+      "title": "AxisStyle",
+      "type": "object"
+    },
+    "LayoutStyle": {
+      "properties": {
+        "font_size": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Font Size",
+          "type": "number"
+        },
+        "font_color": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Font Color",
+          "type": "string"
+        },
+        "font_style": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Font Style",
+          "type": "string"
+        },
+        "plot_bgcolor": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Plot Bgcolor",
+          "type": "string"
+        },
+        "showlegend": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Showlegend",
+          "type": "boolean"
+        },
+        "hovermode": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Hovermode",
+          "type": "string"
+        },
+        "legend_title": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Legend Title",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Title",
+          "type": "string"
+        },
+        "title_x": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "ge": 0.0,
+          "le": 1.0,
+          "title": "Title X",
+          "type": "number"
+        },
+        "title_y": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "ge": 0.0,
+          "le": 1.0,
+          "title": "Title Y",
+          "type": "number"
+        },
+        "xaxis": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AxisStyle"
+            }
+          ],
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Xaxis"
+        },
+        "yaxis": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AxisStyle"
+            }
+          ],
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Yaxis"
+        }
+      },
+      "title": "LayoutStyle",
+      "type": "object"
+    },
+    "LineStyle": {
+      "properties": {
+        "color": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Color",
+          "type": "string"
+        },
+        "dash": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Dash",
+          "type": "string"
+        },
+        "shape": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Shape",
+          "type": "string"
+        }
+      },
+      "title": "LineStyle",
+      "type": "object"
+    },
+    "PlotStyle": {
+      "properties": {
+        "xperiodalignment": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Xperiodalignment",
+          "type": "string"
+        },
+        "marker_colors": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "items": {
+            "type": "string"
+          },
+          "title": "Marker Colors",
+          "type": "array"
+        },
+        "textinfo": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Textinfo",
+          "type": "string"
+        },
+        "line": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/LineStyle"
+            }
+          ],
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Line"
+        },
+        "fillcolor": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Fillcolor",
+          "type": "string"
+        },
+        "mode": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Mode",
+          "type": "string"
+        },
+        "name": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Name",
+          "type": "string"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            }
+          ],
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Width"
+        },
+        "xperiod": {
+          "default": null,
+          "ecoscope:advanced": true,
+          "title": "Xperiod",
+          "type": "string"
+        }
+      },
+      "title": "PlotStyle",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "uiSchema": {
+    "ui:order": [
+      "workflow_details",
+      "gee_client",
+      "time_range",
+      "groupers",
+      "roi",
+      "calculate_ndvi",
+      "draw_ndvi"
+    ]
+  }
+}

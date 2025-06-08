@@ -1,0 +1,125 @@
+{
+  "error": null,
+  "result": {
+    "filters": {
+      "schema": {
+        "properties": {
+          "name": {
+            "default": "Loita Forest",
+            "oneOf": [
+              {
+                "const": "Loita Forest",
+                "title": "Loita Forest"
+              },
+              {
+                "const": "Mara / Serengeti",
+                "title": "Mara / Serengeti"
+              },
+              {
+                "const": "Marmanet Forest",
+                "title": "Marmanet Forest"
+              },
+              {
+                "const": "Mau Forest",
+                "title": "Mau Forest"
+              },
+              {
+                "const": "Nyakweri",
+                "title": "Nyakweri"
+              },
+              {
+                "const": "Rift / Mosiro",
+                "title": "Rift / Mosiro"
+              },
+              {
+                "const": "Samburu Reserve",
+                "title": "Samburu Reserve"
+              }
+            ],
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "uiSchema": {
+          "name": {
+            "ui:title": "Name",
+            "ui:widget": "select"
+          }
+        }
+      }
+    },
+    "layout": [],
+    "metadata": {
+      "description": "NDVI workflow",
+      "time_range": "From 01 Jan 2023 00:00:00 UTC to 31 Dec 2023 23:59:59 UTC",
+      "title": "NDVI Workflow"
+    },
+    "views": {
+      "{\"name\": \"Loita Forest\"}": [
+        {
+          "data": "str",
+          "id": 0,
+          "is_filtered": true,
+          "title": "NDVI Trends",
+          "widget_type": "graph"
+        }
+      ],
+      "{\"name\": \"Mara / Serengeti\"}": [
+        {
+          "data": "str",
+          "id": 0,
+          "is_filtered": true,
+          "title": "NDVI Trends",
+          "widget_type": "graph"
+        }
+      ],
+      "{\"name\": \"Marmanet Forest\"}": [
+        {
+          "data": "str",
+          "id": 0,
+          "is_filtered": true,
+          "title": "NDVI Trends",
+          "widget_type": "graph"
+        }
+      ],
+      "{\"name\": \"Mau Forest\"}": [
+        {
+          "data": "str",
+          "id": 0,
+          "is_filtered": true,
+          "title": "NDVI Trends",
+          "widget_type": "graph"
+        }
+      ],
+      "{\"name\": \"Nyakweri\"}": [
+        {
+          "data": "str",
+          "id": 0,
+          "is_filtered": true,
+          "title": "NDVI Trends",
+          "widget_type": "graph"
+        }
+      ],
+      "{\"name\": \"Rift / Mosiro\"}": [
+        {
+          "data": "str",
+          "id": 0,
+          "is_filtered": true,
+          "title": "NDVI Trends",
+          "widget_type": "graph"
+        }
+      ],
+      "{\"name\": \"Samburu Reserve\"}": [
+        {
+          "data": "str",
+          "id": 0,
+          "is_filtered": true,
+          "title": "NDVI Trends",
+          "widget_type": "graph"
+        }
+      ]
+    }
+  },
+  "trace": null
+}
