@@ -18,6 +18,7 @@ hatch = "*"
 
 [feature.compile.dependencies]
 ecoscope-workflows-core = "0.3.1.*"
+ecoscope-workflows-ext-ecoscope = "0.3.1.*"
 ecoscope-workflows-ext-mep = "*"
 
 # Here we don't specify the channel on purpose, as we want to use the local channel if it exists,
@@ -41,6 +42,22 @@ cmd = './dev/pytest-task.sh 311'
 
 [tasks.pytest-312]
 cmd = './dev/pytest-task.sh 312'
+
+[feature.compile.tasks.compile-ndvi]
+cmd = './dev/recompile.sh ndvi --install'
+depends-on = ["build-release"]
+
+[feature.compile.tasks.recompile-ndvi]
+cmd = './dev/recompile.sh ndvi --update'
+depends-on = ["build-release"]
+
+[feature.compile.tasks.compile-speedmap]
+cmd = './dev/recompile.sh speedmap --install'
+depends-on = ["build-release"]
+
+[feature.compile.tasks.recompile-speedmap]
+cmd = './dev/recompile.sh speedmap --update'
+depends-on = ["build-release"]
 
 [feature.compile.tasks.compile-mep-monthly-report]
 cmd = './dev/recompile.sh mep-monthly-report --install'
