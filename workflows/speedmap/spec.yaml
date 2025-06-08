@@ -1,0 +1,205 @@
+id: speedmap
+requirements:
+  - name: ecoscope-workflows-core
+    version: "0.3.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows/
+  - name: ecoscope-workflows-ext-ecoscope
+    version: "0.3.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows/
+
+rjsf-overrides:
+  $defs:
+    ValueGrouper.oneOf: [
+      {"const": "subject_name", "title": "Subject Name"},
+      {"const": "subject_subtype", "title": "Subject Subtype"},
+      {"const": "subject_sex", "title": "Subject Sex"},
+    ]
+
+workflow:
+  - name: Set Workflow Details
+    id: workflow_details
+    task: set_workflow_details
+  - name: Select EarthRanger Data Source
+    id: er_client_name
+    task: set_er_connection
+  - name: Time Range
+    id: time_range
+    task: set_time_range
+    partial:
+      time_format: "%d %b %Y %H:%M:%S %Z"
+
+  # subject group observations
+  - name: Get Subject Group Observations from EarthRanger
+    id: subject_obs
+    task: get_subjectgroup_observations
+    partial:
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.time_range.return }}
+      raise_on_empty: true
+      include_details: false
+
+  - name: Set Groupers
+    id: groupers
+    task: set_groupers
+
+  - name: Transform Observations to Relocations
+    id: subject_reloc
+    task: process_relocations
+    partial:
+      observations: ${{ workflow.subject_obs.return }}
+      relocs_columns: [
+        "groupby_col",
+        "fixtime",
+        "junk_status",
+        "geometry",
+        "extra__subject__name",
+        "extra__subject__subject_subtype",
+        "extra__subject__sex",
+      ]
+      filter_point_coords: [
+        {"x": 180.0, "y": 90.0},
+        {"x": 0.0, "y": 0.0},
+        {"x": 1.0, "y": 1.0},
+      ]
+
+  - name: Transform Relocations to Trajectories
+    id: subject_traj
+    task: relocations_to_trajectory
+    partial:
+      relocations: ${{ workflow.subject_reloc.return }}
+
+  - name: Add temporal index to Subject Trajectories
+    id: traj_add_temporal_index
+    task: add_temporal_index
+    partial:
+      df: ${{ workflow.subject_traj.return }}
+      time_col: "segment_start"
+      groupers: ${{ workflow.groupers.return }}
+      cast_to_datetime: true
+      format: "mixed"
+  - name: Rename value grouper columns
+    id: rename_grouper_columns
+    task: map_columns
+    partial:
+      df: ${{ workflow.traj_add_temporal_index.return }}
+      drop_columns: []
+      retain_columns: []
+      rename_columns:
+        extra__name: "subject_name"
+  - name: Classify Trajectories By Speed
+    id: classify_traj_speed
+    task: apply_classification
+    partial:
+      df: ${{ workflow.rename_grouper_columns.return }}
+      input_column_name: "speed_kmhr"
+      output_column_name: "speed_bins"
+      classification_options:
+        scheme: "equal_interval"
+        k: 6
+      label_options:
+        label_ranges: false
+        label_decimals: 1
+
+  - name: Split Subject Trajectories by Group
+    id: split_subject_traj_groups
+    task: split_groups
+    partial:
+      df: ${{ workflow.classify_traj_speed.return }}
+      groupers: ${{ workflow.groupers.return }}
+
+  # Set base maps
+  - name: Base Maps
+    id: base_map_defs
+    task: set_base_maps
+
+  # subject group trajectories speed map
+  - name: Sort Trajetories By Classification
+    id: sort_traj_speed
+    task: sort_values
+    partial:
+      column_name: "speed_bins"
+      ascending: true
+      na_position: "last"
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.split_subject_traj_groups.return }}
+  - name: Apply Color to Trajectories By Speed
+    id: colormap_traj_speed
+    task: apply_color_map
+    partial:
+      input_column_name: "speed_bins"
+      output_column_name: "speed_bins_colormap"
+      colormap: ["#1a9850", "#91cf60", "#d9ef8b", "#fee08b", "#fc8d59", "#d73027"]
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.sort_traj_speed.return }}
+  - name: Format Speedmap Legend Label
+    id: speedmap_legend_with_unit
+    task: map_values_with_unit
+    partial:
+      input_column_name: "speed_bins"
+      output_column_name: "speed_bins_formatted"
+      original_unit: "km/h"
+      new_unit: "km/h"
+      decimal_places: 1
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.colormap_traj_speed.return }}
+  - name: Create map layer for each trajectory group
+    id: traj_map_layers
+    task: create_polyline_layer
+    partial:
+      layer_style:
+        color_column: "speed_bins_colormap"
+      legend:
+        label_column: "speed_bins_formatted"
+        color_column: "speed_bins_colormap"
+      tooltip_columns: ["subject_name", "subject_subtype", "speed_kmhr"]
+    mapvalues:
+      argnames: geodataframe
+      argvalues: ${{ workflow.speedmap_legend_with_unit.return }}
+  - name: Draw Ecomaps for each trajectory group
+    id: traj_ecomap
+    task: draw_ecomap
+    partial:
+      tile_layers: ${{ workflow.base_map_defs.return }}
+      north_arrow_style:
+        placement: "top-left"
+      legend_style:
+        placement: "bottom-right"
+      static: false
+      title: null
+      max_zoom: 20
+    mapvalues:
+      argnames: geo_layers
+      argvalues: ${{ workflow.traj_map_layers.return }}
+  - name: Persist ecomap as Text
+    id: ecomap_html_urls
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: text
+      argvalues: ${{ workflow.traj_ecomap.return }}
+  - name: Create Map Widgets for Trajectories
+    id: traj_map_widgets_single_views
+    task: create_map_widget_single_view
+    partial:
+      title: "Subject Group Speed Map"
+    map:
+      argnames: [view, data]
+      argvalues: ${{ workflow.ecomap_html_urls.return }}
+  - name: Merge EcoMap Widget Views
+    id: traj_grouped_map_widget
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.traj_map_widgets_single_views.return }}
+  - name: Create A Dashboard
+    id: speedmap_dashboard
+    task: gather_dashboard
+    partial:
+      details: ${{ workflow.workflow_details.return}}
+      widgets:
+        - ${{ workflow.traj_grouped_map_widget.return }}
+      time_range: ${{ workflow.time_range.return}}
+      groupers: ${{ workflow.groupers.return }}
