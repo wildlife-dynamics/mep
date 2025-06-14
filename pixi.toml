@@ -58,7 +58,7 @@ depends-on = ["build-release"]
 
 [feature.compile.tasks.recompile-speedmap]
 cmd = './dev/recompile.sh speedmap --update'
-depends-on = ["build-release"]
+# depends-on = ["build-release"]
 
 [feature.compile.tasks.compile-collar-voltage]
 cmd = './dev/recompile.sh collar-voltage --install'

@@ -40,10 +40,10 @@ class SubjectObs(BaseModel):
     subject_group_name: str = Field(
         ..., description="Name of EarthRanger Subject", title="Subject Group Name"
     )
-    include_inactive: Optional[bool] = Field(
-        True,
-        description="Whether or not to include inactive subjects",
-        title="Include Inactive",
+    include_subjectsource_details: Optional[bool] = Field(
+        False,
+        description="Whether or not to include subject source details",
+        title="Include Subjectsource Details",
     )
 
 
@@ -227,28 +227,22 @@ class ValueGrouper(RootModel[str]):
 
 class TrajectorySegmentFilter(BaseModel):
     min_length_meters: Optional[float] = Field(
-        0.001, description="Minimum Segment Length in Meters", title="Min Length Meters"
+        0.001, title="Minimum Segment Length (Meters)"
     )
     max_length_meters: Optional[float] = Field(
-        100000,
-        description="Maximum Segment Length in Meters",
-        title="Max Length Meters",
+        100000, title="Maximum Segment Length (Meters)"
     )
     min_time_secs: Optional[float] = Field(
-        1, description="Minimum Segment Duration in Seconds", title="Min Time Secs"
+        1, title="Minimum Segment Duration (Seconds)"
     )
     max_time_secs: Optional[float] = Field(
-        172800, description="Maximum Segment Duration in Seconds", title="Max Time Secs"
+        172800, title="Maximum Segment Duration (Seconds)"
     )
     min_speed_kmhr: Optional[float] = Field(
-        0.0001,
-        description="Minimum Segment Speed in Kilometers per Hour",
-        title="Min Speed Kmhr",
+        0.0001, title="Minimum Segment Speed (Kilometers per Hour)"
     )
     max_speed_kmhr: Optional[float] = Field(
-        500,
-        description="Maximum Segment Speed in Kilometers per Hour",
-        title="Max Speed Kmhr",
+        500, title="Maximum Segment Speed (Kilometers per Hour)"
     )
 
 
@@ -287,7 +281,7 @@ class SubjectTraj(BaseModel):
                 "max_speed_kmhr": 500,
             }
         ),
-        description="Trajectory Segments outside these bounds will be removed",
+        description="Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
         title="Trajectory Segment Filter",
     )
 

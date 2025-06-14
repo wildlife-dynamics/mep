@@ -67,11 +67,12 @@
           "type": "string",
           "description": "Name of EarthRanger Subject"
         },
-        "include_inactive": {
-          "default": true,
-          "title": "Include Inactive",
+        "include_subjectsource_details": {
+          "default": false,
+          "title": "Include Subjectsource Details",
           "type": "boolean",
-          "description": "Whether or not to include inactive subjects"
+          "description": "Whether or not to include subject source details",
+          "ecoscope:advanced": true
         }
       },
       "required": [
@@ -123,7 +124,7 @@
             "max_speed_kmhr": 500
           },
           "title": "Trajectory Segment Filter",
-          "description": "Trajectory Segments outside these bounds will be removed",
+          "description": "Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
           "ecoscope:advanced": true
         }
       },
@@ -393,44 +394,38 @@
       "properties": {
         "min_length_meters": {
           "default": 0.001,
-          "description": "Minimum Segment Length in Meters",
           "ecoscope:advanced": true,
-          "title": "Min Length Meters",
+          "title": "Minimum Segment Length (Meters)",
           "type": "number"
         },
         "max_length_meters": {
           "default": 100000,
-          "description": "Maximum Segment Length in Meters",
           "ecoscope:advanced": true,
-          "title": "Max Length Meters",
+          "title": "Maximum Segment Length (Meters)",
           "type": "number"
         },
         "min_time_secs": {
           "default": 1,
-          "description": "Minimum Segment Duration in Seconds",
           "ecoscope:advanced": true,
-          "title": "Min Time Secs",
+          "title": "Minimum Segment Duration (Seconds)",
           "type": "number"
         },
         "max_time_secs": {
           "default": 172800,
-          "description": "Maximum Segment Duration in Seconds",
           "ecoscope:advanced": true,
-          "title": "Max Time Secs",
+          "title": "Maximum Segment Duration (Seconds)",
           "type": "number"
         },
         "min_speed_kmhr": {
           "default": 0.0001,
-          "description": "Minimum Segment Speed in Kilometers per Hour",
           "ecoscope:advanced": true,
-          "title": "Min Speed Kmhr",
+          "title": "Minimum Segment Speed (Kilometers per Hour)",
           "type": "number"
         },
         "max_speed_kmhr": {
           "default": 500,
-          "description": "Maximum Segment Speed in Kilometers per Hour",
           "ecoscope:advanced": true,
-          "title": "Max Speed Kmhr",
+          "title": "Maximum Segment Speed (Kilometers per Hour)",
           "type": "number"
         }
       },

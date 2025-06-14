@@ -5,6 +5,7 @@ import json
 import os
 import sys
 from io import TextIOWrapper
+from typing import Optional
 
 import click
 import obstore
@@ -31,8 +32,14 @@ def cli() -> None:
 @click.option(
     "--config-file",
     type=click.File("r"),
-    required=True,
+    required=False,
     help="Configuration parameters for running the workflow.",
+)
+@click.option(
+    "--config-json",
+    type=str,
+    required=False,
+    help="JSON string of configuration parameters for running the workflow.",
 )
 @click.option(
     "--execution-mode",
@@ -46,15 +53,40 @@ def cli() -> None:
     help="Whether or not to mock io with 3rd party services; for testing only.",
 )
 def run(
-    config_file: TextIOWrapper,
+    config_file: Optional[TextIOWrapper],
+    config_json: Optional[str],
     execution_mode: str,
     mock_io: bool,
 ) -> None:
+    # Validate that exactly one of --config-file or --config-json is provided
+    if (config_file is not None and config_json is not None) or (
+        config_file is None and config_json is None
+    ):
+        raise click.UsageError(
+            "Exactly one of --config-file or --config-json must be provided."
+        )
+
+    # Load configuration based on which option is provided
+    if config_file is not None:
+        yaml = ruamel.yaml.YAML(typ="safe")
+        params = Params(**yaml.load(config_file))
+    else:  # config_json is not None
+        try:
+            config_dict = json.loads(config_json)
+            params = Params(**config_dict)
+        except json.JSONDecodeError as e:
+            raise click.BadParameter(
+                "Invalid JSON string for --config-json", param_hint="--config-json"
+            ) from e
+        except pydantic.ValidationError as e:
+            raise click.BadParameter(
+                f"Invalid configuration: {e}", param_hint="--config-json"
+            ) from e
+
+    # Rest of the function remains unchanged
     results_url = os.environ.get("ECOSCOPE_WORKFLOWS_RESULTS")
     if not results_url:
         raise ValueError("Environment variable ECOSCOPE_WORKFLOWS_RESULTS is required.")
-    yaml = ruamel.yaml.YAML(typ="safe")
-    params = Params(**yaml.load(config_file))
     response = dispatch(execution_mode, mock_io, params)
     result_store = obstore.store.from_url(results_url)
     result_bytes = response.model_dump_json().encode("utf-8")

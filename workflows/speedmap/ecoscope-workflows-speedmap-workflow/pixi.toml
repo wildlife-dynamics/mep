@@ -11,8 +11,6 @@ platforms = [
     "linux-64",
     "osx-arm64",
 ]
-[dependencies]
-[feature.test.dependencies]
 
 [system-requirements]
 linux = "4.4.0"

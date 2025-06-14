@@ -109,7 +109,7 @@ time_range = (
 
 subject_obs_params = dict(
     subject_group_name=...,
-    include_inactive=...,
+    include_subjectsource_details=...,
 )
 
 # %%
