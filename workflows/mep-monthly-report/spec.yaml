@@ -1,7 +1,7 @@
 id: mep_monthly_report
 requirements:
   - name: ecoscope-workflows-core
-    version: "0.3.1.*"
+    version: "0.3.7.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
   - name: ecoscope-workflows-ext-mep
     version: "*"

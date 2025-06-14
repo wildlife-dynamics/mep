@@ -1,5 +1,5 @@
-from ._example import add_one_thousand
+from ._collar_voltage import calculate_collar_voltage
 
 __all__ = [
-    "add_one_thousand",
+    "calculate_collar_voltage",
 ]

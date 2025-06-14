@@ -75,8 +75,8 @@ or pytest-311/pytest-312 depending on your desired python version.
 
 3. Test your workflow. First set up your output directory by
    ```bash
-   mkdir -p /tmp/workflows/mep-monthly-report/output
-   export ECOSCOPE_WORKFLOWS_RESULTS=file:///tmp/workflows/mep-monthly-report/output
+   mkdir -p /tmp/workflows/mep-collar-voltage/output
+   export ECOSCOPE_WORKFLOWS_RESULTS=file:///tmp/workflows/mep-collar-voltage/output
    ```
    Then run your workflow by
    ```bash

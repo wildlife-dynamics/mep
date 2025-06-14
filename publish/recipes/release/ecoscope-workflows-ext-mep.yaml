@@ -2,11 +2,9 @@ context:
   name: ecoscope-workflows-ext-mep
   version: ${{ env.get("HATCH_VCS_VERSION") }}
 
-
 package:
   name: ${{ name }}
   version: ${{ version }}
-
 
 source:
   path: ../../..  # get back to root of repo
@@ -25,6 +23,8 @@ requirements:
   run:
     - python
     - ecoscope-workflows-core
+    - ecoscope-workflows-ext-mep
+    - ecoscope-workflows-ext-ecoscope
 
 about:
   license: BSD-3-Clause

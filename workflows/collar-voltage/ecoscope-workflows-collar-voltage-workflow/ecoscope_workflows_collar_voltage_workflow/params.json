@@ -1,0 +1,196 @@
+{
+  "properties": {
+    "workflow_details": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Workflow Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Workflow Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "description": "Add information that will help to differentiate this workflow from another.",
+      "title": "Set Workflow Details"
+    },
+    "er_client_name": {
+      "additionalProperties": false,
+      "properties": {
+        "data_source": {
+          "$ref": "#/$defs/EarthRangerConnection",
+          "title": "",
+          "description": "Select one of your configured data sources."
+        }
+      },
+      "required": [
+        "data_source"
+      ],
+      "type": "object",
+      "title": "Data Source"
+    },
+    "time_range": {
+      "additionalProperties": false,
+      "properties": {
+        "since": {
+          "format": "date-time",
+          "title": "Since",
+          "type": "string",
+          "description": "The start time"
+        },
+        "until": {
+          "format": "date-time",
+          "title": "Until",
+          "type": "string",
+          "description": "The end time"
+        }
+      },
+      "required": [
+        "since",
+        "until"
+      ],
+      "type": "object",
+      "description": "Choose the period of time to analyze.",
+      "title": "Time Range"
+    },
+    "filter_time_range": {
+      "additionalProperties": false,
+      "properties": {
+        "since": {
+          "format": "date-time",
+          "title": "Since",
+          "type": "string",
+          "description": "The start time"
+        },
+        "until": {
+          "format": "date-time",
+          "title": "Until",
+          "type": "string",
+          "description": "The end time"
+        }
+      },
+      "required": [
+        "since",
+        "until"
+      ],
+      "type": "object",
+      "description": "Choose the period of time to analyze.",
+      "title": "Filter Time Range"
+    },
+    "subject_obs": {
+      "additionalProperties": false,
+      "properties": {
+        "subject_group_name": {
+          "title": "Subject Group Name",
+          "type": "string",
+          "description": "Name of EarthRanger Subject"
+        }
+      },
+      "required": [
+        "subject_group_name"
+      ],
+      "type": "object",
+      "title": "Get Subject Group Observations from EarthRanger"
+    },
+    "groupers": {
+      "additionalProperties": false,
+      "properties": {
+        "groupers": {
+          "default": null,
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ValueGrouper"
+              },
+              {
+                "$ref": "#/$defs/TemporalGrouper"
+              }
+            ],
+            "title": "Group by"
+          },
+          "title": " ",
+          "type": "array",
+          "description": "            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            "
+        }
+      },
+      "type": "object",
+      "required": [],
+      "title": "Set Groupers"
+    }
+  },
+  "$defs": {
+    "EarthRangerConnection": {
+      "properties": {
+        "name": {
+          "title": "Data Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "EarthRangerConnection",
+      "type": "object"
+    },
+    "TemporalGrouper": {
+      "oneOf": [
+        {
+          "const": "%Y",
+          "title": "Year (example: 2024)"
+        },
+        {
+          "const": "%B",
+          "title": "Month (example: September)"
+        },
+        {
+          "const": "%Y-%m",
+          "title": "Year and Month (example: 2023-01)"
+        },
+        {
+          "const": "%j",
+          "title": "Day of the year as a number (example: 365)"
+        },
+        {
+          "const": "%d",
+          "title": "Day of the month as a number (example: 31)"
+        },
+        {
+          "const": "%A",
+          "title": "Day of the week (example: Sunday)"
+        },
+        {
+          "const": "%H",
+          "title": "Hour (24-hour clock) as number (example: 22)"
+        },
+        {
+          "const": "%Y-%m-%d",
+          "title": "Date (example: 2025-01-31)"
+        }
+      ],
+      "title": "Time",
+      "type": "string"
+    },
+    "ValueGrouper": {
+      "oneOf": [],
+      "title": "Category",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "uiSchema": {
+    "ui:order": [
+      "workflow_details",
+      "er_client_name",
+      "time_range",
+      "filter_time_range",
+      "subject_obs",
+      "groupers"
+    ]
+  }
+}
