@@ -10,36 +10,10 @@
 # %% [markdown]
 # ## Imports
 
-from ecoscope_workflows_core.tasks.config import set_workflow_details
+import os
 from ecoscope_workflows_core.tasks.filter import set_time_range
-from ecoscope_workflows_core.tasks.groupby import set_groupers
-from ecoscope_workflows_core.tasks.analysis import apply_arithmetic_operation
-from ecoscope_workflows_ext_mep.tasks import add_one_thousand
-from ecoscope_workflows_core.tasks.results import create_single_value_widget_single_view
-from ecoscope_workflows_core.tasks.results import gather_dashboard
-
-# %% [markdown]
-# ## Set Workflow Details
-
-# %%
-# parameters
-
-workflow_details_params = dict(
-    name=...,
-    description=...,
-    image_url=...,
-)
-
-# %%
-# call the task
-
-
-workflow_details = (
-    set_workflow_details.handle_errors(task_instance_id="workflow_details")
-    .partial(**workflow_details_params)
-    .call()
-)
-
+from ecoscope_workflows_ext_custom.tasks import gather_doc
+from ecoscope_workflows_core.tasks.results import gather_output_files
 
 # %% [markdown]
 # ## Time Range
@@ -64,109 +38,47 @@ time_range = (
 
 
 # %% [markdown]
-# ## Set Groupers
+# ## Create Monthly Report
 
 # %%
 # parameters
 
-groupers_params = dict(
-    groupers=...,
+monthly_report_params = dict(
+    logo_path=...,
 )
 
 # %%
 # call the task
 
 
-groupers = (
-    set_groupers.handle_errors(task_instance_id="groupers")
-    .partial(**groupers_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## Calculate Task
-
-# %%
-# parameters
-
-calculator_params = dict(
-    a=...,
-    b=...,
-    operation=...,
-)
-
-# %%
-# call the task
-
-
-calculator = (
-    apply_arithmetic_operation.handle_errors(task_instance_id="calculator")
-    .partial(**calculator_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## Add More
-
-# %%
-# parameters
-
-add_more_params = dict()
-
-# %%
-# call the task
-
-
-add_more = (
-    add_one_thousand.handle_errors(task_instance_id="add_more")
-    .partial(value=calculator, **add_more_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## Create Single Value Widgets
-
-# %%
-# parameters
-
-sv_widgets_params = dict(
-    view=...,
-)
-
-# %%
-# call the task
-
-
-sv_widgets = (
-    create_single_value_widget_single_view.handle_errors(task_instance_id="sv_widgets")
-    .partial(title="Sum", decimal_places=0, data=add_more, **sv_widgets_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## Create An Example Dashboard
-
-# %%
-# parameters
-
-template_dashboard_params = dict()
-
-# %%
-# call the task
-
-
-template_dashboard = (
-    gather_dashboard.handle_errors(task_instance_id="template_dashboard")
+monthly_report = (
+    gather_doc.handle_errors(task_instance_id="monthly_report")
     .partial(
-        details=workflow_details,
-        widgets=sv_widgets,
+        title="MEP Monthly Report",
         time_range=time_range,
-        groupers=groupers,
-        **template_dashboard_params,
+        root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        filename="mep_monthly_report",
+        doc_widgets=[],
+        **monthly_report_params,
     )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Gather Output Files
+
+# %%
+# parameters
+
+output_files_params = dict()
+
+# %%
+# call the task
+
+
+output_files = (
+    gather_output_files.handle_errors(task_instance_id="output_files")
+    .partial(files=[monthly_report, monthly_report], **output_files_params)
     .call()
 )

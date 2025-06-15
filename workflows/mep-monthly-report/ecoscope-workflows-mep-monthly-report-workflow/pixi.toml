@@ -4,13 +4,15 @@
 name = "ecoscope-workflows-mep-monthly-report-workflow"
 channels = [
     "file:///tmp/ecoscope-workflows-custom/release/artifacts/",
+    "https://repo.prefix.dev/ecoscope-workflows-custom/",
     "https://repo.prefix.dev/ecoscope-workflows/",
     "conda-forge",
     "microsoft",
 ]
-platforms = ["linux-64", "osx-arm64"]
-[dependencies]
-[feature.test.dependencies]
+platforms = [
+    "linux-64",
+    "osx-arm64",
+]
 
 [system-requirements]
 linux = "4.4.0"
@@ -19,7 +21,15 @@ linux = "4.4.0"
 version = "0.3.7.*"
 channel = "https://repo.prefix.dev/ecoscope-workflows/"
 
+[dependencies.ecoscope-workflows-ext-ecoscope]
+version = "0.3.7.*"
+channel = "https://repo.prefix.dev/ecoscope-workflows/"
+
 [dependencies.ecoscope-workflows-ext-mep]
+version = "0.0.2.*"
+channel = "https://repo.prefix.dev/ecoscope-workflows-custom/"
+
+[dependencies.ecoscope-workflows-ext-custom]
 version = "*"
 channel = "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
 
@@ -74,19 +84,27 @@ cmd = "python -m pytest -v tests/test_metadata.py"
 
 [feature.test.tasks.test-app-async-mock-io]
 cmd = "python -m pytest -v tests/test_results.py -k 'app and async and mock-io'"
-depends-on = ["playwright-install"]
+depends-on = [
+    "playwright-install",
+]
 
 [feature.test.tasks.test-app-sequential-mock-io]
 cmd = "python -m pytest -v tests/test_results.py -k 'app and sequential and mock-io'"
-depends-on = ["playwright-install"]
+depends-on = [
+    "playwright-install",
+]
 
 [feature.test.tasks.test-cli-async-mock-io]
 cmd = "python -m pytest -v tests/test_results.py -k 'cli and async and mock-io'"
-depends-on = ["playwright-install"]
+depends-on = [
+    "playwright-install",
+]
 
 [feature.test.tasks.test-cli-sequential-mock-io]
 cmd = "python -m pytest -v tests/test_results.py -k 'cli and sequential and mock-io'"
-depends-on = ["playwright-install"]
+depends-on = [
+    "playwright-install",
+]
 
 [environments.default]
 features = []
@@ -94,12 +112,17 @@ solve-group = "default"
 no-default-feature = false
 
 [environments.runner]
-features = ["runner"]
+features = [
+    "runner",
+]
 solve-group = "runner"
 no-default-feature = true
 
 [environments.test]
-features = ["runner", "test"]
+features = [
+    "runner",
+    "test",
+]
 solve-group = "test"
 no-default-feature = true
 

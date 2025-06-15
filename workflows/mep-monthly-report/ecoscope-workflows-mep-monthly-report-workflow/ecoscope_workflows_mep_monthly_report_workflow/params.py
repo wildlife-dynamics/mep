@@ -3,18 +3,9 @@
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import List, Optional, Union
+from typing import Optional
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
-
-
-class WorkflowDetails(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    name: str = Field(..., title="Workflow Name")
-    description: Optional[str] = Field("", title="Workflow Description")
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class TimeRange(BaseModel):
@@ -25,45 +16,12 @@ class TimeRange(BaseModel):
     until: AwareDatetime = Field(..., description="The end time", title="Until")
 
 
-class Operation(str, Enum):
-    add = "add"
-    subtract = "subtract"
-    multiply = "multiply"
-    divide = "divide"
-    floor_divide = "floor_divide"
-    modulo = "modulo"
-    power = "power"
-    min = "min"
-    max = "max"
-
-
-class Calculator(BaseModel):
+class MonthlyReport(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    a: Union[float, int] = Field(..., description="The first number", title="A")
-    b: Union[float, int] = Field(..., description="The second number", title="B")
-    operation: Operation = Field(
-        ..., description="The arithmetic operation to apply", title="Operation"
-    )
-
-
-class TemporalGrouper(RootModel[str]):
-    root: str = Field(..., title="Time")
-
-
-class ValueGrouper(RootModel[str]):
-    root: str = Field(..., title="Category")
-
-
-class Groupers(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    groupers: Optional[List[Union[ValueGrouper, TemporalGrouper]]] = Field(
-        None,
-        description="            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            ",
-        title=" ",
+    logo_path: Optional[str] = Field(
+        None, description="The logo file path", title="Logo Path"
     )
 
 
@@ -71,13 +29,7 @@ class Params(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    workflow_details: Optional[WorkflowDetails] = Field(
-        None,
-        description="Add information that will help to differentiate this workflow from another.",
-        title="Set Workflow Details",
-    )
     time_range: Optional[TimeRange] = Field(
         None, description="Choose the period of time to analyze.", title="Time Range"
     )
-    groupers: Optional[Groupers] = Field(None, title="Set Groupers")
-    calculator: Optional[Calculator] = Field(None, title="Calculate Task")
+    monthly_report: Optional[MonthlyReport] = Field(None, title="Create Monthly Report")

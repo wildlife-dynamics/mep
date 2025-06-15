@@ -1,25 +1,5 @@
 {
   "properties": {
-    "workflow_details": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "title": "Workflow Name",
-          "type": "string"
-        },
-        "description": {
-          "default": "",
-          "title": "Workflow Description",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object",
-      "description": "Add information that will help to differentiate this workflow from another.",
-      "title": "Set Workflow Details"
-    },
     "time_range": {
       "additionalProperties": false,
       "properties": {
@@ -44,136 +24,27 @@
       "description": "Choose the period of time to analyze.",
       "title": "Time Range"
     },
-    "groupers": {
+    "monthly_report": {
       "additionalProperties": false,
       "properties": {
-        "groupers": {
+        "logo_path": {
           "default": null,
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/ValueGrouper"
-              },
-              {
-                "$ref": "#/$defs/TemporalGrouper"
-              }
-            ],
-            "title": "Group by"
-          },
-          "title": " ",
-          "type": "array",
-          "description": "            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            "
-        }
-      },
-      "type": "object",
-      "required": [],
-      "title": "Set Groupers"
-    },
-    "calculator": {
-      "additionalProperties": false,
-      "properties": {
-        "a": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "integer"
-            }
-          ],
-          "title": "A",
-          "description": "The first number"
-        },
-        "b": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "integer"
-            }
-          ],
-          "title": "B",
-          "description": "The second number"
-        },
-        "operation": {
-          "enum": [
-            "add",
-            "subtract",
-            "multiply",
-            "divide",
-            "floor_divide",
-            "modulo",
-            "power",
-            "min",
-            "max"
-          ],
-          "title": "Operation",
+          "title": "Logo Path",
           "type": "string",
-          "description": "The arithmetic operation to apply"
+          "description": "The logo file path"
         }
       },
-      "required": [
-        "a",
-        "b",
-        "operation"
-      ],
+      "required": [],
       "type": "object",
-      "title": "Calculate Task"
+      "title": "Create Monthly Report"
     }
   },
-  "$defs": {
-    "TemporalGrouper": {
-      "oneOf": [
-        {
-          "const": "%Y",
-          "title": "Year (example: 2024)"
-        },
-        {
-          "const": "%B",
-          "title": "Month (example: September)"
-        },
-        {
-          "const": "%Y-%m",
-          "title": "Year and Month (example: 2023-01)"
-        },
-        {
-          "const": "%j",
-          "title": "Day of the year as a number (example: 365)"
-        },
-        {
-          "const": "%d",
-          "title": "Day of the month as a number (example: 31)"
-        },
-        {
-          "const": "%A",
-          "title": "Day of the week (example: Sunday)"
-        },
-        {
-          "const": "%H",
-          "title": "Hour (24-hour clock) as number (example: 22)"
-        },
-        {
-          "const": "%Y-%m-%d",
-          "title": "Date (example: 2025-01-31)"
-        }
-      ],
-      "title": "Time",
-      "type": "string"
-    },
-    "ValueGrouper": {
-      "oneOf": [],
-      "title": "Category",
-      "type": "string"
-    }
-  },
+  "$defs": {},
   "additionalProperties": false,
   "uiSchema": {
     "ui:order": [
-      "workflow_details",
       "time_range",
-      "groupers",
-      "calculator"
+      "monthly_report"
     ]
   }
 }
