@@ -5,6 +5,21 @@ import os
 from ecoscope_workflows_core.graph import DependsOn, DependsOnSequence, Graph, Node
 
 from ecoscope_workflows_core.tasks.filter import set_time_range
+from ecoscope_workflows_core.tasks.io import set_er_connection
+from ecoscope_workflows_ext_ecoscope.tasks.results import set_base_maps
+from ecoscope_workflows_ext_ecoscope.tasks.io import get_patrol_observations
+from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import process_relocations
+from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
+    relocations_to_trajectory,
+)
+from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df
+from ecoscope_workflows_ext_ecoscope.tasks.transformation import apply_color_map
+from ecoscope_workflows_ext_ecoscope.tasks.results import create_polyline_layer
+from ecoscope_workflows_ext_ecoscope.tasks.results import draw_ecomap
+from ecoscope_workflows_core.tasks.io import persist_text
+from ecoscope_workflows_ext_custom.tasks import html_to_png
+from ecoscope_workflows_ext_custom.tasks import create_doc_figure
+from ecoscope_workflows_ext_custom.tasks import create_doc_heading
 from ecoscope_workflows_ext_custom.tasks import gather_doc
 from ecoscope_workflows_core.tasks.results import gather_output_files
 
@@ -16,8 +31,40 @@ def main(params: Params):
 
     dependencies = {
         "time_range": [],
-        "monthly_report": ["time_range"],
-        "output_files": ["monthly_report", "monthly_report"],
+        "er_client_name": [],
+        "base_map_defs": [],
+        "vehicle_patrols": ["er_client_name", "time_range"],
+        "vehicle_patrol_reloc": ["vehicle_patrols"],
+        "vehicle_patrol_traj": ["vehicle_patrol_reloc"],
+        "persist_vehicle_patrol_traj": ["vehicle_patrol_traj"],
+        "vehicle_traj_colormap": ["vehicle_patrol_traj"],
+        "vehicle_patrol_map_layers": ["vehicle_traj_colormap"],
+        "vehicle_patrol_ecomap": ["base_map_defs", "vehicle_patrol_map_layers"],
+        "patrol_vehicle_ecomap_html_url": ["vehicle_patrol_ecomap"],
+        "vehicle_patrol_map_png": ["patrol_vehicle_ecomap_html_url"],
+        "vehicle_patrol_map_widget": ["vehicle_patrol_map_png"],
+        "foot_patrols": ["er_client_name", "time_range"],
+        "foot_patrol_reloc": ["foot_patrols"],
+        "foot_patrol_traj": ["foot_patrol_reloc"],
+        "persist_foot_patrol_traj": ["foot_patrol_traj"],
+        "foot_traj_colormap": ["foot_patrol_traj"],
+        "foot_patrol_map_layers": ["foot_traj_colormap"],
+        "foot_patrol_ecomap": ["base_map_defs", "foot_patrol_map_layers"],
+        "patrol_foot_ecomap_html_url": ["foot_patrol_ecomap"],
+        "foot_patrol_map_png": ["patrol_foot_ecomap_html_url"],
+        "foot_patrol_map_widget": ["foot_patrol_map_png"],
+        "patrol_section_widget": [],
+        "monthly_report": [
+            "time_range",
+            "patrol_section_widget",
+            "vehicle_patrol_map_widget",
+            "foot_patrol_map_widget",
+        ],
+        "output_files": [
+            "monthly_report",
+            "vehicle_patrol_map_png",
+            "patrol_vehicle_ecomap_html_url",
+        ],
     }
 
     nodes = {
@@ -26,9 +73,348 @@ def main(params: Params):
             .handle_errors(task_instance_id="time_range")
             .set_executor("lithops"),
             partial={
-                "time_format": "%d %b %Y %H:%M:%S %Z",
+                "time_format": "%Y-%m-%d",
             }
             | (params_dict.get("time_range") or {}),
+            method="call",
+        ),
+        "er_client_name": Node(
+            async_task=set_er_connection.validate()
+            .handle_errors(task_instance_id="er_client_name")
+            .set_executor("lithops"),
+            partial=(params_dict.get("er_client_name") or {}),
+            method="call",
+        ),
+        "base_map_defs": Node(
+            async_task=set_base_maps.validate()
+            .handle_errors(task_instance_id="base_map_defs")
+            .set_executor("lithops"),
+            partial=(params_dict.get("base_map_defs") or {}),
+            method="call",
+        ),
+        "vehicle_patrols": Node(
+            async_task=get_patrol_observations.validate()
+            .handle_errors(task_instance_id="vehicle_patrols")
+            .set_executor("lithops"),
+            partial={
+                "client": DependsOn("er_client_name"),
+                "time_range": DependsOn("time_range"),
+                "include_patrol_details": True,
+                "raise_on_empty": False,
+            }
+            | (params_dict.get("vehicle_patrols") or {}),
+            method="call",
+        ),
+        "vehicle_patrol_reloc": Node(
+            async_task=process_relocations.validate()
+            .handle_errors(task_instance_id="vehicle_patrol_reloc")
+            .set_executor("lithops"),
+            partial={
+                "observations": DependsOn("vehicle_patrols"),
+                "relocs_columns": [
+                    "patrol_id",
+                    "patrol_start_time",
+                    "patrol_end_time",
+                    "patrol_type__value",
+                    "patrol_type__display",
+                    "patrol_serial_number",
+                    "patrol_status",
+                    "patrol_subject",
+                    "groupby_col",
+                    "fixtime",
+                    "junk_status",
+                    "extra__source",
+                    "geometry",
+                ],
+                "filter_point_coords": [
+                    {"x": 180.0, "y": 90.0},
+                    {"x": 0.0, "y": 0.0},
+                    {"x": 1.0, "y": 1.0},
+                ],
+            }
+            | (params_dict.get("vehicle_patrol_reloc") or {}),
+            method="call",
+        ),
+        "vehicle_patrol_traj": Node(
+            async_task=relocations_to_trajectory.validate()
+            .handle_errors(task_instance_id="vehicle_patrol_traj")
+            .set_executor("lithops"),
+            partial={
+                "relocations": DependsOn("vehicle_patrol_reloc"),
+            }
+            | (params_dict.get("vehicle_patrol_traj") or {}),
+            method="call",
+        ),
+        "persist_vehicle_patrol_traj": Node(
+            async_task=persist_df.validate()
+            .handle_errors(task_instance_id="persist_vehicle_patrol_traj")
+            .set_executor("lithops"),
+            partial={
+                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "df": DependsOn("vehicle_patrol_traj"),
+                "filename": "vehicle_patrols_traj",
+            }
+            | (params_dict.get("persist_vehicle_patrol_traj") or {}),
+            method="call",
+        ),
+        "vehicle_traj_colormap": Node(
+            async_task=apply_color_map.validate()
+            .handle_errors(task_instance_id="vehicle_traj_colormap")
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("vehicle_patrol_traj"),
+                "colormap": [
+                    "#FF9600",
+                    "#F23B0E",
+                    "#A100CB",
+                    "#F04564",
+                    "#03421A",
+                    "#3089FF",
+                    "#E26FFF",
+                    "#8C1700",
+                    "#002960",
+                    "#FFD000",
+                    "#B62879",
+                    "#680078",
+                    "#005A56",
+                    "#0056C7",
+                    "#331878",
+                    "#E76826",
+                ],
+                "input_column_name": "extra__patrol_type__value",
+                "output_column_name": "patrol_type_colormap",
+            }
+            | (params_dict.get("vehicle_traj_colormap") or {}),
+            method="call",
+        ),
+        "vehicle_patrol_map_layers": Node(
+            async_task=create_polyline_layer.validate()
+            .handle_errors(task_instance_id="vehicle_patrol_map_layers")
+            .set_executor("lithops"),
+            partial={
+                "layer_style": {"color_column": "patrol_type_colormap"},
+                "legend": {
+                    "label_column": "extra__patrol_type__value",
+                    "color_column": "patrol_type_colormap",
+                },
+                "geodataframe": DependsOn("vehicle_traj_colormap"),
+            }
+            | (params_dict.get("vehicle_patrol_map_layers") or {}),
+            method="call",
+        ),
+        "vehicle_patrol_ecomap": Node(
+            async_task=draw_ecomap.validate()
+            .handle_errors(task_instance_id="vehicle_patrol_ecomap")
+            .set_executor("lithops"),
+            partial={
+                "tile_layers": DependsOn("base_map_defs"),
+                "max_zoom": 10,
+                "geo_layers": DependsOn("vehicle_patrol_map_layers"),
+            }
+            | (params_dict.get("vehicle_patrol_ecomap") or {}),
+            method="call",
+        ),
+        "patrol_vehicle_ecomap_html_url": Node(
+            async_task=persist_text.validate()
+            .handle_errors(task_instance_id="patrol_vehicle_ecomap_html_url")
+            .set_executor("lithops"),
+            partial={
+                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "text": DependsOn("vehicle_patrol_ecomap"),
+            }
+            | (params_dict.get("patrol_vehicle_ecomap_html_url") or {}),
+            method="call",
+        ),
+        "vehicle_patrol_map_png": Node(
+            async_task=html_to_png.validate()
+            .handle_errors(task_instance_id="vehicle_patrol_map_png")
+            .set_executor("lithops"),
+            partial={
+                "html_path": DependsOn("patrol_vehicle_ecomap_html_url"),
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {"wait_for_timeout": 50000},
+            }
+            | (params_dict.get("vehicle_patrol_map_png") or {}),
+            method="call",
+        ),
+        "vehicle_patrol_map_widget": Node(
+            async_task=create_doc_figure.validate()
+            .handle_errors(task_instance_id="vehicle_patrol_map_widget")
+            .set_executor("lithops"),
+            partial={
+                "heading": "Combined Vehicle Patrols",
+                "level": 3,
+                "filepath": DependsOn("vehicle_patrol_map_png"),
+            }
+            | (params_dict.get("vehicle_patrol_map_widget") or {}),
+            method="call",
+        ),
+        "foot_patrols": Node(
+            async_task=get_patrol_observations.validate()
+            .handle_errors(task_instance_id="foot_patrols")
+            .set_executor("lithops"),
+            partial={
+                "client": DependsOn("er_client_name"),
+                "time_range": DependsOn("time_range"),
+                "include_patrol_details": True,
+                "raise_on_empty": False,
+            }
+            | (params_dict.get("foot_patrols") or {}),
+            method="call",
+        ),
+        "foot_patrol_reloc": Node(
+            async_task=process_relocations.validate()
+            .handle_errors(task_instance_id="foot_patrol_reloc")
+            .set_executor("lithops"),
+            partial={
+                "observations": DependsOn("foot_patrols"),
+                "relocs_columns": [
+                    "patrol_id",
+                    "patrol_start_time",
+                    "patrol_end_time",
+                    "patrol_type__value",
+                    "patrol_type__display",
+                    "patrol_serial_number",
+                    "patrol_status",
+                    "patrol_subject",
+                    "groupby_col",
+                    "fixtime",
+                    "junk_status",
+                    "extra__source",
+                    "geometry",
+                ],
+                "filter_point_coords": [
+                    {"x": 180.0, "y": 90.0},
+                    {"x": 0.0, "y": 0.0},
+                    {"x": 1.0, "y": 1.0},
+                ],
+            }
+            | (params_dict.get("foot_patrol_reloc") or {}),
+            method="call",
+        ),
+        "foot_patrol_traj": Node(
+            async_task=relocations_to_trajectory.validate()
+            .handle_errors(task_instance_id="foot_patrol_traj")
+            .set_executor("lithops"),
+            partial={
+                "relocations": DependsOn("foot_patrol_reloc"),
+            }
+            | (params_dict.get("foot_patrol_traj") or {}),
+            method="call",
+        ),
+        "persist_foot_patrol_traj": Node(
+            async_task=persist_df.validate()
+            .handle_errors(task_instance_id="persist_foot_patrol_traj")
+            .set_executor("lithops"),
+            partial={
+                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "df": DependsOn("foot_patrol_traj"),
+                "filename": "foot_patrol_traj",
+            }
+            | (params_dict.get("persist_foot_patrol_traj") or {}),
+            method="call",
+        ),
+        "foot_traj_colormap": Node(
+            async_task=apply_color_map.validate()
+            .handle_errors(task_instance_id="foot_traj_colormap")
+            .set_executor("lithops"),
+            partial={
+                "df": DependsOn("foot_patrol_traj"),
+                "colormap": [
+                    "#FF9600",
+                    "#F23B0E",
+                    "#A100CB",
+                    "#F04564",
+                    "#03421A",
+                    "#3089FF",
+                    "#E26FFF",
+                    "#8C1700",
+                    "#002960",
+                    "#FFD000",
+                    "#B62879",
+                    "#680078",
+                    "#005A56",
+                    "#0056C7",
+                    "#331878",
+                    "#E76826",
+                ],
+                "input_column_name": "extra__patrol_type__value",
+                "output_column_name": "patrol_type_colormap",
+            }
+            | (params_dict.get("foot_traj_colormap") or {}),
+            method="call",
+        ),
+        "foot_patrol_map_layers": Node(
+            async_task=create_polyline_layer.validate()
+            .handle_errors(task_instance_id="foot_patrol_map_layers")
+            .set_executor("lithops"),
+            partial={
+                "layer_style": {"color_column": "patrol_type_colormap"},
+                "legend": {
+                    "label_column": "extra__patrol_type__value",
+                    "color_column": "patrol_type_colormap",
+                },
+                "geodataframe": DependsOn("foot_traj_colormap"),
+            }
+            | (params_dict.get("foot_patrol_map_layers") or {}),
+            method="call",
+        ),
+        "foot_patrol_ecomap": Node(
+            async_task=draw_ecomap.validate()
+            .handle_errors(task_instance_id="foot_patrol_ecomap")
+            .set_executor("lithops"),
+            partial={
+                "tile_layers": DependsOn("base_map_defs"),
+                "max_zoom": 10,
+                "geo_layers": DependsOn("foot_patrol_map_layers"),
+            }
+            | (params_dict.get("foot_patrol_ecomap") or {}),
+            method="call",
+        ),
+        "patrol_foot_ecomap_html_url": Node(
+            async_task=persist_text.validate()
+            .handle_errors(task_instance_id="patrol_foot_ecomap_html_url")
+            .set_executor("lithops"),
+            partial={
+                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "text": DependsOn("foot_patrol_ecomap"),
+            }
+            | (params_dict.get("patrol_foot_ecomap_html_url") or {}),
+            method="call",
+        ),
+        "foot_patrol_map_png": Node(
+            async_task=html_to_png.validate()
+            .handle_errors(task_instance_id="foot_patrol_map_png")
+            .set_executor("lithops"),
+            partial={
+                "html_path": DependsOn("patrol_foot_ecomap_html_url"),
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {"wait_for_timeout": 50000},
+            }
+            | (params_dict.get("foot_patrol_map_png") or {}),
+            method="call",
+        ),
+        "foot_patrol_map_widget": Node(
+            async_task=create_doc_figure.validate()
+            .handle_errors(task_instance_id="foot_patrol_map_widget")
+            .set_executor("lithops"),
+            partial={
+                "heading": "Combined Foot Patrols",
+                "level": 3,
+                "filepath": DependsOn("foot_patrol_map_png"),
+            }
+            | (params_dict.get("foot_patrol_map_widget") or {}),
+            method="call",
+        ),
+        "patrol_section_widget": Node(
+            async_task=create_doc_heading.validate()
+            .handle_errors(task_instance_id="patrol_section_widget")
+            .set_executor("lithops"),
+            partial={
+                "heading": "MEP Patrol Tracks",
+                "level": 2,
+            }
+            | (params_dict.get("patrol_section_widget") or {}),
             method="call",
         ),
         "monthly_report": Node(
@@ -40,7 +426,13 @@ def main(params: Params):
                 "time_range": DependsOn("time_range"),
                 "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
                 "filename": "mep_monthly_report",
-                "doc_widgets": [],
+                "doc_widgets": DependsOnSequence(
+                    [
+                        DependsOn("patrol_section_widget"),
+                        DependsOn("vehicle_patrol_map_widget"),
+                        DependsOn("foot_patrol_map_widget"),
+                    ],
+                ),
             }
             | (params_dict.get("monthly_report") or {}),
             method="call",
@@ -53,7 +445,8 @@ def main(params: Params):
                 "files": DependsOnSequence(
                     [
                         DependsOn("monthly_report"),
-                        DependsOn("monthly_report"),
+                        DependsOn("vehicle_patrol_map_png"),
+                        DependsOn("patrol_vehicle_ecomap_html_url"),
                     ],
                 ),
             }

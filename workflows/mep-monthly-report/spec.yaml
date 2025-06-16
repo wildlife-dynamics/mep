@@ -18,7 +18,259 @@ workflow:
     id: time_range
     task: set_time_range
     partial:
-      time_format: "%d %b %Y %H:%M:%S %Z"
+      time_format: "%Y-%m-%d"
+
+  - name: Data Source
+    id: er_client_name
+    task: set_er_connection
+
+  - name: Base Maps
+    id: base_map_defs
+    task: set_base_maps
+
+########Vehicle Patrols Section########
+  
+  - id: vehicle_patrols
+    task: get_patrol_observations
+    partial:
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.time_range.return }}
+      include_patrol_details: true
+      raise_on_empty: false
+  - name: Transform Observations to Relocations
+    id: vehicle_patrol_reloc
+    task: process_relocations
+    partial:
+      observations: ${{ workflow.vehicle_patrols.return }}
+      relocs_columns: [
+        "patrol_id",
+        "patrol_start_time",
+        "patrol_end_time",
+        "patrol_type__value",
+        "patrol_type__display",
+        "patrol_serial_number",
+        "patrol_status",
+        "patrol_subject",
+        "groupby_col",
+        "fixtime",
+        "junk_status",
+        "extra__source",
+        "geometry",
+      ]
+      filter_point_coords: [
+        {"x": 180.0, "y": 90.0},
+        {"x": 0.0, "y": 0.0},
+        {"x": 1.0, "y": 1.0},
+      ]
+  - name: Transform Relocations to Trajectories
+    id: vehicle_patrol_traj
+    task: relocations_to_trajectory
+    partial:
+      relocations: ${{ workflow.vehicle_patrol_reloc.return }}
+  - id: persist_vehicle_patrol_traj
+    task: persist_df
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      df: ${{ workflow.vehicle_patrol_traj.return }}
+      filename: "vehicle_patrols_traj"
+  - name: Patrol Traj Colormap
+    id: vehicle_traj_colormap
+    task: apply_color_map
+    partial:
+      df: ${{ workflow.vehicle_patrol_traj.return }}
+      colormap: ["#FF9600", "#F23B0E", "#A100CB", "#F04564", "#03421A", "#3089FF", "#E26FFF", "#8C1700", "#002960", "#FFD000", "#B62879", "#680078", "#005A56", "#0056C7", "#331878", "#E76826"]
+      input_column_name: "extra__patrol_type__value"
+      output_column_name: "patrol_type_colormap"
+
+  - id: vehicle_patrol_map_layers
+    task: create_polyline_layer
+    partial:
+      layer_style:
+        color_column: "patrol_type_colormap"
+      legend:
+        label_column: "extra__patrol_type__value"
+        color_column: "patrol_type_colormap"
+      geodataframe: ${{ workflow.vehicle_traj_colormap.return }}
+  - id: vehicle_patrol_ecomap
+    task: draw_ecomap
+    partial:
+      tile_layers: ${{ workflow.base_map_defs.return }}
+      max_zoom: 10
+      geo_layers: ${{ workflow.vehicle_patrol_map_layers.return }}
+  - name: Persist Patrols Ecomap as Text
+    id: patrol_vehicle_ecomap_html_url
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      text: ${{ workflow.vehicle_patrol_ecomap.return }}
+  - name: Convert vehicle patrol map to png
+    id: vehicle_patrol_map_png
+    task: html_to_png
+    partial:
+      html_path: ${{ workflow.patrol_vehicle_ecomap_html_url.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        wait_for_timeout: 50000
+  - id: vehicle_patrol_map_widget
+    task: create_doc_figure
+    partial:
+      heading: "Combined Vehicle Patrols"
+      level: 3
+      filepath: ${{ workflow.vehicle_patrol_map_png.return }}
+
+########Foot Patrols Section########
+  
+  - id: foot_patrols
+    task: get_patrol_observations
+    partial:
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.time_range.return }}
+      include_patrol_details: true
+      raise_on_empty: false
+  - name: Transform Observations to Relocations
+    id: foot_patrol_reloc
+    task: process_relocations
+    partial:
+      observations: ${{ workflow.foot_patrols.return }}
+      relocs_columns: [
+        "patrol_id",
+        "patrol_start_time",
+        "patrol_end_time",
+        "patrol_type__value",
+        "patrol_type__display",
+        "patrol_serial_number",
+        "patrol_status",
+        "patrol_subject",
+        "groupby_col",
+        "fixtime",
+        "junk_status",
+        "extra__source",
+        "geometry",
+      ]
+      filter_point_coords: [
+        {"x": 180.0, "y": 90.0},
+        {"x": 0.0, "y": 0.0},
+        {"x": 1.0, "y": 1.0},
+      ]
+  - name: Transform Relocations to Trajectories
+    id: foot_patrol_traj
+    task: relocations_to_trajectory
+    partial:
+      relocations: ${{ workflow.foot_patrol_reloc.return }}
+  - id: persist_foot_patrol_traj
+    task: persist_df
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      df: ${{ workflow.foot_patrol_traj.return }}
+      filename: "foot_patrol_traj"
+  - name: Patrol Traj Colormap
+    id: foot_traj_colormap
+    task: apply_color_map
+    partial:
+      df: ${{ workflow.foot_patrol_traj.return }}
+      colormap: ["#FF9600", "#F23B0E", "#A100CB", "#F04564", "#03421A", "#3089FF", "#E26FFF", "#8C1700", "#002960", "#FFD000", "#B62879", "#680078", "#005A56", "#0056C7", "#331878", "#E76826"]
+      input_column_name: "extra__patrol_type__value"
+      output_column_name: "patrol_type_colormap"
+
+  - id: foot_patrol_map_layers
+    task: create_polyline_layer
+    partial:
+      layer_style:
+        color_column: "patrol_type_colormap"
+      legend:
+        label_column: "extra__patrol_type__value"
+        color_column: "patrol_type_colormap"
+      geodataframe: ${{ workflow.foot_traj_colormap.return }}
+  - id: foot_patrol_ecomap
+    task: draw_ecomap
+    partial:
+      tile_layers: ${{ workflow.base_map_defs.return }}
+      max_zoom: 10
+      geo_layers: ${{ workflow.foot_patrol_map_layers.return }}
+  - name: Persist Patrols Ecomap as Text
+    id: patrol_foot_ecomap_html_url
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      text: ${{ workflow.foot_patrol_ecomap.return }}
+  - name: Convert foot patrol map to png
+    id: foot_patrol_map_png
+    task: html_to_png
+    partial:
+      html_path: ${{ workflow.patrol_foot_ecomap_html_url.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        wait_for_timeout: 50000
+  - id: foot_patrol_map_widget
+    task: create_doc_figure
+    partial:
+      heading: "Combined Foot Patrols"
+      level: 3
+      filepath: ${{ workflow.foot_patrol_map_png.return }}
+
+# #########Vehicle Patrols Per Patrol Station########
+# skipping this as it takes a long time to run
+  # - id: groupers
+  #   task: set_groupers
+  # - name: Split Patrol Trajectories by Group
+  #   id: ind_vehicle_patrol_traj
+  #   task: split_groups
+  #   partial:
+  #     df: ${{ workflow.vehicle_traj_colormap.return }}
+  #     groupers: ${{ workflow.groupers.return }}
+
+  # - id: ind_vehicle_patrol_map_layers
+  #   task: create_polyline_layer
+  #   partial:
+  #     layer_style:
+  #       color_column: "patrol_type_colormap"
+  #     legend:
+  #       label_column: "extra__patrol_type__value"
+  #       color_column: "patrol_type_colormap"
+  #   mapvalues:
+  #     argnames: geodataframe
+  #     argvalues: ${{ workflow.ind_vehicle_patrol_traj.return }}
+  # - id: ind_vehicle_patrol_ecomap
+  #   task: draw_ecomap
+  #   partial:
+  #     tile_layers: ${{ workflow.base_map_defs.return }}
+  #     max_zoom: 10
+  #   mapvalues:
+  #     argnames: geo_layers
+  #     argvalues: ${{ workflow.ind_vehicle_patrol_map_layers.return }}
+  # - name: Persist Patrols Ecomap as Text
+  #   id: ind_patrol_vehicle_ecomap_html
+  #   task: persist_text
+  #   partial:
+  #     root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+  #   mapvalues:
+  #     argnames: text
+  #     argvalues: ${{ workflow.ind_vehicle_patrol_ecomap.return }}
+  # - name: Convert vehicle patrol map to png
+  #   id: ind_vehicle_patrol_map_png
+  #   task: html_to_png
+  #   partial:
+  #     output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+  #     config:
+  #       wait_for_timeout: 50000
+  #   mapvalues:
+  #     argnames: html_path
+  #     argvalues: ${{ workflow.ind_patrol_vehicle_ecomap_html.return }}
+  # - id: ind_vehicle_patrol_map_widget
+  #   task: create_doc_figure
+  #   partial:
+  #     heading: "Vehicle Patrols"
+  #     level: 3
+  #     filepath: ${{ workflow.vehicle_patrol_map_png.return }}
+
+
+#########Assemble a Word Document########
+  - id: patrol_section_widget
+    task: create_doc_heading
+    partial:
+      heading: "MEP Patrol Tracks"
+      level: 2
+
   - name: Create Monthly Report
     id: monthly_report
     task: gather_doc
@@ -27,7 +279,10 @@ workflow:
       time_range: ${{ workflow.time_range.return}}
       root_path:  ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: "mep_monthly_report"
-      doc_widgets: []
+      doc_widgets: 
+        - ${{ workflow.patrol_section_widget.return }}
+        - ${{ workflow.vehicle_patrol_map_widget.return }}
+        - ${{ workflow.foot_patrol_map_widget.return }}
 
   - name: Gather Output Files
     id: output_files
@@ -35,5 +290,6 @@ workflow:
     partial:
       files:
         - ${{ workflow.monthly_report.return }}
-        - ${{ workflow.monthly_report.return }}
+        - ${{ workflow.vehicle_patrol_map_png.return }}
+        - ${{ workflow.patrol_vehicle_ecomap_html_url.return }}
 
