@@ -15,7 +15,7 @@ def test_calculate_collar_voltage():
         time_range=TimeRange(
             since=pd.to_datetime("2025-01-01").replace(tzinfo=pytz.UTC),
             until=pd.to_datetime("2025-01-07").replace(tzinfo=pytz.UTC),
-        )
+        ),
     )
 
     assert df is not None
