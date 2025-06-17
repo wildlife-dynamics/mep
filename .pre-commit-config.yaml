@@ -1,4 +1,4 @@
-exclude: '^workflows/.*(?<!\.ya?ml)$'
+exclude: '^workflows/'
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
