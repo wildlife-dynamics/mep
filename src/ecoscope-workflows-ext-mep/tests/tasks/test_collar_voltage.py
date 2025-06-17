@@ -18,4 +18,4 @@ def test_calculate_collar_voltage():
         ),
     )
 
-    assert df is not None
+    assert len(df) > 0
