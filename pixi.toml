@@ -3,7 +3,7 @@ name = "mep"
 channels = [
     # Uncomment the following lines to use local channels for development.
     # "file:///tmp/ecoscope-workflows/release/artifacts/",
-    "file:///tmp/ecoscope-workflows-custom/release/artifacts/",
+    # "file:///tmp/ecoscope-workflows-custom/release/artifacts/",
     'https://repo.prefix.dev/ecoscope-workflows/',
     'https://repo.prefix.dev/ecoscope-workflows-custom/',
     'conda-forge',
@@ -20,7 +20,7 @@ hatch = "*"
 ecoscope-workflows-core = "0.3.7.*"
 ecoscope-workflows-ext-ecoscope = "0.3.7.*"
 ecoscope-workflows-ext-mep = "0.0.2.*"
-# ecoscope-workflows-ext-custom = "0.0.2.*"
+ecoscope-workflows-ext-custom = "0.0.2.*"
 
 # Here we don't specify the channel on purpose, as we want to use the local channel if it exists,
 # otherwise we fall back to the default channel.
@@ -28,7 +28,7 @@ ecoscope-workflows-ext-mep = "0.0.2.*"
 # ecoscope-workflows-core = { version = "*", channel = "file:///tmp/ecoscope-workflows/release/artifacts/" }
 # ecoscope-workflows-ext-ecoscope = { version = "*", channel = "file:///tmp/ecoscope-workflows/release/artifacts/" }
 # ecoscope-workflows-ext-mep = { version = "*", channel = "file:///tmp/ecoscope-workflows-custom/release/artifacts/" }
-ecoscope-workflows-ext-custom = { version = "*", channel = "file:///tmp/ecoscope-workflows-custom/release/artifacts/" }
+# ecoscope-workflows-ext-custom = { version = "*", channel = "file:///tmp/ecoscope-workflows-custom/release/artifacts/" }
 
 [environments]
 compile = { features = ["compile"], no-default-feature = true }
