@@ -25,7 +25,7 @@ Annotate your function with `@task` and input parameters with `Annotated[float, 
 
 Note: make sure to include your tasks to `__init__.py` to register it as a ecoscope-workflow task.
 
-You can also add other dependecies in `src/ecoscope-workflows-ext-mep/pyproject.toml` under [tool.pixi.dependencies] section
+You can also add other dependencies in `src/ecoscope-workflows-ext-mep/pyproject.toml` under [tool.pixi.dependencies] section
 
 Unittests are under `src/ecoscope-workflows-ext-mep/tests` and can be tested it by
 ```bash

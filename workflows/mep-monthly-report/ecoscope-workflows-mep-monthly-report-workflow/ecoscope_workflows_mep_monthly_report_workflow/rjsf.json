@@ -1,25 +1,5 @@
 {
   "properties": {
-    "workflow_details": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "title": "Workflow Name",
-          "type": "string"
-        },
-        "description": {
-          "default": "",
-          "title": "Workflow Description",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object",
-      "description": "Add information that will help to differentiate this workflow from another.",
-      "title": "Set Workflow Details"
-    },
     "time_range": {
       "additionalProperties": false,
       "properties": {
@@ -44,136 +24,680 @@
       "description": "Choose the period of time to analyze.",
       "title": "Time Range"
     },
-    "groupers": {
+    "er_client_name": {
       "additionalProperties": false,
       "properties": {
-        "groupers": {
-          "default": null,
+        "data_source": {
+          "$ref": "#/$defs/EarthRangerConnection",
+          "title": "",
+          "description": "Select one of your configured data sources."
+        }
+      },
+      "required": [
+        "data_source"
+      ],
+      "type": "object",
+      "title": "Data Source"
+    },
+    "base_map_defs": {
+      "additionalProperties": false,
+      "properties": {
+        "base_maps": {
+          "default": [
+            {
+              "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+              "opacity": 1
+            },
+            {
+              "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+              "opacity": 0.5
+            }
+          ],
           "items": {
+            "title": "Base Layer or Custom Layer",
             "anyOf": [
               {
-                "$ref": "#/$defs/ValueGrouper"
+                "properties": {
+                  "url": {
+                    "default": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    "enum": [
+                      "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "Open Street Map",
+                "type": "object"
               },
               {
-                "$ref": "#/$defs/TemporalGrouper"
+                "properties": {
+                  "url": {
+                    "default": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "Roadmap",
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "url": {
+                    "default": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "Satellite",
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "url": {
+                    "default": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "Terrain",
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "url": {
+                    "default": "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "LandDx",
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "url": {
+                    "default": "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "USGS Hillshade",
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "url": {
+                    "default": "https://example.tiles.com/{z}/{x}/{y}.png",
+                    "description": "The URL of a publicly accessible tiled raster service.",
+                    "pattern": "https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}([-a-zA-Z0-9()@:%_\\+.~#?&//=\\{\\}]*)",
+                    "title": "Custom Layer URL",
+                    "type": "string"
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Custom Layer Opacity",
+                    "type": "number"
+                  },
+                  "max_zoom": {
+                    "default": null,
+                    "description": "Set the maximum zoom level to fetch tiles for.",
+                    "title": "Custom Layer Max Zoom",
+                    "type": "integer"
+                  },
+                  "min_zoom": {
+                    "default": null,
+                    "description": "Set the minimum zoom level to fetch tiles for.",
+                    "title": "Custom Layer Min Zoom",
+                    "type": "integer"
+                  }
+                },
+                "title": "Custom Layer (Advanced)",
+                "type": "object"
               }
-            ],
-            "title": "Group by"
+            ]
           },
-          "title": " ",
+          "title": "Set Map Base Layers",
           "type": "array",
-          "description": "            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            "
+          "description": "Select tile layers to use as base layers in map outputs. The first layer in the list will be the bottommost layer displayed.",
+          "ecoscope:advanced": true
         }
       },
       "type": "object",
       "required": [],
-      "title": "Set Groupers"
+      "title": "Base Maps"
     },
-    "calculator": {
+    "vehicle_patrols": {
       "additionalProperties": false,
       "properties": {
-        "a": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "integer"
-            }
-          ],
-          "title": "A",
-          "description": "The first number"
+        "patrol_type": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Patrol Type",
+          "type": "array",
+          "description": "Select the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
         },
-        "b": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "integer"
-            }
-          ],
-          "title": "B",
-          "description": "The second number"
-        },
-        "operation": {
-          "enum": [
-            "add",
-            "subtract",
-            "multiply",
-            "divide",
-            "floor_divide",
-            "modulo",
-            "power",
-            "min",
-            "max"
-          ],
-          "title": "Operation",
-          "type": "string",
-          "description": "The arithmetic operation to apply"
+        "status": {
+          "default": null,
+          "description": "List comprised of 'active'/'overdue'/'done'/'cancelled'",
+          "ecoscope:advanced": true,
+          "items": {
+            "enum": [
+              "active",
+              "overdue",
+              "done",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "title": "Status",
+          "type": "array"
         }
       },
       "required": [
-        "a",
-        "b",
-        "operation"
+        "patrol_type"
       ],
       "type": "object",
-      "title": "Calculate Task"
+      "title": ""
+    },
+    "vehicle_patrol_traj": {
+      "additionalProperties": false,
+      "properties": {
+        "trajectory_segment_filter": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/TrajectorySegmentFilter"
+            }
+          ],
+          "default": {
+            "min_length_meters": 0.001,
+            "max_length_meters": 100000,
+            "min_time_secs": 1,
+            "max_time_secs": 172800,
+            "min_speed_kmhr": 0.0001,
+            "max_speed_kmhr": 500
+          },
+          "title": "Trajectory Segment Filter",
+          "description": "Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Transform Relocations to Trajectories"
+    },
+    "persist_vehicle_patrol_traj": {
+      "additionalProperties": false,
+      "properties": {
+        "filetype": {
+          "default": "csv",
+          "enum": [
+            "csv",
+            "gpkg"
+          ],
+          "title": "Filetype",
+          "type": "string",
+          "description": "The output format"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": ""
+    },
+    "vehicle_patrol_map_layers": {
+      "additionalProperties": false,
+      "properties": {
+        "tooltip_columns": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "title": "Tooltip Columns",
+          "type": "array",
+          "description": "If present, only the listed dataframe columns will display in the layer's picking info",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": ""
+    },
+    "vehicle_patrol_ecomap": {
+      "additionalProperties": false,
+      "properties": {
+        "static": {
+          "default": false,
+          "title": "Static",
+          "type": "boolean",
+          "description": "Set to true to disable map pan/zoom."
+        },
+        "title": {
+          "default": null,
+          "title": "Title",
+          "type": "string",
+          "description": "            The map title. Note this is the title drawn on the map canvas itself, and will result\n            in duplicate titles if set in the context of a dashboard in which the iframe/widget\n            container also has a title set on it.\n            ",
+          "ecoscope:advanced": true
+        },
+        "north_arrow_style": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/NorthArrowStyle"
+            }
+          ],
+          "default": null,
+          "title": "North Arrow Style",
+          "description": "Additional arguments for configuring the North Arrow."
+        },
+        "legend_style": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/LegendStyle"
+            }
+          ],
+          "default": null,
+          "title": "Legend Style",
+          "description": "Additional arguments for configuring the legend."
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": ""
+    },
+    "vehicle_patrol_map_widget": {
+      "additionalProperties": false,
+      "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption",
+          "description": "The figure caption"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": ""
+    },
+    "foot_patrols": {
+      "additionalProperties": false,
+      "properties": {
+        "patrol_type": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Patrol Type",
+          "type": "array",
+          "description": "Select the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
+        },
+        "status": {
+          "default": null,
+          "description": "List comprised of 'active'/'overdue'/'done'/'cancelled'",
+          "ecoscope:advanced": true,
+          "items": {
+            "enum": [
+              "active",
+              "overdue",
+              "done",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "title": "Status",
+          "type": "array"
+        }
+      },
+      "required": [
+        "patrol_type"
+      ],
+      "type": "object",
+      "title": ""
+    },
+    "foot_patrol_traj": {
+      "additionalProperties": false,
+      "properties": {
+        "trajectory_segment_filter": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/TrajectorySegmentFilter"
+            }
+          ],
+          "default": {
+            "min_length_meters": 0.001,
+            "max_length_meters": 100000,
+            "min_time_secs": 1,
+            "max_time_secs": 172800,
+            "min_speed_kmhr": 0.0001,
+            "max_speed_kmhr": 500
+          },
+          "title": "Trajectory Segment Filter",
+          "description": "Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Transform Relocations to Trajectories"
+    },
+    "persist_foot_patrol_traj": {
+      "additionalProperties": false,
+      "properties": {
+        "filetype": {
+          "default": "csv",
+          "enum": [
+            "csv",
+            "gpkg"
+          ],
+          "title": "Filetype",
+          "type": "string",
+          "description": "The output format"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": ""
+    },
+    "foot_patrol_map_layers": {
+      "additionalProperties": false,
+      "properties": {
+        "tooltip_columns": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "title": "Tooltip Columns",
+          "type": "array",
+          "description": "If present, only the listed dataframe columns will display in the layer's picking info",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": ""
+    },
+    "foot_patrol_ecomap": {
+      "additionalProperties": false,
+      "properties": {
+        "static": {
+          "default": false,
+          "title": "Static",
+          "type": "boolean",
+          "description": "Set to true to disable map pan/zoom."
+        },
+        "title": {
+          "default": null,
+          "title": "Title",
+          "type": "string",
+          "description": "            The map title. Note this is the title drawn on the map canvas itself, and will result\n            in duplicate titles if set in the context of a dashboard in which the iframe/widget\n            container also has a title set on it.\n            ",
+          "ecoscope:advanced": true
+        },
+        "north_arrow_style": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/NorthArrowStyle"
+            }
+          ],
+          "default": null,
+          "title": "North Arrow Style",
+          "description": "Additional arguments for configuring the North Arrow."
+        },
+        "legend_style": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/LegendStyle"
+            }
+          ],
+          "default": null,
+          "title": "Legend Style",
+          "description": "Additional arguments for configuring the legend."
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": ""
+    },
+    "foot_patrol_map_widget": {
+      "additionalProperties": false,
+      "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption",
+          "description": "The figure caption"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": ""
+    },
+    "monthly_report": {
+      "additionalProperties": false,
+      "properties": {
+        "logo_path": {
+          "default": null,
+          "title": "Logo Path",
+          "type": "string",
+          "description": "The logo file path"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Create Monthly Report"
     }
   },
   "$defs": {
-    "TemporalGrouper": {
-      "oneOf": [
-        {
-          "const": "%Y",
-          "title": "Year (example: 2024)"
-        },
-        {
-          "const": "%B",
-          "title": "Month (example: September)"
-        },
-        {
-          "const": "%Y-%m",
-          "title": "Year and Month (example: 2023-01)"
-        },
-        {
-          "const": "%j",
-          "title": "Day of the year as a number (example: 365)"
-        },
-        {
-          "const": "%d",
-          "title": "Day of the month as a number (example: 31)"
-        },
-        {
-          "const": "%A",
-          "title": "Day of the week (example: Sunday)"
-        },
-        {
-          "const": "%H",
-          "title": "Hour (24-hour clock) as number (example: 22)"
-        },
-        {
-          "const": "%Y-%m-%d",
-          "title": "Date (example: 2025-01-31)"
+    "EarthRangerConnection": {
+      "properties": {
+        "name": {
+          "title": "Data Source",
+          "type": "string"
         }
+      },
+      "required": [
+        "name"
       ],
-      "title": "Time",
-      "type": "string"
+      "title": "EarthRangerConnection",
+      "type": "object"
     },
-    "ValueGrouper": {
-      "oneOf": [],
-      "title": "Category",
-      "type": "string"
+    "TrajectorySegmentFilter": {
+      "properties": {
+        "min_length_meters": {
+          "default": 0.001,
+          "ecoscope:advanced": true,
+          "title": "Minimum Segment Length (Meters)",
+          "type": "number"
+        },
+        "max_length_meters": {
+          "default": 100000,
+          "ecoscope:advanced": true,
+          "title": "Maximum Segment Length (Meters)",
+          "type": "number"
+        },
+        "min_time_secs": {
+          "default": 1,
+          "ecoscope:advanced": true,
+          "title": "Minimum Segment Duration (Seconds)",
+          "type": "number"
+        },
+        "max_time_secs": {
+          "default": 172800,
+          "ecoscope:advanced": true,
+          "title": "Maximum Segment Duration (Seconds)",
+          "type": "number"
+        },
+        "min_speed_kmhr": {
+          "default": 0.0001,
+          "ecoscope:advanced": true,
+          "title": "Minimum Segment Speed (Kilometers per Hour)",
+          "type": "number"
+        },
+        "max_speed_kmhr": {
+          "default": 500,
+          "ecoscope:advanced": true,
+          "title": "Maximum Segment Speed (Kilometers per Hour)",
+          "type": "number"
+        }
+      },
+      "title": "TrajectorySegmentFilter",
+      "type": "object"
+    },
+    "LegendStyle": {
+      "properties": {
+        "placement": {
+          "default": "bottom-right",
+          "ecoscope:advanced": true,
+          "enum": [
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right",
+            "fill"
+          ],
+          "title": "Placement",
+          "type": "string"
+        },
+        "title": {
+          "default": "Legend",
+          "ecoscope:advanced": true,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "title": "LegendStyle",
+      "type": "object"
+    },
+    "NorthArrowStyle": {
+      "properties": {
+        "placement": {
+          "default": "top-left",
+          "ecoscope:advanced": true,
+          "enum": [
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right",
+            "fill"
+          ],
+          "title": "Placement",
+          "type": "string"
+        },
+        "style": {
+          "default": {
+            "transform": "scale(0.8)"
+          },
+          "ecoscope:advanced": true,
+          "title": "Style",
+          "type": "object"
+        }
+      },
+      "title": "NorthArrowStyle",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "uiSchema": {
     "ui:order": [
-      "workflow_details",
       "time_range",
-      "groupers",
-      "calculator"
+      "er_client_name",
+      "base_map_defs",
+      "vehicle_patrols",
+      "vehicle_patrol_traj",
+      "persist_vehicle_patrol_traj",
+      "vehicle_patrol_map_layers",
+      "vehicle_patrol_ecomap",
+      "vehicle_patrol_map_widget",
+      "foot_patrols",
+      "foot_patrol_traj",
+      "persist_foot_patrol_traj",
+      "foot_patrol_map_layers",
+      "foot_patrol_ecomap",
+      "foot_patrol_map_widget",
+      "monthly_report"
     ]
   }
 }

@@ -8,17 +8,16 @@ from pydantic import Field
 
 @task
 def calculate_collar_voltage(
-    relocs: Annotated[
-        AnyGeoDataFrame,
-        Field(description="The relocation geodataframe.", exclude=True)],
-    time_range: Annotated[TimeRange, Field(description="Time range filter")],)-> str:
+    relocs: Annotated[AnyGeoDataFrame, Field(description="The relocation geodataframe.", exclude=True)],
+    time_range: Annotated[TimeRange, Field(description="Time range filter")],
+) -> str:
     import pandas as pd
     from ecoscope_workflows_core.tasks import analysis, transformation
     from ecoscope_workflows_core.tasks.transformation._extract import FieldType
     from ecoscope_workflows_core.tasks.transformation._filter import ComparisonOperator
     from ecoscope_workflows_ext_ecoscope.tasks import results
     from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import AxisStyle, LayoutStyle, LineStyle, PlotStyle
-    
+
     relocs = transformation.extract_column_as_type(
         relocs, "extra__subjectsource__assigned_range", FieldType.SERIES, "extra.extra.subjectsource__assigned_range."
     )
@@ -32,7 +31,6 @@ def calculate_collar_voltage(
     groups = relocs.groupby(by=["extra__subject__name", "extra__subjectsource__id"])
 
     for _, dataframe in groups:
-
         subjectsource_upperbound = analysis.dataframe_column_first_unique(
             dataframe, "extra.extra.subjectsource__assigned_range.upper"
         )
@@ -57,7 +55,9 @@ def calculate_collar_voltage(
         curr_df = transformation.filter_df(
             dataframe, column_name="fixtime", op=ComparisonOperator.GE, value=time_range.since
         )
-        curr_df = transformation.filter_df(curr_df, column_name="fixtime", op=ComparisonOperator.LT, value=time_range.until)
+        curr_df = transformation.filter_df(
+            curr_df, column_name="fixtime", op=ComparisonOperator.LT, value=time_range.until
+        )
         hist_df = transformation.filter_df(
             dataframe, column_name="fixtime", op=ComparisonOperator.LT, value=time_range.since
         )

@@ -4,17 +4,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
-
-
-class WorkflowDetails(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    name: str = Field(..., title="Workflow Name")
-    description: Optional[str] = Field("", title="Workflow Description")
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, confloat, constr
 
 
 class TimeRange(BaseModel):
@@ -25,45 +17,420 @@ class TimeRange(BaseModel):
     until: AwareDatetime = Field(..., description="The end time", title="Until")
 
 
-class Operation(str, Enum):
-    add = "add"
-    subtract = "subtract"
-    multiply = "multiply"
-    divide = "divide"
-    floor_divide = "floor_divide"
-    modulo = "modulo"
-    power = "power"
-    min = "min"
-    max = "max"
-
-
-class Calculator(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    a: Union[float, int] = Field(..., description="The first number", title="A")
-    b: Union[float, int] = Field(..., description="The second number", title="B")
-    operation: Operation = Field(
-        ..., description="The arithmetic operation to apply", title="Operation"
+class Url(str, Enum):
+    https___tile_openstreetmap_org__z___x___y__png = (
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     )
 
 
-class TemporalGrouper(RootModel[str]):
-    root: str = Field(..., title="Time")
-
-
-class ValueGrouper(RootModel[str]):
-    root: str = Field(..., title="Category")
-
-
-class Groupers(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
+class BaseMaps(BaseModel):
+    url: Literal["https://tile.openstreetmap.org/{z}/{x}/{y}.png"] = Field(
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png", title="Preset Layer URL"
     )
-    groupers: Optional[List[Union[ValueGrouper, TemporalGrouper]]] = Field(
+    opacity: Optional[confloat(ge=0.0, le=1.0)] = Field(
+        1,
+        description="Set layer transparency from 1 (fully visible) to 0 (hidden).",
+        title="Layer Opacity",
+    )
+
+
+class Url1(str, Enum):
+    https___server_arcgisonline_com_ArcGIS_rest_services_World_Street_Map_MapServer_tile__z___y___x_ = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+
+
+class BaseMaps1(BaseModel):
+    url: Literal[
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+    ] = Field(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+        title="Preset Layer URL",
+    )
+    opacity: Optional[confloat(ge=0.0, le=1.0)] = Field(
+        1,
+        description="Set layer transparency from 1 (fully visible) to 0 (hidden).",
+        title="Layer Opacity",
+    )
+
+
+class Url2(str, Enum):
+    https___server_arcgisonline_com_ArcGIS_rest_services_World_Imagery_MapServer_tile__z___y___x_ = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+
+
+class BaseMaps2(BaseModel):
+    url: Literal[
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+    ] = Field(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        title="Preset Layer URL",
+    )
+    opacity: Optional[confloat(ge=0.0, le=1.0)] = Field(
+        1,
+        description="Set layer transparency from 1 (fully visible) to 0 (hidden).",
+        title="Layer Opacity",
+    )
+
+
+class Url3(str, Enum):
+    https___server_arcgisonline_com_ArcGIS_rest_services_World_Topo_Map_MapServer_tile__z___y___x_ = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+
+
+class BaseMaps3(BaseModel):
+    url: Literal[
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+    ] = Field(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+        title="Preset Layer URL",
+    )
+    opacity: Optional[confloat(ge=0.0, le=1.0)] = Field(
+        1,
+        description="Set layer transparency from 1 (fully visible) to 0 (hidden).",
+        title="Layer Opacity",
+    )
+
+
+class Url4(str, Enum):
+    https___tiles_arcgis_com_tiles_POUcpLYXNckpLjnY_arcgis_rest_services_landDx_basemap_tiles_mapservice_MapServer_tile__z___y___x_ = "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}"
+
+
+class BaseMaps4(BaseModel):
+    url: Literal[
+        "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}"
+    ] = Field(
+        "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}",
+        title="Preset Layer URL",
+    )
+    opacity: Optional[confloat(ge=0.0, le=1.0)] = Field(
+        1,
+        description="Set layer transparency from 1 (fully visible) to 0 (hidden).",
+        title="Layer Opacity",
+    )
+
+
+class Url5(str, Enum):
+    https___server_arcgisonline_com_arcgis_rest_services_Elevation_World_Hillshade_MapServer_tile__z___y___x_ = "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"
+
+
+class BaseMaps5(BaseModel):
+    url: Literal[
+        "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"
+    ] = Field(
+        "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+        title="Preset Layer URL",
+    )
+    opacity: Optional[confloat(ge=0.0, le=1.0)] = Field(
+        1,
+        description="Set layer transparency from 1 (fully visible) to 0 (hidden).",
+        title="Layer Opacity",
+    )
+
+
+class BaseMaps6(BaseModel):
+    url: Optional[
+        constr(
+            pattern=r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}([-a-zA-Z0-9()@:%_\+.~#?&//=\{\}]*)"
+        )
+    ] = Field(
+        "https://example.tiles.com/{z}/{x}/{y}.png",
+        description="The URL of a publicly accessible tiled raster service.",
+        title="Custom Layer URL",
+    )
+    opacity: Optional[confloat(ge=0.0, le=1.0)] = Field(
+        1,
+        description="Set layer transparency from 1 (fully visible) to 0 (hidden).",
+        title="Custom Layer Opacity",
+    )
+    max_zoom: Optional[int] = Field(
         None,
-        description="            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            ",
-        title=" ",
+        description="Set the maximum zoom level to fetch tiles for.",
+        title="Custom Layer Max Zoom",
+    )
+    min_zoom: Optional[int] = Field(
+        None,
+        description="Set the minimum zoom level to fetch tiles for.",
+        title="Custom Layer Min Zoom",
+    )
+
+
+class BaseMapDefs(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    base_maps: Optional[
+        List[
+            Union[
+                BaseMaps,
+                BaseMaps1,
+                BaseMaps2,
+                BaseMaps3,
+                BaseMaps4,
+                BaseMaps5,
+                BaseMaps6,
+            ]
+        ]
+    ] = Field(
+        [
+            {
+                "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+                "opacity": 1,
+            },
+            {
+                "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                "opacity": 0.5,
+            },
+        ],
+        description="Select tile layers to use as base layers in map outputs. The first layer in the list will be the bottommost layer displayed.",
+        title="Set Map Base Layers",
+    )
+
+
+class StatusEnum(str, Enum):
+    active = "active"
+    overdue = "overdue"
+    done = "done"
+    cancelled = "cancelled"
+
+
+class VehiclePatrols(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    patrol_type: List[str] = Field(
+        ...,
+        description="Select the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
+        title="Patrol Type",
+    )
+    status: Optional[List[StatusEnum]] = Field(
+        None,
+        description="List comprised of 'active'/'overdue'/'done'/'cancelled'",
+        title="Status",
+    )
+
+
+class Filetype(str, Enum):
+    csv = "csv"
+    gpkg = "gpkg"
+
+
+class PersistVehiclePatrolTraj(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    filetype: Optional[Filetype] = Field(
+        "csv", description="The output format", title="Filetype"
+    )
+
+
+class VehiclePatrolMapLayers(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    tooltip_columns: Optional[List[str]] = Field(
+        None,
+        description="If present, only the listed dataframe columns will display in the layer's picking info",
+        title="Tooltip Columns",
+    )
+
+
+class VehiclePatrolMapWidget(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    caption: Optional[str] = Field(
+        None, description="The figure caption", title="Caption"
+    )
+
+
+class FootPatrols(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    patrol_type: List[str] = Field(
+        ...,
+        description="Select the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
+        title="Patrol Type",
+    )
+    status: Optional[List[StatusEnum]] = Field(
+        None,
+        description="List comprised of 'active'/'overdue'/'done'/'cancelled'",
+        title="Status",
+    )
+
+
+class PersistFootPatrolTraj(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    filetype: Optional[Filetype] = Field(
+        "csv", description="The output format", title="Filetype"
+    )
+
+
+class FootPatrolMapLayers(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    tooltip_columns: Optional[List[str]] = Field(
+        None,
+        description="If present, only the listed dataframe columns will display in the layer's picking info",
+        title="Tooltip Columns",
+    )
+
+
+class FootPatrolMapWidget(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    caption: Optional[str] = Field(
+        None, description="The figure caption", title="Caption"
+    )
+
+
+class MonthlyReport(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    logo_path: Optional[str] = Field(
+        None, description="The logo file path", title="Logo Path"
+    )
+
+
+class EarthRangerConnection(BaseModel):
+    name: str = Field(..., title="Data Source")
+
+
+class TrajectorySegmentFilter(BaseModel):
+    min_length_meters: Optional[float] = Field(
+        0.001, title="Minimum Segment Length (Meters)"
+    )
+    max_length_meters: Optional[float] = Field(
+        100000, title="Maximum Segment Length (Meters)"
+    )
+    min_time_secs: Optional[float] = Field(
+        1, title="Minimum Segment Duration (Seconds)"
+    )
+    max_time_secs: Optional[float] = Field(
+        172800, title="Maximum Segment Duration (Seconds)"
+    )
+    min_speed_kmhr: Optional[float] = Field(
+        0.0001, title="Minimum Segment Speed (Kilometers per Hour)"
+    )
+    max_speed_kmhr: Optional[float] = Field(
+        500, title="Maximum Segment Speed (Kilometers per Hour)"
+    )
+
+
+class Placement(str, Enum):
+    top_left = "top-left"
+    top_right = "top-right"
+    bottom_left = "bottom-left"
+    bottom_right = "bottom-right"
+    fill = "fill"
+
+
+class LegendStyle(BaseModel):
+    placement: Optional[Placement] = Field("bottom-right", title="Placement")
+    title: Optional[str] = Field("Legend", title="Title")
+
+
+class NorthArrowStyle(BaseModel):
+    placement: Optional[Placement] = Field("top-left", title="Placement")
+    style: Optional[Dict[str, Any]] = Field({"transform": "scale(0.8)"}, title="Style")
+
+
+class ErClientName(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    data_source: EarthRangerConnection = Field(
+        ..., description="Select one of your configured data sources.", title=""
+    )
+
+
+class VehiclePatrolTraj(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    trajectory_segment_filter: Optional[TrajectorySegmentFilter] = Field(
+        default_factory=lambda: TrajectorySegmentFilter.model_validate(
+            {
+                "min_length_meters": 0.001,
+                "max_length_meters": 100000,
+                "min_time_secs": 1,
+                "max_time_secs": 172800,
+                "min_speed_kmhr": 0.0001,
+                "max_speed_kmhr": 500,
+            }
+        ),
+        description="Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
+        title="Trajectory Segment Filter",
+    )
+
+
+class VehiclePatrolEcomap(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    static: Optional[bool] = Field(
+        False, description="Set to true to disable map pan/zoom.", title="Static"
+    )
+    title: Optional[str] = Field(
+        None,
+        description="            The map title. Note this is the title drawn on the map canvas itself, and will result\n            in duplicate titles if set in the context of a dashboard in which the iframe/widget\n            container also has a title set on it.\n            ",
+        title="Title",
+    )
+    north_arrow_style: Optional[NorthArrowStyle] = Field(
+        None,
+        description="Additional arguments for configuring the North Arrow.",
+        title="North Arrow Style",
+    )
+    legend_style: Optional[LegendStyle] = Field(
+        None,
+        description="Additional arguments for configuring the legend.",
+        title="Legend Style",
+    )
+
+
+class FootPatrolTraj(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    trajectory_segment_filter: Optional[TrajectorySegmentFilter] = Field(
+        default_factory=lambda: TrajectorySegmentFilter.model_validate(
+            {
+                "min_length_meters": 0.001,
+                "max_length_meters": 100000,
+                "min_time_secs": 1,
+                "max_time_secs": 172800,
+                "min_speed_kmhr": 0.0001,
+                "max_speed_kmhr": 500,
+            }
+        ),
+        description="Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
+        title="Trajectory Segment Filter",
+    )
+
+
+class FootPatrolEcomap(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    static: Optional[bool] = Field(
+        False, description="Set to true to disable map pan/zoom.", title="Static"
+    )
+    title: Optional[str] = Field(
+        None,
+        description="            The map title. Note this is the title drawn on the map canvas itself, and will result\n            in duplicate titles if set in the context of a dashboard in which the iframe/widget\n            container also has a title set on it.\n            ",
+        title="Title",
+    )
+    north_arrow_style: Optional[NorthArrowStyle] = Field(
+        None,
+        description="Additional arguments for configuring the North Arrow.",
+        title="North Arrow Style",
+    )
+    legend_style: Optional[LegendStyle] = Field(
+        None,
+        description="Additional arguments for configuring the legend.",
+        title="Legend Style",
     )
 
 
@@ -71,13 +438,27 @@ class Params(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    workflow_details: Optional[WorkflowDetails] = Field(
-        None,
-        description="Add information that will help to differentiate this workflow from another.",
-        title="Set Workflow Details",
-    )
     time_range: Optional[TimeRange] = Field(
         None, description="Choose the period of time to analyze.", title="Time Range"
     )
-    groupers: Optional[Groupers] = Field(None, title="Set Groupers")
-    calculator: Optional[Calculator] = Field(None, title="Calculate Task")
+    er_client_name: Optional[ErClientName] = Field(None, title="Data Source")
+    base_map_defs: Optional[BaseMapDefs] = Field(None, title="Base Maps")
+    vehicle_patrols: Optional[VehiclePatrols] = Field(None, title="")
+    vehicle_patrol_traj: Optional[VehiclePatrolTraj] = Field(
+        None, title="Transform Relocations to Trajectories"
+    )
+    persist_vehicle_patrol_traj: Optional[PersistVehiclePatrolTraj] = Field(
+        None, title=""
+    )
+    vehicle_patrol_map_layers: Optional[VehiclePatrolMapLayers] = Field(None, title="")
+    vehicle_patrol_ecomap: Optional[VehiclePatrolEcomap] = Field(None, title="")
+    vehicle_patrol_map_widget: Optional[VehiclePatrolMapWidget] = Field(None, title="")
+    foot_patrols: Optional[FootPatrols] = Field(None, title="")
+    foot_patrol_traj: Optional[FootPatrolTraj] = Field(
+        None, title="Transform Relocations to Trajectories"
+    )
+    persist_foot_patrol_traj: Optional[PersistFootPatrolTraj] = Field(None, title="")
+    foot_patrol_map_layers: Optional[FootPatrolMapLayers] = Field(None, title="")
+    foot_patrol_ecomap: Optional[FootPatrolEcomap] = Field(None, title="")
+    foot_patrol_map_widget: Optional[FootPatrolMapWidget] = Field(None, title="")
+    monthly_report: Optional[MonthlyReport] = Field(None, title="Create Monthly Report")

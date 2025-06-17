@@ -7,8 +7,8 @@ requirements:
     version: "0.3.7.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
   - name: ecoscope-workflows-ext-mep
-    version: "*"
-    channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
+    version: "0.0.2.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
 workflow:
   - name: Set Workflow Details

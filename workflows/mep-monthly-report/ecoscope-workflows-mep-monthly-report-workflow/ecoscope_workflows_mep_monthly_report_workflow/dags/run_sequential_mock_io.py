@@ -8,16 +8,38 @@ that they would not be included (or would be different) in the production versio
 """
 
 import json
+import os
 import warnings  # 🧪
+from ecoscope_workflows_core.testing import create_task_magicmock  # 🧪
 
 
-from ecoscope_workflows_core.tasks.config import set_workflow_details
 from ecoscope_workflows_core.tasks.filter import set_time_range
-from ecoscope_workflows_core.tasks.groupby import set_groupers
-from ecoscope_workflows_core.tasks.analysis import apply_arithmetic_operation
-from ecoscope_workflows_ext_mep.tasks import add_one_thousand
-from ecoscope_workflows_core.tasks.results import create_single_value_widget_single_view
-from ecoscope_workflows_core.tasks.results import gather_dashboard
+from ecoscope_workflows_core.tasks.io import set_er_connection
+from ecoscope_workflows_ext_ecoscope.tasks.results import set_base_maps
+
+get_patrol_observations = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
+    func_name="get_patrol_observations",  # 🧪
+)  # 🧪
+from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import process_relocations
+from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
+    relocations_to_trajectory,
+)
+from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df
+from ecoscope_workflows_ext_ecoscope.tasks.transformation import apply_color_map
+from ecoscope_workflows_ext_ecoscope.tasks.results import create_polyline_layer
+from ecoscope_workflows_ext_ecoscope.tasks.results import draw_ecomap
+from ecoscope_workflows_core.tasks.io import persist_text
+from ecoscope_workflows_ext_custom.tasks import html_to_png
+from ecoscope_workflows_ext_custom.tasks import create_doc_figure
+
+get_patrol_observations = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
+    func_name="get_patrol_observations",  # 🧪
+)  # 🧪
+from ecoscope_workflows_ext_custom.tasks import create_doc_heading
+from ecoscope_workflows_ext_custom.tasks import gather_doc
+from ecoscope_workflows_core.tasks.results import gather_output_files
 
 from ..params import Params
 
@@ -27,66 +49,381 @@ def main(params: Params):
 
     params_dict = json.loads(params.model_dump_json(exclude_unset=True))
 
-    workflow_details = (
-        set_workflow_details.validate()
-        .handle_errors(task_instance_id="workflow_details")
-        .partial(**(params_dict.get("workflow_details") or {}))
-        .call()
-    )
-
     time_range = (
         set_time_range.validate()
         .handle_errors(task_instance_id="time_range")
+        .partial(time_format="%Y-%m-%d", **(params_dict.get("time_range") or {}))
+        .call()
+    )
+
+    er_client_name = (
+        set_er_connection.validate()
+        .handle_errors(task_instance_id="er_client_name")
+        .partial(**(params_dict.get("er_client_name") or {}))
+        .call()
+    )
+
+    base_map_defs = (
+        set_base_maps.validate()
+        .handle_errors(task_instance_id="base_map_defs")
+        .partial(**(params_dict.get("base_map_defs") or {}))
+        .call()
+    )
+
+    vehicle_patrols = (
+        get_patrol_observations.validate()
+        .handle_errors(task_instance_id="vehicle_patrols")
         .partial(
-            time_format="%d %b %Y %H:%M:%S %Z", **(params_dict.get("time_range") or {})
-        )
-        .call()
-    )
-
-    groupers = (
-        set_groupers.validate()
-        .handle_errors(task_instance_id="groupers")
-        .partial(**(params_dict.get("groupers") or {}))
-        .call()
-    )
-
-    calculator = (
-        apply_arithmetic_operation.validate()
-        .handle_errors(task_instance_id="calculator")
-        .partial(**(params_dict.get("calculator") or {}))
-        .call()
-    )
-
-    add_more = (
-        add_one_thousand.validate()
-        .handle_errors(task_instance_id="add_more")
-        .partial(value=calculator, **(params_dict.get("add_more") or {}))
-        .call()
-    )
-
-    sv_widgets = (
-        create_single_value_widget_single_view.validate()
-        .handle_errors(task_instance_id="sv_widgets")
-        .partial(
-            title="Sum",
-            decimal_places=0,
-            data=add_more,
-            **(params_dict.get("sv_widgets") or {}),
-        )
-        .call()
-    )
-
-    template_dashboard = (
-        gather_dashboard.validate()
-        .handle_errors(task_instance_id="template_dashboard")
-        .partial(
-            details=workflow_details,
-            widgets=sv_widgets,
+            client=er_client_name,
             time_range=time_range,
-            groupers=groupers,
-            **(params_dict.get("template_dashboard") or {}),
+            include_patrol_details=True,
+            raise_on_empty=False,
+            **(params_dict.get("vehicle_patrols") or {}),
         )
         .call()
     )
 
-    return template_dashboard
+    vehicle_patrol_reloc = (
+        process_relocations.validate()
+        .handle_errors(task_instance_id="vehicle_patrol_reloc")
+        .partial(
+            observations=vehicle_patrols,
+            relocs_columns=[
+                "patrol_id",
+                "patrol_start_time",
+                "patrol_end_time",
+                "patrol_type__value",
+                "patrol_type__display",
+                "patrol_serial_number",
+                "patrol_status",
+                "patrol_subject",
+                "groupby_col",
+                "fixtime",
+                "junk_status",
+                "extra__source",
+                "geometry",
+            ],
+            filter_point_coords=[
+                {"x": 180.0, "y": 90.0},
+                {"x": 0.0, "y": 0.0},
+                {"x": 1.0, "y": 1.0},
+            ],
+            **(params_dict.get("vehicle_patrol_reloc") or {}),
+        )
+        .call()
+    )
+
+    vehicle_patrol_traj = (
+        relocations_to_trajectory.validate()
+        .handle_errors(task_instance_id="vehicle_patrol_traj")
+        .partial(
+            relocations=vehicle_patrol_reloc,
+            **(params_dict.get("vehicle_patrol_traj") or {}),
+        )
+        .call()
+    )
+
+    persist_vehicle_patrol_traj = (
+        persist_df.validate()
+        .handle_errors(task_instance_id="persist_vehicle_patrol_traj")
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            df=vehicle_patrol_traj,
+            filename="vehicle_patrols_traj",
+            **(params_dict.get("persist_vehicle_patrol_traj") or {}),
+        )
+        .call()
+    )
+
+    vehicle_traj_colormap = (
+        apply_color_map.validate()
+        .handle_errors(task_instance_id="vehicle_traj_colormap")
+        .partial(
+            df=vehicle_patrol_traj,
+            colormap=[
+                "#FF9600",
+                "#F23B0E",
+                "#A100CB",
+                "#F04564",
+                "#03421A",
+                "#3089FF",
+                "#E26FFF",
+                "#8C1700",
+                "#002960",
+                "#FFD000",
+                "#B62879",
+                "#680078",
+                "#005A56",
+                "#0056C7",
+                "#331878",
+                "#E76826",
+            ],
+            input_column_name="extra__patrol_type__value",
+            output_column_name="patrol_type_colormap",
+            **(params_dict.get("vehicle_traj_colormap") or {}),
+        )
+        .call()
+    )
+
+    vehicle_patrol_map_layers = (
+        create_polyline_layer.validate()
+        .handle_errors(task_instance_id="vehicle_patrol_map_layers")
+        .partial(
+            layer_style={"color_column": "patrol_type_colormap"},
+            legend={
+                "label_column": "extra__patrol_type__value",
+                "color_column": "patrol_type_colormap",
+            },
+            geodataframe=vehicle_traj_colormap,
+            **(params_dict.get("vehicle_patrol_map_layers") or {}),
+        )
+        .call()
+    )
+
+    vehicle_patrol_ecomap = (
+        draw_ecomap.validate()
+        .handle_errors(task_instance_id="vehicle_patrol_ecomap")
+        .partial(
+            tile_layers=base_map_defs,
+            max_zoom=10,
+            geo_layers=vehicle_patrol_map_layers,
+            **(params_dict.get("vehicle_patrol_ecomap") or {}),
+        )
+        .call()
+    )
+
+    patrol_vehicle_ecomap_html_url = (
+        persist_text.validate()
+        .handle_errors(task_instance_id="patrol_vehicle_ecomap_html_url")
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            text=vehicle_patrol_ecomap,
+            **(params_dict.get("patrol_vehicle_ecomap_html_url") or {}),
+        )
+        .call()
+    )
+
+    vehicle_patrol_map_png = (
+        html_to_png.validate()
+        .handle_errors(task_instance_id="vehicle_patrol_map_png")
+        .partial(
+            html_path=patrol_vehicle_ecomap_html_url,
+            output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            config={"wait_for_timeout": 50000},
+            **(params_dict.get("vehicle_patrol_map_png") or {}),
+        )
+        .call()
+    )
+
+    vehicle_patrol_map_widget = (
+        create_doc_figure.validate()
+        .handle_errors(task_instance_id="vehicle_patrol_map_widget")
+        .partial(
+            heading="Combined Vehicle Patrols",
+            level=3,
+            filepath=vehicle_patrol_map_png,
+            **(params_dict.get("vehicle_patrol_map_widget") or {}),
+        )
+        .call()
+    )
+
+    foot_patrols = (
+        get_patrol_observations.validate()
+        .handle_errors(task_instance_id="foot_patrols")
+        .partial(
+            client=er_client_name,
+            time_range=time_range,
+            include_patrol_details=True,
+            raise_on_empty=False,
+            **(params_dict.get("foot_patrols") or {}),
+        )
+        .call()
+    )
+
+    foot_patrol_reloc = (
+        process_relocations.validate()
+        .handle_errors(task_instance_id="foot_patrol_reloc")
+        .partial(
+            observations=foot_patrols,
+            relocs_columns=[
+                "patrol_id",
+                "patrol_start_time",
+                "patrol_end_time",
+                "patrol_type__value",
+                "patrol_type__display",
+                "patrol_serial_number",
+                "patrol_status",
+                "patrol_subject",
+                "groupby_col",
+                "fixtime",
+                "junk_status",
+                "extra__source",
+                "geometry",
+            ],
+            filter_point_coords=[
+                {"x": 180.0, "y": 90.0},
+                {"x": 0.0, "y": 0.0},
+                {"x": 1.0, "y": 1.0},
+            ],
+            **(params_dict.get("foot_patrol_reloc") or {}),
+        )
+        .call()
+    )
+
+    foot_patrol_traj = (
+        relocations_to_trajectory.validate()
+        .handle_errors(task_instance_id="foot_patrol_traj")
+        .partial(
+            relocations=foot_patrol_reloc, **(params_dict.get("foot_patrol_traj") or {})
+        )
+        .call()
+    )
+
+    persist_foot_patrol_traj = (
+        persist_df.validate()
+        .handle_errors(task_instance_id="persist_foot_patrol_traj")
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            df=foot_patrol_traj,
+            filename="foot_patrol_traj",
+            **(params_dict.get("persist_foot_patrol_traj") or {}),
+        )
+        .call()
+    )
+
+    foot_traj_colormap = (
+        apply_color_map.validate()
+        .handle_errors(task_instance_id="foot_traj_colormap")
+        .partial(
+            df=foot_patrol_traj,
+            colormap=[
+                "#FF9600",
+                "#F23B0E",
+                "#A100CB",
+                "#F04564",
+                "#03421A",
+                "#3089FF",
+                "#E26FFF",
+                "#8C1700",
+                "#002960",
+                "#FFD000",
+                "#B62879",
+                "#680078",
+                "#005A56",
+                "#0056C7",
+                "#331878",
+                "#E76826",
+            ],
+            input_column_name="extra__patrol_type__value",
+            output_column_name="patrol_type_colormap",
+            **(params_dict.get("foot_traj_colormap") or {}),
+        )
+        .call()
+    )
+
+    foot_patrol_map_layers = (
+        create_polyline_layer.validate()
+        .handle_errors(task_instance_id="foot_patrol_map_layers")
+        .partial(
+            layer_style={"color_column": "patrol_type_colormap"},
+            legend={
+                "label_column": "extra__patrol_type__value",
+                "color_column": "patrol_type_colormap",
+            },
+            geodataframe=foot_traj_colormap,
+            **(params_dict.get("foot_patrol_map_layers") or {}),
+        )
+        .call()
+    )
+
+    foot_patrol_ecomap = (
+        draw_ecomap.validate()
+        .handle_errors(task_instance_id="foot_patrol_ecomap")
+        .partial(
+            tile_layers=base_map_defs,
+            max_zoom=10,
+            geo_layers=foot_patrol_map_layers,
+            **(params_dict.get("foot_patrol_ecomap") or {}),
+        )
+        .call()
+    )
+
+    patrol_foot_ecomap_html_url = (
+        persist_text.validate()
+        .handle_errors(task_instance_id="patrol_foot_ecomap_html_url")
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            text=foot_patrol_ecomap,
+            **(params_dict.get("patrol_foot_ecomap_html_url") or {}),
+        )
+        .call()
+    )
+
+    foot_patrol_map_png = (
+        html_to_png.validate()
+        .handle_errors(task_instance_id="foot_patrol_map_png")
+        .partial(
+            html_path=patrol_foot_ecomap_html_url,
+            output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            config={"wait_for_timeout": 50000},
+            **(params_dict.get("foot_patrol_map_png") or {}),
+        )
+        .call()
+    )
+
+    foot_patrol_map_widget = (
+        create_doc_figure.validate()
+        .handle_errors(task_instance_id="foot_patrol_map_widget")
+        .partial(
+            heading="Combined Foot Patrols",
+            level=3,
+            filepath=foot_patrol_map_png,
+            **(params_dict.get("foot_patrol_map_widget") or {}),
+        )
+        .call()
+    )
+
+    patrol_section_widget = (
+        create_doc_heading.validate()
+        .handle_errors(task_instance_id="patrol_section_widget")
+        .partial(
+            heading="MEP Patrol Tracks",
+            level=2,
+            **(params_dict.get("patrol_section_widget") or {}),
+        )
+        .call()
+    )
+
+    monthly_report = (
+        gather_doc.validate()
+        .handle_errors(task_instance_id="monthly_report")
+        .partial(
+            title="MEP Monthly Report",
+            time_range=time_range,
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            filename="mep_monthly_report",
+            doc_widgets=[
+                patrol_section_widget,
+                vehicle_patrol_map_widget,
+                foot_patrol_map_widget,
+            ],
+            **(params_dict.get("monthly_report") or {}),
+        )
+        .call()
+    )
+
+    output_files = (
+        gather_output_files.validate()
+        .handle_errors(task_instance_id="output_files")
+        .partial(
+            files=[
+                monthly_report,
+                vehicle_patrol_map_png,
+                patrol_vehicle_ecomap_html_url,
+            ],
+            **(params_dict.get("output_files") or {}),
+        )
+        .call()
+    )
+
+    return output_files

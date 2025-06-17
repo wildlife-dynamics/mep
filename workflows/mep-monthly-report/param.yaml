@@ -1,12 +1,40 @@
-workflow_details:
-  name: "Example Workflow"
-  description: "An example workflow for testing purposes."
 time_range:
-  since: "2015-01-01T00:00:00Z"
-  until: "2015-02-28T23:59:59Z"
-groupers:
-  groupers: []
-calculator:
-  a: 1
-  b: 1
-  operation: "add"
+  since: "2025-05-01T00:00:00Z"
+  until: "2025-05-07T23:59:59Z"
+er_client_name:
+  data_source:
+    name: "mep"
+base_map_defs:
+  base_maps:
+    - url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+      opacity: 1.0
+    - url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+      opacity: 0.5
+      max_zoom: 17
+      min_zoom: null
+vehicle_patrols:
+  patrol_type:
+    - "MEP_routine_vehicle_patrol_bravo_team"
+    - "MEP_routine_vehicle_patrol_foxtrot_team"
+    - "MEP_Routine_Vehicle_Patrol - Mwaluganje Team"
+    - "MEP_routine_vehicle_patrol_hq_team"
+    - "MEP_routine_vehicle_patrol_delta_team"
+    - "MEP_routine_vehicle_patrol_echo_team"
+    - "MEP_routine_vehicle_patrol_kilo_team"
+    - "MEP_routine_vehicle_patrol_mobile_team"
+    - "MEP_routine_vehicle_patrol_alpha_team"
+    - "MEP_routine_vehicle_patrol_charlie_team"
+    - "MEP_routine_vehicle_patrol_golf_team"
+foot_patrols:
+  patrol_type:
+    - "MEP_routine_foot_patrol_bravo_team"
+    - "MEP_routine_foot_patrol_foxtrot_team"
+    - "MEP_routine_foot_patrol_HQ_team"
+    - "MEP Routine Foot Patrol - Delta Team"
+    - "MEP_routine_foot_patrol_echo_team"
+    - "MEP_routine_foot_patrol_kilo_team"
+    - "mwaluganje_routine_foot_patrol_alpha_team"
+    - "MEP_routine_foot_patrol_alpha_team"
+    - "MEP_routine_foot_patrol_charlie_team"
+    - "MEP_routine_foot_patrol_golf_team"
+    - "MEP_routine_foot_patrol_marmanet"
