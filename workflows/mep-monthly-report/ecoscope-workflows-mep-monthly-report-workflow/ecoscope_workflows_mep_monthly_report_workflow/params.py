@@ -179,7 +179,7 @@ class BaseMapDefs(BaseModel):
             },
         ],
         description="Select tile layers to use as base layers in map outputs. The first layer in the list will be the bottommost layer displayed.",
-        title="Set Map Base Layers",
+        title=" ",
     )
 
 
@@ -194,14 +194,14 @@ class VehiclePatrols(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    patrol_type: List[str] = Field(
+    patrol_types: List[str] = Field(
         ...,
-        description="Select the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
-        title="Patrol Type",
+        description="Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
+        title="Patrol Types",
     )
     status: Optional[List[StatusEnum]] = Field(
         None,
-        description="List comprised of 'active'/'overdue'/'done'/'cancelled'",
+        description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
         title="Status",
     )
 
@@ -209,6 +209,7 @@ class VehiclePatrols(BaseModel):
 class Filetype(str, Enum):
     csv = "csv"
     gpkg = "gpkg"
+    geoparquet = "geoparquet"
 
 
 class PersistVehiclePatrolTraj(BaseModel):
@@ -244,14 +245,14 @@ class FootPatrols(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    patrol_type: List[str] = Field(
+    patrol_types: List[str] = Field(
         ...,
-        description="Select the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
-        title="Patrol Type",
+        description="Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
+        title="Patrol Types",
     )
     status: Optional[List[StatusEnum]] = Field(
         None,
-        description="List comprised of 'active'/'overdue'/'done'/'cancelled'",
+        description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
         title="Status",
     )
 
@@ -299,22 +300,22 @@ class EarthRangerConnection(BaseModel):
 
 
 class TrajectorySegmentFilter(BaseModel):
-    min_length_meters: Optional[float] = Field(
+    min_length_meters: Optional[confloat(ge=0.001)] = Field(
         0.001, title="Minimum Segment Length (Meters)"
     )
-    max_length_meters: Optional[float] = Field(
+    max_length_meters: Optional[confloat(gt=0.001)] = Field(
         100000, title="Maximum Segment Length (Meters)"
     )
-    min_time_secs: Optional[float] = Field(
+    min_time_secs: Optional[confloat(ge=1.0)] = Field(
         1, title="Minimum Segment Duration (Seconds)"
     )
-    max_time_secs: Optional[float] = Field(
+    max_time_secs: Optional[confloat(gt=1.0)] = Field(
         172800, title="Maximum Segment Duration (Seconds)"
     )
-    min_speed_kmhr: Optional[float] = Field(
-        0.0001, title="Minimum Segment Speed (Kilometers per Hour)"
+    min_speed_kmhr: Optional[confloat(gt=0.001)] = Field(
+        0.01, title="Minimum Segment Speed (Kilometers per Hour)"
     )
-    max_speed_kmhr: Optional[float] = Field(
+    max_speed_kmhr: Optional[confloat(gt=0.001)] = Field(
         500, title="Maximum Segment Speed (Kilometers per Hour)"
     )
 
@@ -357,12 +358,12 @@ class VehiclePatrolTraj(BaseModel):
                 "max_length_meters": 100000,
                 "min_time_secs": 1,
                 "max_time_secs": 172800,
-                "min_speed_kmhr": 0.0001,
+                "min_speed_kmhr": 0.01,
                 "max_speed_kmhr": 500,
             }
         ),
         description="Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
-        title="Trajectory Segment Filter",
+        title=" ",
     )
 
 
@@ -401,12 +402,12 @@ class FootPatrolTraj(BaseModel):
                 "max_length_meters": 100000,
                 "min_time_secs": 1,
                 "max_time_secs": 172800,
-                "min_speed_kmhr": 0.0001,
+                "min_speed_kmhr": 0.01,
                 "max_speed_kmhr": 500,
             }
         ),
         description="Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
-        title="Trajectory Segment Filter",
+        title=" ",
     )
 
 

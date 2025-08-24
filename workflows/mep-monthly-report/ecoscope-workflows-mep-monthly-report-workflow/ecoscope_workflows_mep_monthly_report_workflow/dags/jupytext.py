@@ -101,7 +101,7 @@ base_map_defs = (
 # parameters
 
 vehicle_patrols_params = dict(
-    patrol_type=...,
+    patrol_types=...,
     status=...,
 )
 
@@ -395,7 +395,7 @@ vehicle_patrol_map_widget = (
 # parameters
 
 foot_patrols_params = dict(
-    patrol_type=...,
+    patrol_types=...,
     status=...,
 )
 

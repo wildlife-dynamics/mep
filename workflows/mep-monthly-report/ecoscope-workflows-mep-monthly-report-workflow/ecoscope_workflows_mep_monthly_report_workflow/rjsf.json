@@ -54,7 +54,7 @@
             }
           ],
           "items": {
-            "title": "Base Layer or Custom Layer",
+            "title": "Base Layer",
             "anyOf": [
               {
                 "properties": {
@@ -229,7 +229,7 @@
               }
             ]
           },
-          "title": "Set Map Base Layers",
+          "title": " ",
           "type": "array",
           "description": "Select tile layers to use as base layers in map outputs. The first layer in the list will be the bottommost layer displayed.",
           "ecoscope:advanced": true
@@ -242,17 +242,17 @@
     "vehicle_patrols": {
       "additionalProperties": false,
       "properties": {
-        "patrol_type": {
+        "patrol_types": {
           "items": {
             "type": "string"
           },
-          "title": "Patrol Type",
+          "title": "Patrol Types",
           "type": "array",
-          "description": "Select the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
+          "description": "Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
         },
         "status": {
           "default": null,
-          "description": "List comprised of 'active'/'overdue'/'done'/'cancelled'",
+          "description": "Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
           "ecoscope:advanced": true,
           "items": {
             "enum": [
@@ -268,7 +268,7 @@
         }
       },
       "required": [
-        "patrol_type"
+        "patrol_types"
       ],
       "type": "object",
       "title": ""
@@ -287,10 +287,10 @@
             "max_length_meters": 100000,
             "min_time_secs": 1,
             "max_time_secs": 172800,
-            "min_speed_kmhr": 0.0001,
+            "min_speed_kmhr": 0.01,
             "max_speed_kmhr": 500
           },
-          "title": "Trajectory Segment Filter",
+          "title": " ",
           "description": "Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
           "ecoscope:advanced": true
         }
@@ -306,7 +306,8 @@
           "default": "csv",
           "enum": [
             "csv",
-            "gpkg"
+            "gpkg",
+            "geoparquet"
           ],
           "title": "Filetype",
           "type": "string",
@@ -400,17 +401,17 @@
     "foot_patrols": {
       "additionalProperties": false,
       "properties": {
-        "patrol_type": {
+        "patrol_types": {
           "items": {
             "type": "string"
           },
-          "title": "Patrol Type",
+          "title": "Patrol Types",
           "type": "array",
-          "description": "Select the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
+          "description": "Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
         },
         "status": {
           "default": null,
-          "description": "List comprised of 'active'/'overdue'/'done'/'cancelled'",
+          "description": "Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
           "ecoscope:advanced": true,
           "items": {
             "enum": [
@@ -426,7 +427,7 @@
         }
       },
       "required": [
-        "patrol_type"
+        "patrol_types"
       ],
       "type": "object",
       "title": ""
@@ -445,10 +446,10 @@
             "max_length_meters": 100000,
             "min_time_secs": 1,
             "max_time_secs": 172800,
-            "min_speed_kmhr": 0.0001,
+            "min_speed_kmhr": 0.01,
             "max_speed_kmhr": 500
           },
-          "title": "Trajectory Segment Filter",
+          "title": " ",
           "description": "Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
           "ecoscope:advanced": true
         }
@@ -464,7 +465,8 @@
           "default": "csv",
           "enum": [
             "csv",
-            "gpkg"
+            "gpkg",
+            "geoparquet"
           ],
           "title": "Filetype",
           "type": "string",
@@ -589,36 +591,42 @@
         "min_length_meters": {
           "default": 0.001,
           "ecoscope:advanced": true,
+          "minimum": 0.001,
           "title": "Minimum Segment Length (Meters)",
           "type": "number"
         },
         "max_length_meters": {
           "default": 100000,
           "ecoscope:advanced": true,
+          "exclusiveMinimum": 0.001,
           "title": "Maximum Segment Length (Meters)",
           "type": "number"
         },
         "min_time_secs": {
           "default": 1,
           "ecoscope:advanced": true,
+          "minimum": 1,
           "title": "Minimum Segment Duration (Seconds)",
           "type": "number"
         },
         "max_time_secs": {
           "default": 172800,
           "ecoscope:advanced": true,
+          "exclusiveMinimum": 1,
           "title": "Maximum Segment Duration (Seconds)",
           "type": "number"
         },
         "min_speed_kmhr": {
-          "default": 0.0001,
+          "default": 0.01,
           "ecoscope:advanced": true,
+          "exclusiveMinimum": 0.001,
           "title": "Minimum Segment Speed (Kilometers per Hour)",
           "type": "number"
         },
         "max_speed_kmhr": {
           "default": 500,
           "ecoscope:advanced": true,
+          "exclusiveMinimum": 0.001,
           "title": "Maximum Segment Speed (Kilometers per Hour)",
           "type": "number"
         }
@@ -679,8 +687,41 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
   "uiSchema": {
+    "time_range": {
+      "ui:order": [
+        "since",
+        "until"
+      ]
+    },
+    "vehicle_patrols": {
+      "ui:order": [
+        "patrol_types",
+        "status"
+      ]
+    },
+    "vehicle_patrol_ecomap": {
+      "ui:order": [
+        "static",
+        "title",
+        "north_arrow_style",
+        "legend_style"
+      ]
+    },
+    "foot_patrols": {
+      "ui:order": [
+        "patrol_types",
+        "status"
+      ]
+    },
+    "foot_patrol_ecomap": {
+      "ui:order": [
+        "static",
+        "title",
+        "north_arrow_style",
+        "legend_style"
+      ]
+    },
     "ui:order": [
       "time_range",
       "er_client_name",
@@ -699,5 +740,6 @@
       "foot_patrol_map_widget",
       "monthly_report"
     ]
-  }
+  },
+  "additionalProperties": false
 }
