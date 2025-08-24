@@ -68,7 +68,7 @@ er_client_name = (
 
 
 # %% [markdown]
-# ## Time Range
+# ## Query Time Range
 
 # %%
 # parameters

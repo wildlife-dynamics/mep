@@ -57,7 +57,7 @@
       ],
       "type": "object",
       "description": "Choose the period of time to analyze.",
-      "title": "Time Range"
+      "title": "Query Time Range"
     },
     "filter_time_range": {
       "additionalProperties": false,
@@ -88,8 +88,7 @@
       "properties": {
         "subject_group_name": {
           "title": "Subject Group Name",
-          "type": "string",
-          "description": "Name of EarthRanger Subject"
+          "type": "string"
         }
       },
       "required": [
@@ -182,8 +181,25 @@
       "type": "string"
     }
   },
-  "additionalProperties": false,
   "uiSchema": {
+    "workflow_details": {
+      "ui:order": [
+        "name",
+        "description"
+      ]
+    },
+    "time_range": {
+      "ui:order": [
+        "since",
+        "until"
+      ]
+    },
+    "filter_time_range": {
+      "ui:order": [
+        "since",
+        "until"
+      ]
+    },
     "ui:order": [
       "workflow_details",
       "er_client_name",
@@ -192,5 +208,6 @@
       "subject_obs",
       "groupers"
     ]
-  }
+  },
+  "additionalProperties": false
 }

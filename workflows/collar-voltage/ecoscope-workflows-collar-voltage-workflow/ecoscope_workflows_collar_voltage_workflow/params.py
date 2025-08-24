@@ -36,9 +36,7 @@ class SubjectObs(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    subject_group_name: str = Field(
-        ..., description="Name of EarthRanger Subject", title="Subject Group Name"
-    )
+    subject_group_name: str = Field(..., title="Subject Group Name")
 
 
 class EarthRangerConnection(BaseModel):
@@ -84,7 +82,9 @@ class Params(BaseModel):
     )
     er_client_name: Optional[ErClientName] = Field(None, title="Data Source")
     time_range: Optional[TimeRange] = Field(
-        None, description="Choose the period of time to analyze.", title="Time Range"
+        None,
+        description="Choose the period of time to analyze.",
+        title="Query Time Range",
     )
     filter_time_range: Optional[FilterTimeRange] = Field(
         None,
