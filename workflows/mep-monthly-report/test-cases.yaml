@@ -17,7 +17,7 @@ all-grouper:
           max_zoom: 17
           min_zoom: null
     vehicle_patrols:
-      patrol_type:
+      patrol_types:
         - "MEP_routine_vehicle_patrol_bravo_team"
         - "MEP_routine_vehicle_patrol_foxtrot_team"
         - "MEP_Routine_Vehicle_Patrol - Mwaluganje Team"
@@ -30,11 +30,10 @@ all-grouper:
         - "MEP_routine_vehicle_patrol_charlie_team"
         - "MEP_routine_vehicle_patrol_golf_team"
     foot_patrols:
-      patrol_type:
+      patrol_types:
         - "MEP_routine_foot_patrol_bravo_team"
         - "MEP_routine_foot_patrol_foxtrot_team"
         - "MEP_routine_foot_patrol_HQ_team"
-        - "MEP Routine Foot Patrol - Delta Team"
         - "MEP_routine_foot_patrol_echo_team"
         - "MEP_routine_foot_patrol_kilo_team"
         - "mwaluganje_routine_foot_patrol_alpha_team"
@@ -62,7 +61,7 @@ month-grouper:
           max_zoom: 17
           min_zoom: null
     vehicle_patrols:
-      patrol_type:
+      patrol_types:
         - "MEP_routine_vehicle_patrol_bravo_team"
         - "MEP_routine_vehicle_patrol_foxtrot_team"
         - "MEP_Routine_Vehicle_Patrol - Mwaluganje Team"
@@ -75,11 +74,10 @@ month-grouper:
         - "MEP_routine_vehicle_patrol_charlie_team"
         - "MEP_routine_vehicle_patrol_golf_team"
     foot_patrols:
-      patrol_type:
+      patrol_types:
         - "MEP_routine_foot_patrol_bravo_team"
         - "MEP_routine_foot_patrol_foxtrot_team"
         - "MEP_routine_foot_patrol_HQ_team"
-        - "MEP Routine Foot Patrol - Delta Team"
         - "MEP_routine_foot_patrol_echo_team"
         - "MEP_routine_foot_patrol_kilo_team"
         - "mwaluganje_routine_foot_patrol_alpha_team"
@@ -108,7 +106,7 @@ value-grouper:
           max_zoom: 17
           min_zoom: null
     vehicle_patrols:
-      patrol_type:
+      patrol_types:
         - "MEP_routine_vehicle_patrol_bravo_team"
         - "MEP_routine_vehicle_patrol_foxtrot_team"
         - "MEP_Routine_Vehicle_Patrol - Mwaluganje Team"
@@ -121,11 +119,10 @@ value-grouper:
         - "MEP_routine_vehicle_patrol_charlie_team"
         - "MEP_routine_vehicle_patrol_golf_team"
     foot_patrols:
-      patrol_type:
+      patrol_types:
         - "MEP_routine_foot_patrol_bravo_team"
         - "MEP_routine_foot_patrol_foxtrot_team"
         - "MEP_routine_foot_patrol_HQ_team"
-        - "MEP Routine Foot Patrol - Delta Team"
         - "MEP_routine_foot_patrol_echo_team"
         - "MEP_routine_foot_patrol_kilo_team"
         - "mwaluganje_routine_foot_patrol_alpha_team"
