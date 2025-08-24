@@ -504,8 +504,45 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
   "uiSchema": {
+    "workflow_details": {
+      "ui:order": [
+        "name",
+        "description"
+      ]
+    },
+    "time_range": {
+      "ui:order": [
+        "since",
+        "until"
+      ]
+    },
+    "roi": {
+      "ui:order": [
+        "url",
+        "roi_column",
+        "roi_name",
+        "layer_name"
+      ]
+    },
+    "calculate_ndvi": {
+      "ui:order": [
+        "band",
+        "scale_factor",
+        "analysis_scale"
+      ]
+    },
+    "draw_ndvi": {
+      "ui:order": [
+        "historic_band_title",
+        "historic_mean_title",
+        "layout_style",
+        "upper_lower_band_style",
+        "historic_mean_style",
+        "current_value_style",
+        "time_column"
+      ]
+    },
     "ui:order": [
       "workflow_details",
       "gee_client",
@@ -515,5 +552,6 @@
       "calculate_ndvi",
       "draw_ndvi"
     ]
-  }
+  },
+  "additionalProperties": false
 }
