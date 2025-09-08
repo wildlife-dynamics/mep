@@ -15,15 +15,15 @@ from ._map_utils import (
     create_layer_from_gdf,
 )
 from ._zip import zip_grouped_by_key
-from ._mep_utils import ( 
+from ._mep_utils import (
     get_area_bounds,
-    get_subjects_task, 
+    get_subjects_task,
     download_profile_photo,
     persist_subject_info,
     split_gdf_by_column,
     generate_mcp_gdf,
     calculate_etd_by_groups,
-    create_seasonal_labels
+    create_seasonal_labels,
 )
 
 __all__ = [
@@ -48,5 +48,5 @@ __all__ = [
     "persist_subject_info",
     "split_gdf_by_column",
     "calculate_etd_by_groups",
-    "create_seasonal_labels"
+    "create_seasonal_labels",
 ]
