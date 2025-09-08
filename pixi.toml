@@ -19,7 +19,7 @@ hatch = "*"
 [feature.compile.dependencies]
 ecoscope-workflows-core = "0.7.2.*"
 ecoscope-workflows-ext-ecoscope = "0.7.2.*"
-ecoscope-workflows-ext-mep = "0.0.2.*"
+ecoscope-workflows-ext-mep = "*"
 ecoscope-workflows-ext-custom = "0.0.3.*"
 
 # Here we don't specify the channel on purpose, as we want to use the local channel if it exists,
@@ -69,3 +69,11 @@ cmd = './dev/recompile.sh mep-monthly-report --install'
 
 [feature.compile.tasks.recompile-mep-monthly-report]
 cmd = './dev/recompile.sh mep-monthly-report --update'
+
+[feature.compile.tasks.compile-collared_elephant_report]
+cmd = './dev/recompile.sh collared_elephant_report --install'
+depends-on = ["build-release"]
+
+[feature.compile.tasks.recompile-collared_elephant_report]
+cmd = './dev/recompile.sh collared_elephant_report --update'
+depends-on = ["build-release"]

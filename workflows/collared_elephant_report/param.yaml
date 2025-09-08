@@ -1,0 +1,76 @@
+workflow_details:
+  name: Collared Elephants Report
+  description : Generate a report on collared elephants
+
+gee_client:
+  data_source:
+    name: "ecoscope_poc"
+
+er_client:
+  data_source:
+    name: "mara_ep"
+
+configure_grouping_strategy:
+  groupers:
+    - subject_name
+
+# Desired time range
+define_time_range:
+  since: "2025-09-01T00:00:00Z"
+  until: "2025-09-08T23:59:59Z"
+
+# Desired basemap layers
+configure_base_maps:
+  base_maps:
+    - url: "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"
+      opacity: 0.7
+    - url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+      opacity: 0.2
+      max_zoom: 15
+      min_zoom: null
+
+#Link to retrieve landDx db
+retrieve_ldx_db:
+  url: "https://maraelephant.maps.arcgis.com/sharing/rest/content/items/6da0c9bdd43d4dd0ac59a4f3cd73dcab/data"
+
+# Specific AOI to use from LandDX db
+load_aoi:
+  aoi: 
+    - "Community Conservancy"
+    - "National Reserve" 
+    - "National Park"
+
+
+# LandDX specific config styles
+create_styled_ldx_layers:
+  style_config:
+    styles:
+      
+      Community Conservancy:
+        get_fill_color: [85, 107, 47]
+        get_line_color: [85, 107, 47]
+        opacity: 0.25
+        get_line_width: 2
+        stroked: True
+      
+      National Reserve:
+        get_fill_color: [143, 188, 139]
+        get_line_color: [143, 188, 139]
+        opacity: 0.25
+        get_line_width: 2
+        stroked: True
+
+      National Park: 
+        get_fill_color: [255, 250, 205]
+        get_line_color: [255, 250, 205]
+        opacity: 0.25
+        get_line_width: 2
+        stroked: True
+    legend:
+      labels: ["Community Conservancy","National Reserve", "National Park"]
+      colors: ["#556b2f","#8fbc8b","#fffacd"]
+
+
+# Subject group name
+subject_observations:
+    subject_group_name: "MEP_Elephants_Tsavo"

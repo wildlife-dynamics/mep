@@ -1,0 +1,838 @@
+id: collared_elephant_report
+requirements:
+  - name: ecoscope-workflows-core
+    version: "0.7.2.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows/
+  - name: ecoscope-workflows-ext-ecoscope
+    version: "0.7.2.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows/
+  - name: ecoscope-workflows-ext-mep
+    version: "*"
+    channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
+
+rjsf-overrides:
+  $defs:
+    ValueGrouper.oneOf: [
+      {"const": "name", "title": "ROI Name"},
+    ]
+
+workflow:
+# workflow details 
+# connection details to ER
+# connection details to GEE
+# time range
+# groupers
+# 1. retrieve subject df
+# retrieve subject group observations 
+# retrieve events df 
+# rename columns for consistency ie name for both subject and  observations
+# split subject df by group
+# download profile photo of subject and persist as png
+# download subject details and persist as json 
+
+# 2. Download landDX db 
+# retrieve AOI from landDX db
+# 3. convert observations to relocations and filter by landDX AOI  ie KE and TZ
+# split relocations by group 
+# generate nsd plots and persist as html
+# generate mcp asymptote plots and persist as html
+# generate speed plots and persist as html
+# generate collar events plots and persist as html
+# generate mcp gdf 
+# generate season windows --> should be a gdf that will eventually be added on all reloc plots 
+
+# convert relocations to trajectories
+# generate seasons labels 
+# split trajs by group
+# generate seasonal home ranges and mcp--polyline and persist as html
+# generate home range etds and persist as html
+# generate speedmaps and persist as html
+# 
+
+  - name: Set Workflow Details
+    id: workflow_details
+    task: set_workflow_details
+
+  - name: Select Google Earth Engine Data Source
+    id: gee_client
+    task: set_gee_connection
+  
+  - name: Connect to Earth Ranger instance
+    id: er_client
+    task: set_er_connection
+
+  - name: Configure Base Map Layers
+    id: configure_base_maps
+    task: set_base_maps
+  
+  - name: Configure grouping strategy
+    id: configure_grouping_strategy
+    task: set_groupers
+
+  - name: Define time range
+    id: define_time_range
+    task: set_time_range
+    partial:
+      time_format: "%d %b %Y %H:%M:%S %Z"
+
+  - name: Retrieve and unpack landDX db 
+    id: retrieve_ldx_db
+    task: download_land_dx
+    partial:
+      map_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+  
+  - name: Load AOI from landDX
+    id: load_aoi
+    task: load_landdx_aoi 
+    partial:
+      map_path: ${{ workflow.retrieve_ldx_db.return }}
+  
+  - name: split landDX layers by type
+    id: split_landdx_by_type
+    task: split_gdf_by_column
+    partial: 
+      gdf: ${{ workflow.load_aoi.return }}
+      column: type
+  
+  - name: Annotate geometry types 
+    id: annotate_geom_types
+    task: annotate_gdf_dict_with_geometry_type
+    partial:
+      gdf_dict: ${{ workflow.split_landdx_by_type.return }}
+  
+  - name: Style landDX map layers
+    id: create_styled_ldx_layers
+    task: create_map_layers_from_annotated_dict
+    partial:
+      annotated_dict: ${{ workflow.annotate_geom_types.return }}
+  
+  - name: Get subject dataframe 
+    id: subject_df
+    task: get_subjects_task # write custom task for this
+    partial:
+      client: ${{ workflow.er_client.return }}
+      include_inactive: True 
+  
+  - name: Normalize additional subject info
+    id: normalize_subject_info
+    task: normalize_column
+    partial:
+      column: additional
+      df: ${{ workflow.subject_df.return }}
+
+  - name: Rename subject columns 
+    id: rename_subject_cols
+    task: map_columns
+    partial:
+      drop_columns:
+        - url
+        - image_url
+        - common_name
+        - content_type
+        - additional__external_id	
+        - additional__tm_animal_id
+        - additional__external_name
+
+      retain_columns:
+        - id
+        - name
+        - hex
+        - additional__rgb
+        - additional__sex
+        - additional__Bio
+        - additional__DOB
+        - additional__notes
+        - additional__status
+        - additional__region
+        - additional__country
+        - additional__id_photo
+        - additional__distribution
+
+      rename_columns:
+        id: groupby_col
+        name: subject_name
+        hex: hex_color
+
+      df: ${{ workflow.normalize_subject_info.return }}
+
+  - name: split subjects df by group
+    id: split_subject_by_group # use name or id 
+    task: split_groups
+    partial:
+      df: ${{ workflow.rename_subject_cols.return }}
+      groupers: ${{ workflow.configure_grouping_strategy.return }}
+
+  - name: Download subject profile photo
+    id: download_profile_pic
+    task: download_profile_photo
+    partial:
+      image_type: ".png"
+      column: additional__id_photo
+      overwrite_existing: true
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.split_subject_by_group.return }}
+
+  - name: Download subject info and persist
+    id: download_subject_info
+    task: persist_subject_info
+    partial:
+      maxlen: 1000
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.split_subject_by_group.return }}
+
+  # get events
+  - name : Retrieve events from ER
+    id: get_events_data
+    task: get_events
+    partial:
+      client: ${{ workflow.er_client.return }}
+      time_range: ${{ workflow.define_time_range.return }}
+      include_details: true
+      raise_on_empty: true
+      event_columns: 
+        - id 
+        - time 
+        - event_type
+        - event_category
+        - reported_by
+        - serial_number
+        - geometry
+        - event_details
+
+  - name: Normalize event details 
+    id: normalize_event_details
+    task: normalize_column
+    partial:
+      column: event_details
+      df: ${{ workflow.get_events_data.return }}
+
+  - name: Rename event columns 
+    id: rename_event_cols
+    task: map_columns
+    partial:
+      drop_columns:
+        - id
+        - index
+        - end_time
+        - message
+        - provenance
+        - attributes
+        - comment
+        - title 
+        - is_contained_in 
+        - patrol_segments
+        - icon_id 
+        - url 
+        - image_url
+        - serial_number
+        - related_subjects
+        - patrols
+        - event_details_updates
+
+      retain_columns:
+        - location
+        - time 
+        - event_type
+        - event_category
+        - priority
+        - priority_label
+        - reported_by
+        - state
+        - sort_at 
+        - geometry
+        - updated_at
+        - created_at
+        - geojson
+        - is_collection
+        - event_details__pic
+        - event_details__region
+        - event_details__source
+        - event_details__details	
+        - event_details__subject
+        - event_details__source_id	
+        - event_details__subject_id
+        - event_details__collaring_type
+        - event_details__collaring_reason
+        - event_details__collar_checked_by
+
+      rename_columns:
+        id: groupby_col
+        name: subject_name
+        hex: hex_color
+        event_details__pic: pic
+        event_details__region: region
+        event_details__source: source
+        event_details__details: details
+        event_details__subject: groupby_col
+        event_details__source_id: source_id
+        event_details__subject_id: subject_name
+        event_details__collaring_type: collaring_type
+        event_details__collaring_reason: collaring_reason
+        event_details__collar_checked_by: collar_checked_by
+
+      df: ${{ workflow.normalize_event_details.return }}
+
+  - name: split events by group
+    id: split_events_by_group # use name or id 
+    task: split_groups
+    partial:
+      df: ${{ workflow.rename_event_cols.return }}
+      groupers: ${{ workflow.configure_grouping_strategy.return }}
+
+  # generate subject observations 
+  - name: Get subject group observations from ER 
+    id: subject_observations
+    task: get_subjectgroup_observations
+    partial:
+      client: ${{ workflow.er_client.return }}
+      time_range: ${{ workflow.define_time_range.return }}
+      raise_on_empty: false
+      include_details: false
+      include_subjectsource_details: false
+  
+  - name: Transform observations to relocations 
+    id: subject_relocations
+    task: process_relocations 
+    partial:
+      observations: ${{ workflow.subject_observations.return }}
+      relocs_columns:
+        - fixtime
+        - geometry
+        - groupby_col
+        - junk_status
+        - extra__created_at
+        - extra__subject__sex
+        - extra__subject__hex
+        - extra__subject__name
+        - extra__subject__subject_subtype
+
+  # convert relocations to trajectories
+  - name: Convert relocations to trajectories
+    id: convert_to_trajectories
+    task: relocations_to_trajectory
+    partial:
+      relocations: ${{ workflow.subject_relocations.return }}
+  
+  # Add temporal index to subject trajectories using segment_start
+  - name: Add temporal index to trajectories
+    id: add_temporal_index_to_traj
+    task: add_temporal_index
+    partial:
+      df: ${{ workflow.convert_to_trajectories.return }}
+      time_col: segment_start
+      groupers: ${{ workflow.configure_grouping_strategy.return }}
+      cast_to_datetime: true
+      format: mixed 
+
+  # classify trajectories into speed bins 
+  - name: Classify trajectories by speed
+    id: classify_trajectory_speed_bins
+    task: apply_classification
+    partial:
+      df: ${{ workflow.add_temporal_index_to_traj.return }}
+      input_column_name: speed_kmhr
+      output_column_name: speed_bins
+      classification_options:
+        scheme: equal_interval
+        k: 6
+      label_options:
+        label_ranges: false
+        label_decimals: 1
+
+  # generate seasonal home range etd 
+  - name: Generate seasonal home range etd
+    id: generate_seasonal_etd
+    task: calculate_elliptical_time_density
+    partial:
+      crs: ESRI:53042
+      percentiles:
+        - 50.0
+        - 60.0
+        - 70.0
+        - 80.0
+        - 90.0
+        - 95.0
+        - 99.0
+      nodata_value: nan
+      band_count: 1
+      trajectory_gdf: ${{ workflow.classify_trajectory_speed_bins.return }}
+
+  # wet/dry season windows based on ndvi and roi
+  - name: Determine seasonal windows
+    id: determine_seasonal_windows
+    task: determine_season_windows
+    partial:
+      client: ${{ workflow.gee_client.return }}
+      roi: ${{ workflow.generate_seasonal_etd.return }}
+      time_range: ${{ workflow.define_time_range.return }}
+  
+  # create seasonal column 
+  - name: Generate seasonal column 
+    id: add_season_labels
+    task: create_seasonal_labels
+    partial:
+      traj: ${{ workflow.classify_trajectory_speed_bins.return }}
+      total_percentiles: ${{ workflow.determine_seasonal_windows.return }}
+  
+  - name: Split trajectories by group
+    id: split_trajs_by_group
+    task: split_groups 
+    partial:
+      df: ${{ workflow.add_season_labels.return }}
+      groupers: ${{ workflow.configure_grouping_strategy.return }}
+  
+  # speedmap
+  - name: Sort trajectories by speed bins
+    id: sort_trajs_by_speed
+    task: sort_values
+    partial:
+      column_name: speed_bins
+      na_position: last
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.split_trajs_by_group.return }}
+
+  - name: Apply colormap to speedbins 
+    id: apply_speed_colormap
+    task: apply_color_map
+    partial:
+      input_column_name: speed_bins
+      output_column_name: speed_bins_colormap
+      colormap:
+        - '#1a9850'
+        - '#91cf60'
+        - '#d9ef8b'
+        - '#fee08b'
+        - '#fc8d59'
+        - '#d73027'
+    mapvalues:
+      argnames: df 
+      argvalues: ${{ workflow.sort_trajs_by_speed.return }}
+  
+  - name: Format speed bins for legend 
+    id: format_speed_bin_labels
+    task: map_values_with_unit
+    partial:
+      input_column_name: speed_bins
+      output_column_name: speed_bins_formatted
+      original_unit: km/h
+      new_unit: km/h 
+      decimal_places: 1
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.apply_speed_colormap.return }}
+  
+  - name: Format speed values for display
+    id: format_speed_values
+    task: map_values_with_unit
+    partial:
+      input_column_name: speed_kmhr
+      output_column_name: speed_kmhr
+      original_unit: km/h
+      new_unit: km/h 
+      decimal_places: 1
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.format_speed_bin_labels.return }}
+  
+  - name: Generata speedmap layers
+    id: generate_speedmap_layers
+    task: create_polyline_layer
+    skipif:
+      conditions:
+        - any_is_empty_df
+        - any_dependency_skipped
+    partial:
+      layer_style:
+        color_column: speed_bins_colormap
+      legend:
+        label_column: speed_bins_formatted
+        color_column: speed_bins_colormap
+      tooltip_columns:
+        - extra__name
+        - segment_start
+        - dist_meters
+        - timespan_seconds
+        - extra__sex
+    mapvalues:
+      argnames: geodataframe
+      argvalues: ${{ workflow.format_speed_values.return }}
+  
+  - name: Zoom speed trajectories by view state
+    id: zoom_traj_view
+    task: create_view_state_from_gdf
+    partial:
+      pitch: 0
+      bearing: 0
+    mapvalues:
+      argnames: gdf
+      argvalues: ${{ workflow.format_speed_values.return }}
+
+  # combine static LandDx layers with speed ecomap trajectory layers
+  - name: Combine landdx and speedmap layers
+    id: combine_landdx_speed_layers
+    task: combine_map_layers
+    partial:
+      static_layers: ${{ workflow.create_styled_ldx_layers.return }}
+    mapvalues:
+      argnames: grouped_layers
+      argvalues: ${{ workflow.generate_speedmap_layers.return }}
+
+  # Zip up tasks to pass them on the same mapvalues
+  - name: Zip speed layers and zoom values
+    id: speedvalues_view_zip
+    task: zip_grouped_by_key
+    partial:
+      left:  ${{ workflow.combine_landdx_speed_layers.return }}
+      right: ${{ workflow.zoom_traj_view.return }}
+
+  # draw speed ecomaps for each trajectory group
+  - name: Draw Speedmap
+    id: draw_speedmap
+    task: draw_ecomap
+    partial:
+      tile_layers: ${{ workflow.configure_base_maps.return }}
+      north_arrow_style:
+        placement: top-left
+      legend_style:
+        placement: bottom-right
+        title: Speed Values(Km/h)
+      static: false
+      title: null
+      max_zoom: 20
+    mapvalues:
+      argnames: 
+        - geo_layers
+        - view_state
+      argvalues: ${{ workflow.speedvalues_view_zip.return }}
+
+  # persist HTML URLs of speed ecomaps as text files
+  - name: Persist Speed Ecomap HTML Paths
+    id: persist_speed_ecomap_urls
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: text
+      argvalues: ${{ workflow.draw_speedmap.return }}
+
+  # create single-view map widgets for speed trajectory ecomaps
+  - name: Create Speed Ecomap Widgets
+    id: create_speed_ecomap_widgets
+    task: create_map_widget_single_view
+    skipif:
+      conditions: 
+        - never
+    partial:
+      title: Speedmap
+    map:
+      argnames:
+        - view 
+        - data
+      argvalues: ${{ workflow.persist_speed_ecomap_urls.return }}
+
+  # merge individual speed ecomap widgets into a grouped view
+  - name: Merge Speed Ecomap Widgets
+    id: merge_speed_ecomap_widgets
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.create_speed_ecomap_widgets.return }}
+
+  #Home Range -ETD
+  # generate elliptical time density (ETD) home range maps per subject group
+  - name: Generate hr etd
+    id: generate_etd
+    task: calculate_etd_by_groups #calculate_elliptical_time_density
+    partial:
+      crs: ESRI:53042
+      percentiles:
+        - 50.0
+        - 60.0
+        - 70.0
+        - 80.0
+        - 90.0
+        - 95.0
+        - 99.0
+      nodata_value: nan
+      band_count: 1
+      include_groups: true
+      groupby_cols:
+        - season
+
+    mapvalues:
+      argnames: trajectory_gdf
+      argvalues: ${{ workflow.split_trajs_by_group.return }}
+
+  - name: Generate MCP gdf 
+    id: calculate_mcp
+    task: generate_mcp_gdf
+    partial:
+      planar_crs: ESRI:102022
+    mapvalues:
+      argnames: gdf
+      argvalues: ${{ workflow.split_trajs_by_group.return }}
+
+  # apply colormap to ETD home range percentiles
+  - name: Apply colormap to etd percentiles
+    id: apply_etd_percentile_colormap
+    task: apply_color_map
+    partial:
+      input_column_name: percentile
+      colormap: RdYlGn
+      output_column_name: percentile_colormap
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.generate_etd.return }}
+
+  # create polygon map layers from ETD (home range) percentiles
+  - name: Create hr etd layers
+    id: generate_etd_ecomap_layers
+    task: create_polygon_layer
+    skipif:
+      conditions:
+        - any_is_empty_df
+        - any_dependency_skipped
+    partial:
+      layer_style:
+        fill_color_column: percentile_colormap
+        opacity: 0.55
+      legend:
+        label_column: percentile
+        color_column: percentile_colormap
+      tooltip_columns:
+        - percentile
+    mapvalues:
+      argnames: geodataframe
+      argvalues: ${{ workflow.apply_etd_percentile_colormap.return }}
+
+  - name: Zoom hr movement by view state
+    id: zoom_hr_view
+    task: create_view_state_from_gdf
+    partial:
+      pitch: 0
+      bearing: 0
+    mapvalues:
+      argnames: gdf
+      argvalues: ${{ workflow.apply_etd_percentile_colormap.return }}
+
+  # combine static LandDx layers with home range (ETD) ecomap layers
+  - name: Combine ldx and hr layers
+    id: combine_landdx_hr_ecomap_layers
+    task: combine_map_layers
+    partial:
+      static_layers: ${{ workflow.create_styled_ldx_layers.return }}
+    mapvalues:
+      argnames: grouped_layers
+      argvalues: ${{ workflow.generate_etd_ecomap_layers.return }}
+
+  # Zip up tasks to pass them on the same mapvalues
+  - name: Zip hr layers and zoom values
+    id: hr_view_zip
+    task: zip_grouped_by_key
+    partial:
+      left:  ${{ workflow.combine_landdx_hr_ecomap_layers.return }}
+      right: ${{ workflow.zoom_hr_view.return }}
+
+  # draw home range (ETD) ecomaps for each subject group
+  - name: Draw Home Range Ecomaps by Group
+    id: draw_hr_ecomaps
+    task: draw_ecomap
+    partial:
+      tile_layers: ${{ workflow.configure_base_maps.return }}
+      north_arrow_style:
+        placement: top-left
+      legend_style:
+        placement: bottom-right
+        title: Home Range Metrics
+      static: false
+      title: null
+      max_zoom: 20
+    mapvalues:
+      argnames: 
+        - geo_layers
+        - view_state
+      argvalues: ${{ workflow.hr_view_zip.return }}
+
+  # persist HTML URLs of home range ecomaps as text files
+  - name: Persist hr ecomap html urls
+    id: persist_hr_ecomap_urls
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: text 
+      argvalues: ${{ workflow.draw_hr_ecomaps.return }}
+
+  # create single-view map widgets for home range ecomaps
+  - name: Create hr ecomap widgets
+    id: create_hr_ecomap_widgets
+    task: create_map_widget_single_view
+    skipif:
+      conditions: 
+        - never
+    partial:
+      title: Home Range Ecomap
+    map:
+      argnames:
+        - view 
+        - data
+      argvalues: ${{ workflow.persist_hr_ecomap_urls.return }}
+
+  # merge home range ecomap widgets into a grouped view
+  - name: Merge hr ecomap widgets
+    id: merge_hr_ecomap_widgets
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.create_hr_ecomap_widgets.return }}
+
+  # Seasons
+  - name: time density colormap
+    id: season_colormap
+    task: apply_color_map
+    partial:
+      input_column_name: season
+      output_column_name: season_colormap
+      colormap: 
+        - '#f57c00' 
+        - '#4cf3f7' 
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.generate_etd.return }}
+
+  - name: Create season layers
+    id: season_etd_map_layer
+    task: create_polygon_layer
+    skipif:
+      conditions:
+        - any_is_empty_df
+        - any_dependency_skipped
+    partial:
+      layer_style:
+        fill_color_column: season_colormap
+        opacity: 0.650000
+      
+      legend:
+        label_column:  season
+        color_column: season_colormap
+      
+      tooltip_columns:
+        - percentile
+    mapvalues:
+      argnames: geodataframe
+      argvalues: ${{ workflow.season_colormap.return }}
+  
+  # create polygon map layers for MCP
+  - name: Create MCP Polygon Layer 
+    id: generate_mcp_layers
+    task: create_polygon_layer
+    skipif:
+      conditions:
+        - any_is_empty_df
+        - any_dependency_skipped
+    partial:
+      layer_style:
+        get_fill_color: '#FFFFFF00'
+        get_line_color: '#dc143c'
+        opacity: 0.55
+        stroked: true
+      legend:
+        labels: 
+          - mcp
+        colors: 
+          - '#dc143c'
+      tooltip_columns:
+        - area_km2
+      
+    mapvalues:
+      argnames: geodataframe
+      argvalues: ${{ workflow.calculate_mcp.return }}
+
+  # zip layers to include both hr and mcp 
+  - name: zip mcp and season hr
+    id: zip_season_mcp_hr
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.generate_mcp_layers.return }}
+      right: ${{ workflow.season_etd_map_layer.return }}
+
+  - name: Zoom seasons by view state
+    id: zoom_season_view
+    task: create_view_state_from_gdf
+    partial:
+      pitch: 0
+      bearing: 0
+    mapvalues:
+      argnames: gdf
+      argvalues: ${{ workflow.season_colormap.return }}
+
+  - name: Combine map layers
+    id: comb_season_map_layers
+    task: combine_map_layers
+    partial:
+      static_layers: ${{ workflow.create_styled_ldx_layers.return }}
+    mapvalues:
+      argnames: grouped_layers
+      argvalues: ${{ workflow.zip_season_mcp_hr.return }}
+
+  # Zip up tasks to pass them on the same mapvalues
+  - name: Zip seasons layers and zoom values
+    id: seasons_view_zip
+    task: zip_grouped_by_key
+    partial:
+      left:  ${{ workflow.comb_season_map_layers.return }}
+      right: ${{ workflow.zoom_season_view.return }}
+
+  - name: Draw Season Ecomap 
+    id: seasonal_ecomap
+    task: draw_ecomap
+    partial:
+      tile_layers: ${{ workflow.configure_base_maps.return }}
+      north_arrow_style:
+        placement: top-left
+      legend_style:
+        placement: bottom-right
+        title: Seasons
+      static: false
+      title: null
+      max_zoom: 20
+    
+    mapvalues:
+      argnames: 
+         - geo_layers
+         - view_state
+      argvalues: ${{ workflow.seasons_view_zip.return }}
+
+  - name: Perist HR ecomap as text
+    id: season_etd_ecomap_html_url
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+
+    mapvalues:
+      argnames: text 
+      argvalues: ${{ workflow.seasonal_ecomap.return }}
+
+  - name: Create Map Widgets for Trajectories
+    id: season_etd_widgets_single_view
+    task: create_map_widget_single_view
+    skipif:
+      conditions: 
+        - never
+    partial:
+      title: Subject Group Home Range Map (Seasons)
+    map:
+      argnames:
+        - view 
+        - data
+      
+      argvalues: ${{ workflow.season_etd_ecomap_html_url.return }}
+
+  - name: Merge Ecomap Widgets 
+    id: season_grouped_map_widget
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.season_etd_widgets_single_view.return }}

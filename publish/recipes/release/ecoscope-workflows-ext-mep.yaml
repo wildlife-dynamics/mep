@@ -25,7 +25,8 @@ requirements:
     - ecoscope-workflows-core
     - ecoscope-workflows-ext-mep
     - ecoscope-workflows-ext-ecoscope
-
+    - shapely
+    - ecoscope
 about:
   license: BSD-3-Clause
 

@@ -1,0 +1,58 @@
+value-grouper:
+  name: Value Grouper
+  description: Value Grouper Test Case
+  params:
+    workflow_details:
+      name: "NDVI Workflow"
+      description: "Normalized Difference Vegetation Index Workflow"
+    gee_client:
+      data_source:
+        name: "ecoscope_poc"
+    time_range:
+      since: "2024-06-01T00:00:00Z"
+      until: "2025-05-31T23:59:59Z"
+    groupers:
+      groupers: 
+        - "name"
+    roi:
+      url: "https://www.dropbox.com/s/nvdmidz1o2duyl3/AOIs.gpkg?dl=1"
+
+
+month-grouper: # TODO: copied from value-grouper as a placeholder for console app
+  name: Value Grouper
+  description: Value Grouper Test Case
+  params:
+    workflow_details:
+      name: "NDVI Workflow"
+      description: "Normalized Difference Vegetation Index Workflow"
+    gee_client:
+      data_source:
+        name: "ecoscope_poc"
+    time_range:
+      since: "2024-06-01T00:00:00Z"
+      until: "2025-05-31T23:59:59Z"
+    groupers:
+      groupers: 
+        - "name"
+    roi:
+      url: "https://www.dropbox.com/s/nvdmidz1o2duyl3/AOIs.gpkg?dl=1"
+
+
+all-grouper: # TODO: copied from value-grouper as a placeholder for console app
+  name: Value Grouper
+  description: Value Grouper Test Case
+  params:
+    workflow_details:
+      name: "NDVI Workflow"
+      description: "Normalized Difference Vegetation Index Workflow"
+    gee_client:
+      data_source:
+        name: "ecoscope_poc"
+    time_range:
+      since: "2024-06-01T00:00:00Z"
+      until: "2025-05-31T23:59:59Z"
+    groupers:
+      groupers: 
+        - "name"
+    roi:
+      url: "https://www.dropbox.com/s/nvdmidz1o2duyl3/AOIs.gpkg?dl=1"

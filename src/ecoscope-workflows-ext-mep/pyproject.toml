@@ -63,7 +63,8 @@ ruff = "*"
 tomli-w = "*"
 ecoscope-workflows-core = ">=0.7.2"
 ecoscope-workflows-ext-ecoscope = ">=0.7.2"
-
+shapely ="*"
+ecoscope ="*"
 # additional dependencies added by this extension
 
 
