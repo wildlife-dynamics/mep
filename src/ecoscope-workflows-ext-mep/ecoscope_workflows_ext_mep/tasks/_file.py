@@ -3,6 +3,7 @@ from ecoscope_workflows_core.decorators import task
 from pydantic import Field
 import os
 
+
 @task
 def create_directory(
     path_name: Annotated[
@@ -26,6 +27,3 @@ def create_directory(
     os.makedirs(path_name, exist_ok=True)
     print(f"Successfully created directory {path_name}")
     return path_name
-
-
-    

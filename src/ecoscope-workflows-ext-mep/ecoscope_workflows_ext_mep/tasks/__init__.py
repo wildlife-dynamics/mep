@@ -28,6 +28,7 @@ from ._mep_utils import (
 
 from ._file import create_directory
 from ._inspect import view_df
+
 __all__ = [
     "calculate_collar_voltage",
     "load_landdx_aoi",
@@ -52,5 +53,6 @@ __all__ = [
     "calculate_etd_by_groups",
     "create_seasonal_labels",
     "create_directory",
+    "generate_mcp_gdf",
     "view_df",
 ]

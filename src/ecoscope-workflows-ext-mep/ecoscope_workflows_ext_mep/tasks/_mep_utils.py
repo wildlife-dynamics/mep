@@ -13,6 +13,7 @@ from typing import Sequence, Tuple, Union, Annotated, cast, Optional, Dict, List
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AdvancedField, AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.tasks.analysis import calculate_elliptical_time_density
 
+
 class AutoScaleGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Auto-scale"})
     auto_scale_or_custom: Annotated[
@@ -23,6 +24,7 @@ class AutoScaleGridCellSize(BaseModel):
             description="Define the resolution of the raster grid (in meters per pixel).",
         ),
     ] = "Auto-scale"
+
 
 class CustomGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Customize"})
@@ -174,9 +176,7 @@ def download_profile_photo(
 
         try:
             df_subset = df.loc[[idx]]
-            row_hash = hashlib.sha256(
-                pd.util.hash_pandas_object(df_subset, index=True).values
-            ).hexdigest()
+            row_hash = hashlib.sha256(pd.util.hash_pandas_object(df_subset, index=True).values).hexdigest()
             filename = f"{row_hash[:8]}_{idx}"
 
             if not image_type.startswith("."):
@@ -190,30 +190,11 @@ def download_profile_photo(
             print(f"Error processing URL at index {idx} ({url}): {e}")
             continue
 
-    return str(file_path) if 'file_path' in locals() else None
+    return str(file_path) if "file_path" in locals() else None
+
 
 def safe_strip(x) -> str:
     return "" if x is None else str(x).strip()
-
-def truncate_at_sentence(text: str, maxlen: int) -> str:
-    """Truncate text at sentence boundary within maxlen."""
-    if len(text) <= maxlen:
-        return text
-
-    last_period_index = text[:maxlen].rfind(". ")
-    if last_period_index != -1:
-        return text[: last_period_index + 1]
-
-    for ending in ["! ", "? ", ": "]:
-        last_ending = text[:maxlen].rfind(ending)
-        if last_ending != -1:
-            return text[: last_ending + 1]
-
-    last_space = text[:maxlen].rfind(" ")
-    if last_space != -1:
-        return text[:last_space] + "..."
-
-    return text[:maxlen] + "..."
 
 def truncate_at_sentence(text: str, maxlen: int) -> str:
     if len(text) <= maxlen:
@@ -243,7 +224,7 @@ def save_as_json(data: Union[Dict, List], output_path: Path) -> None:
 
 @task
 def persist_subject_info(
-    df: AnyDataFrame,                    
+    df: AnyDataFrame,
     output_path: Union[str, Path],
     maxlen: int = 1000,
     return_data: bool = True,
@@ -264,8 +245,7 @@ def persist_subject_info(
     missing = [c for c in required_columns if c not in df.columns]
     if missing:
         raise KeyError(
-            f"Required columns {missing} don't exist in the dataframe. "
-            f"Available columns: {list(df.columns)}"
+            f"Required columns {missing} don't exist in the dataframe. " f"Available columns: {list(df.columns)}"
         )
 
     output_path = Path(output_path)
@@ -317,6 +297,7 @@ def persist_subject_info(
         raise
 
     return processed_data if return_data else None
+
 
 @task
 def split_gdf_by_column(
