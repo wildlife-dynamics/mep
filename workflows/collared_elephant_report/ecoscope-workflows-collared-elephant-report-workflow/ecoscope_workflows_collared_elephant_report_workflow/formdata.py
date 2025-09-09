@@ -199,15 +199,20 @@ class DefineTimeRange(BaseModel):
     until: AwareDatetime = Field(..., description="The end time", title="Until")
 
 
-class RetrieveLdxDb(BaseModel):
+class CreateOutputDir(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    url: str = Field(
-        ..., description="URL to retrieve the LandDx database", title="Url"
+    path_name: Optional[str] = Field(
+        "/home/ttemu/ecoscope-workflows/mep/.pixi/envs/compile/lib/python3.12/site-packages/ecoscope_workflows_ext_mep/tasks/output",
+        description="Path to the directory that should be created",
+        title="Path Name",
     )
-    path: str = Field(
-        ..., description="Local path to save the LandDx database copy", title="Path"
+
+
+class RetrieveLdxDb(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
     )
     overwrite_existing: Optional[bool] = Field(
         False,
@@ -280,18 +285,11 @@ class SubjectDf(BaseModel):
     )
 
 
-class GetEventsData(BaseModel):
+class DownloadSubjectInfo(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    event_types: List[str] = Field(
-        ...,
-        description="Specify the event type(s) to analyze (optional). Leave this section empty to analyze all event types. Only V1 Event Types can be analyzed at this time.",
-        title="Event Types",
-    )
-    include_null_geometry: Optional[bool] = Field(
-        True, title="Include Events Without a Geometry (point or polygon)"
-    )
+    return_data: Optional[bool] = Field(True, title="Return Data")
 
 
 class SubjectObservations(BaseModel):
@@ -329,11 +327,6 @@ class ValueGrouper(RootModel[str]):
 class MapStyleConfig(BaseModel):
     styles: Optional[Dict[str, Dict[str, Any]]] = Field(None, title="Styles")
     legend: Optional[Dict[str, List[str]]] = Field(None, title="Legend")
-
-
-class Coordinate(BaseModel):
-    y: float = Field(..., description="Example -0.15293", title="Latitude")
-    x: float = Field(..., description="Example 37.30906", title="Longitude")
 
 
 class TrajectorySegmentFilter(BaseModel):
@@ -420,13 +413,6 @@ class CreateStyledLdxLayers(BaseModel):
     style_config: MapStyleConfig = Field(..., title="Style Config")
 
 
-class SubjectRelocations(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    filter_point_coords: List[Coordinate] = Field(..., title="Filter Point Coords")
-
-
 class ConvertToTrajectories(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -498,7 +484,7 @@ class FormData(BaseModel):
         title="Set Workflow Details",
     )
     gee_client: Optional[GeeClient] = Field(
-        None, title="Select Google Earth Engine Data Source"
+        None, title="Set Google Earth Engine Data Source"
     )
     er_client: Optional[ErClient] = Field(
         None, title="Connect to Earth Ranger instance"
@@ -514,6 +500,9 @@ class FormData(BaseModel):
         description="Choose the period of time to analyze.",
         title="Define time range",
     )
+    create_output_dir: Optional[CreateOutputDir] = Field(
+        None, title="Create output directory"
+    )
     retrieve_ldx_db: Optional[RetrieveLdxDb] = Field(
         None, title="Retrieve and unpack landDX db"
     )
@@ -522,14 +511,11 @@ class FormData(BaseModel):
         None, title="Style landDX map layers"
     )
     subject_df: Optional[SubjectDf] = Field(None, title="Get subject dataframe")
-    get_events_data: Optional[GetEventsData] = Field(
-        None, title="Retrieve events from ER"
+    download_subject_info: Optional[DownloadSubjectInfo] = Field(
+        None, title="Download subject info and persist"
     )
     subject_observations: Optional[SubjectObservations] = Field(
         None, title="Get subject group observations from ER"
-    )
-    subject_relocations: Optional[SubjectRelocations] = Field(
-        None, title="Transform observations to relocations"
     )
     convert_to_trajectories: Optional[ConvertToTrajectories] = Field(
         None, title="Convert relocations to trajectories"

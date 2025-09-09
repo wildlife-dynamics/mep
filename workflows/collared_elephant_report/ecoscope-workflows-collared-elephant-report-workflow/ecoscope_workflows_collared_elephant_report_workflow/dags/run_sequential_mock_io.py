@@ -19,26 +19,19 @@ from ecoscope_workflows_core.tasks.io import set_er_connection
 from ecoscope_workflows_ext_ecoscope.tasks.results import set_base_maps
 from ecoscope_workflows_core.tasks.groupby import set_groupers
 from ecoscope_workflows_core.tasks.filter import set_time_range
+from ecoscope_workflows_ext_mep.tasks import create_directory
 from ecoscope_workflows_ext_mep.tasks import download_land_dx
 from ecoscope_workflows_ext_mep.tasks import load_landdx_aoi
 from ecoscope_workflows_ext_mep.tasks import split_gdf_by_column
 from ecoscope_workflows_ext_mep.tasks import annotate_gdf_dict_with_geometry_type
 from ecoscope_workflows_ext_mep.tasks import create_map_layers_from_annotated_dict
-
-get_subjects_task = create_task_magicmock(  # 🧪
-    anchor="ecoscope_workflows_ext_mep.tasks",  # 🧪
-    func_name="get_subjects_task",  # 🧪
-)  # 🧪
+from ecoscope_workflows_ext_mep.tasks import get_subjects_info
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import normalize_column
 from ecoscope_workflows_core.tasks.transformation import map_columns
+from ecoscope_workflows_ext_mep.tasks import view_df
 from ecoscope_workflows_core.tasks.groupby import split_groups
 from ecoscope_workflows_ext_mep.tasks import download_profile_photo
 from ecoscope_workflows_ext_mep.tasks import persist_subject_info
-
-get_events = create_task_magicmock(  # 🧪
-    anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
-    func_name="get_events",  # 🧪
-)  # 🧪
 
 get_subjectgroup_observations = create_task_magicmock(  # 🧪
     anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
@@ -130,11 +123,19 @@ def main(params: Params):
         .call()
     )
 
+    create_output_dir = (
+        create_directory.validate()
+        .handle_errors(task_instance_id="create_output_dir")
+        .partial(**(params_dict.get("create_output_dir") or {}))
+        .call()
+    )
+
     retrieve_ldx_db = (
         download_land_dx.validate()
         .handle_errors(task_instance_id="retrieve_ldx_db")
         .partial(
-            map_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            path=create_output_dir,
+            url="https://maraelephant.maps.arcgis.com/sharing/rest/content/items/6da0c9bdd43d4dd0ac59a4f3cd73dcab/data",
             **(params_dict.get("retrieve_ldx_db") or {}),
         )
         .call()
@@ -179,7 +180,7 @@ def main(params: Params):
     )
 
     subject_df = (
-        get_subjects_task.validate()
+        get_subjects_info.validate()
         .handle_errors(task_instance_id="subject_df")
         .partial(
             client=er_client,
@@ -239,6 +240,17 @@ def main(params: Params):
         .call()
     )
 
+    view_subj_df = (
+        view_df.validate()
+        .handle_errors(task_instance_id="view_subj_df")
+        .partial(
+            name="Subject DataFrame",
+            gdf=rename_subject_cols,
+            **(params_dict.get("view_subj_df") or {}),
+        )
+        .call()
+    )
+
     split_subject_by_group = (
         split_groups.validate()
         .handle_errors(task_instance_id="split_subject_by_group")
@@ -257,7 +269,7 @@ def main(params: Params):
             image_type=".png",
             column="additional__id_photo",
             overwrite_existing=True,
-            output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            output_path=create_output_dir,
             **(params_dict.get("download_profile_pic") or {}),
         )
         .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
@@ -268,125 +280,10 @@ def main(params: Params):
         .handle_errors(task_instance_id="download_subject_info")
         .partial(
             maxlen=1000,
-            output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            output_path=create_output_dir,
             **(params_dict.get("download_subject_info") or {}),
         )
         .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
-    )
-
-    get_events_data = (
-        get_events.validate()
-        .handle_errors(task_instance_id="get_events_data")
-        .partial(
-            client=er_client,
-            time_range=define_time_range,
-            include_details=True,
-            raise_on_empty=True,
-            event_columns=[
-                "id",
-                "time",
-                "event_type",
-                "event_category",
-                "reported_by",
-                "serial_number",
-                "geometry",
-                "event_details",
-            ],
-            **(params_dict.get("get_events_data") or {}),
-        )
-        .call()
-    )
-
-    normalize_event_details = (
-        normalize_column.validate()
-        .handle_errors(task_instance_id="normalize_event_details")
-        .partial(
-            column="event_details",
-            df=get_events_data,
-            **(params_dict.get("normalize_event_details") or {}),
-        )
-        .call()
-    )
-
-    rename_event_cols = (
-        map_columns.validate()
-        .handle_errors(task_instance_id="rename_event_cols")
-        .partial(
-            drop_columns=[
-                "id",
-                "index",
-                "end_time",
-                "message",
-                "provenance",
-                "attributes",
-                "comment",
-                "title",
-                "is_contained_in",
-                "patrol_segments",
-                "icon_id",
-                "url",
-                "image_url",
-                "serial_number",
-                "related_subjects",
-                "patrols",
-                "event_details_updates",
-            ],
-            retain_columns=[
-                "location",
-                "time",
-                "event_type",
-                "event_category",
-                "priority",
-                "priority_label",
-                "reported_by",
-                "state",
-                "sort_at",
-                "geometry",
-                "updated_at",
-                "created_at",
-                "geojson",
-                "is_collection",
-                "event_details__pic",
-                "event_details__region",
-                "event_details__source",
-                "event_details__details",
-                "event_details__subject",
-                "event_details__source_id",
-                "event_details__subject_id",
-                "event_details__collaring_type",
-                "event_details__collaring_reason",
-                "event_details__collar_checked_by",
-            ],
-            rename_columns={
-                "id": "groupby_col",
-                "name": "subject_name",
-                "hex": "hex_color",
-                "event_details__pic": "pic",
-                "event_details__region": "region",
-                "event_details__source": "source",
-                "event_details__details": "details",
-                "event_details__subject": "groupby_col",
-                "event_details__source_id": "source_id",
-                "event_details__subject_id": "subject_name",
-                "event_details__collaring_type": "collaring_type",
-                "event_details__collaring_reason": "collaring_reason",
-                "event_details__collar_checked_by": "collar_checked_by",
-            },
-            df=normalize_event_details,
-            **(params_dict.get("rename_event_cols") or {}),
-        )
-        .call()
-    )
-
-    split_events_by_group = (
-        split_groups.validate()
-        .handle_errors(task_instance_id="split_events_by_group")
-        .partial(
-            df=rename_event_cols,
-            groupers=configure_grouping_strategy,
-            **(params_dict.get("split_events_by_group") or {}),
-        )
-        .call()
     )
 
     subject_observations = (
@@ -419,7 +316,42 @@ def main(params: Params):
                 "extra__subject__name",
                 "extra__subject__subject_subtype",
             ],
+            filter_point_coords=[
+                {"x": 180.0, "y": 90.0},
+                {"x": 0.0, "y": 0.0},
+                {"x": 1.0, "y": 1.0},
+            ],
             **(params_dict.get("subject_relocations") or {}),
+        )
+        .call()
+    )
+
+    rename_reloc_cols = (
+        map_columns.validate()
+        .handle_errors(task_instance_id="rename_reloc_cols")
+        .partial(
+            drop_columns=[],
+            retain_columns=[],
+            rename_columns={
+                "extra__subject__name": "subject_name",
+                "extra__subject__hex": "hex_color",
+                "extra__subject__sex": "subject_sex",
+                "extra__subject__subject_subtype": "subject_subtype",
+                "extra__created_at": "created_at",
+            },
+            df=subject_observations,
+            **(params_dict.get("rename_reloc_cols") or {}),
+        )
+        .call()
+    )
+
+    view_reloc_df = (
+        view_df.validate()
+        .handle_errors(task_instance_id="view_reloc_df")
+        .partial(
+            name="Subject Relocations DataFrame",
+            gdf=rename_reloc_cols,
+            **(params_dict.get("view_reloc_df") or {}),
         )
         .call()
     )
@@ -428,7 +360,7 @@ def main(params: Params):
         relocations_to_trajectory.validate()
         .handle_errors(task_instance_id="convert_to_trajectories")
         .partial(
-            relocations=subject_relocations,
+            relocations=rename_reloc_cols,
             **(params_dict.get("convert_to_trajectories") or {}),
         )
         .call()
@@ -476,6 +408,35 @@ def main(params: Params):
         .call()
     )
 
+    rename_trajectory_cols = (
+        map_columns.validate()
+        .handle_errors(task_instance_id="rename_trajectory_cols")
+        .partial(
+            drop_columns=[],
+            retain_columns=[],
+            rename_columns={
+                "extra__subject_name": "subject_name",
+                "extra__hex_color": "hex_color",
+                "extra__subject_sex": "subject_sex",
+                "extra__subject_subtype": "subject_subtype",
+            },
+            df=classify_trajectory_speed_bins,
+            **(params_dict.get("rename_trajectory_cols") or {}),
+        )
+        .call()
+    )
+
+    view_trajectory_data = (
+        view_df.validate()
+        .handle_errors(task_instance_id="view_trajectory_data")
+        .partial(
+            name="Subject Trajectory DataFrame",
+            gdf=rename_trajectory_cols,
+            **(params_dict.get("view_trajectory_data") or {}),
+        )
+        .call()
+    )
+
     determine_seasonal_windows = (
         determine_season_windows.validate()
         .handle_errors(task_instance_id="determine_seasonal_windows")
@@ -492,9 +453,20 @@ def main(params: Params):
         create_seasonal_labels.validate()
         .handle_errors(task_instance_id="add_season_labels")
         .partial(
-            traj=classify_trajectory_speed_bins,
+            traj=rename_trajectory_cols,
             total_percentiles=determine_seasonal_windows,
             **(params_dict.get("add_season_labels") or {}),
+        )
+        .call()
+    )
+
+    view_seasonal_labels = (
+        view_df.validate()
+        .handle_errors(task_instance_id="view_seasonal_labels")
+        .partial(
+            name="Subject Trajectory DataFrame with Seasonal Labels",
+            gdf=add_season_labels,
+            **(params_dict.get("view_seasonal_labels") or {}),
         )
         .call()
     )
@@ -578,11 +550,12 @@ def main(params: Params):
                 "color_column": "speed_bins_colormap",
             },
             tooltip_columns=[
-                "extra__name",
-                "segment_start",
+                "subject_name",
+                "subject_sex",
+                "subject_subtype",
+                "speed_kmhr",
+                "speed_bins",
                 "dist_meters",
-                "timespan_seconds",
-                "extra__sex",
             ],
             **(params_dict.get("generate_speedmap_layers") or {}),
         )

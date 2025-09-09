@@ -4,6 +4,7 @@ import ecoscope
 import pandas as pd
 import geopandas as gpd
 from pathlib import Path
+from datetime import datetime
 from pydantic.json_schema import SkipJsonSchema
 from pydantic import Field, BaseModel, ConfigDict
 from ecoscope_workflows_core.decorators import task
@@ -11,7 +12,6 @@ from ecoscope_workflows_ext_ecoscope.connections import EarthRangerClient
 from typing import Sequence, Tuple, Union, Annotated, cast, Optional, Dict, List, Literal
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AdvancedField, AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.tasks.analysis import calculate_elliptical_time_density
-
 
 class AutoScaleGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Auto-scale"})
@@ -23,7 +23,6 @@ class AutoScaleGridCellSize(BaseModel):
             description="Define the resolution of the raster grid (in meters per pixel).",
         ),
     ] = "Auto-scale"
-
 
 class CustomGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Customize"})
@@ -87,8 +86,8 @@ def get_area_bounds(
     return xmin, ymin, xmax, ymax
 
 
-@task(tags=["io"])
-def get_subjects_task(
+@task
+def get_subjects_info(
     client: EarthRangerClient,
     include_inactive: Annotated[
         bool,
@@ -159,19 +158,8 @@ def download_profile_photo(
     """
     Download profile photos from URLs in a DataFrame column.
 
-    Args:
-        df: DataFrame containing URLs
-        column: Column name containing the URLs
-        output_path: Directory to save downloaded images
-        image_type: File extension for saved images (default: '.png')
-        overwrite_existing: Whether to overwrite existing files
-
     Returns:
-        Path to downloaded file if successful, None otherwise
-
-    Raises:
-        KeyError: If column doesn't exist in DataFrame
-        ValueError: If output_path doesn't exist or URL is invalid
+        Path to the last successfully downloaded file if successful, None otherwise
     """
     if column not in df.columns:
         raise KeyError(f"Column '{column}' not found. Available: {list(df.columns)}")
@@ -179,125 +167,33 @@ def download_profile_photo(
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Process each URL in the column
-    downloaded_files = []
-
     for idx, url in df[column].dropna().items():
         if not isinstance(url, str) or not url.startswith(("http://", "https://")):
             print(f"Skipping invalid URL at index {idx}: {url}")
             continue
 
         try:
-            df_subset = df.iloc[idx : idx + 1]
-            row_hash = hashlib.sha256(pd.util.hash_pandas_object(df_subset, index=True).values).hexdigest()
+            df_subset = df.loc[[idx]]
+            row_hash = hashlib.sha256(
+                pd.util.hash_pandas_object(df_subset, index=True).values
+            ).hexdigest()
             filename = f"{row_hash[:8]}_{idx}"
 
             if not image_type.startswith("."):
                 image_type = f".{image_type}"
 
             file_path = output_path / f"{filename}{image_type}"
-
-            # Convert Dropbox share links to direct download links
             processed_url = url.replace("dl=0", "dl=1") if "dropbox.com" in url else url
-
-            # Download the file
-            download_success = ecoscope.io.utils.download_file(processed_url, str(file_path), overwrite_existing)
-            if download_success:
-                downloaded_files.append(str(file_path))
-                print(f"Successfully downloaded: {file_path}")
-            else:
-                print(f"Failed to download from: {processed_url}")
-
+            ecoscope.io.utils.download_file(processed_url, str(file_path), overwrite_existing)
+            print(f"Downloaded profile photo for index {idx} to {file_path}")
         except Exception as e:
             print(f"Error processing URL at index {idx} ({url}): {e}")
             continue
 
-    return downloaded_files if downloaded_files else None
+    return str(file_path) if 'file_path' in locals() else None
 
-
-@task
-def persist_subject_info(
-    df: AnyDataFrame,
-    output_path: Union[str, Path],
-    maxlen: int = 1000,
-) -> Optional[Union[Dict[str, str], List[Dict[str, str]]]]:
-    if df.empty:
-        raise ValueError("DataFrame is empty")
-
-    required_columns = [
-        "name",
-        "additional__Bio",
-        "additional__DOB",
-        "additional__sex",
-        "additional__notes",
-        "additional__country",
-        "additional__distribution",
-        "additional__status",
-    ]
-    missing_columns = [col for col in required_columns if col not in df.columns]
-    if missing_columns:
-        raise KeyError(
-            f"Required columns {missing_columns} don't exist in the dataframe. "
-            f"Available columns: {list(df.columns)}"
-        )
-
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    def process_single_subject(row: pd.Series) -> Dict[str, str]:
-        """Process a single subject row into structured info."""
-
-        bio = safe_strip(row.get("additional__Bio", ""))
-        if len(bio) > maxlen:
-            bio = truncate_at_sentence(bio, maxlen)
-
-        status_value = safe_strip(row.get("additional__status", ""))
-        status_color = "green" if status_value.lower() == "active" else "red"
-
-        dob_raw = safe_strip(row.get("additional__DOB", ""))
-        dob_formatted = format_date(dob_raw)
-
-        subject_info = {
-            "name": safe_strip(row.get("name", "")).title(),
-            "dob": dob_formatted,
-            "sex": safe_strip(row.get("additional__sex", "")).capitalize(),
-            "country": safe_strip(row.get("additional__country", "")),
-            "notes": safe_strip(row.get("additional__notes", "")),
-            "status": f'<span style="color: {status_color};">{status_value}</span>',
-            "status_raw": status_value,
-            "bio": bio,
-            "distribution": safe_strip(row.get("additional__distribution", "")),
-        }
-        return {k: str(v) if v is not None else "" for k, v in subject_info.items()}
-
-    if len(df) == 1:
-        processed_data = process_single_subject(df.iloc[0])
-    else:
-        processed_data = [process_single_subject(row) for _, row in df.iterrows()]
-
-    # Persist data based on format
-    try:
-        row_hash = hashlib.sha256(pd.util.hash_pandas_object(df_subset, index=True).values).hexdigest()
-        filename = f"{row_hash[:8]}_{idx}.json"
-
-        file_path = output_path / filename
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(processed_data, f, indent=2, ensure_ascii=False)
-        print(f"Subject info successfully saved to: {output_path}")
-
-    except Exception as e:
-        print(f"Error saving subject info: {e}")
-        raise
-
-    return processed_data if return_data else None
-
-
-def safe_strip(value: Union[str, int, float, None]) -> str:
-    """Safely strip whitespace from string-like values."""
-    if pd.isna(value) or value is None:
-        return ""
-    return str(value).strip()
-
+def safe_strip(x) -> str:
+    return "" if x is None else str(x).strip()
 
 def truncate_at_sentence(text: str, maxlen: int) -> str:
     """Truncate text at sentence boundary within maxlen."""
@@ -319,22 +215,23 @@ def truncate_at_sentence(text: str, maxlen: int) -> str:
 
     return text[:maxlen] + "..."
 
+def truncate_at_sentence(text: str, maxlen: int) -> str:
+    if len(text) <= maxlen:
+        return text
+    cut = text[:maxlen]
+    dot = cut.rfind(".")
+    return (cut[: dot + 1] if dot >= 40 else cut.rstrip()) + ("..." if dot < 40 else "")
 
 def format_date(date_str: str) -> str:
-    """Format date string to consistent format."""
-    if not date_str:
+    s = safe_strip(date_str)
+    if not s:
         return ""
-
-    date_formats = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d", "%m-%d-%Y", "%d-%m-%Y", "%B %d, %Y", "%b %d, %Y"]
-
-    for fmt in date_formats:
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y", "%b %d, %Y", "%d %b %Y", "%Y/%m/%d"):
         try:
-            parsed_date = datetime.strptime(date_str, fmt)
-            return parsed_date.strftime("%Y-%m-%d")
+            return datetime.strptime(s, fmt).strftime("%d %b %Y")
         except ValueError:
             continue
-    return date_str
-
+    return s
 
 def save_as_json(data: Union[Dict, List], output_path: Path) -> None:
     """Save data as JSON file."""
@@ -344,6 +241,82 @@ def save_as_json(data: Union[Dict, List], output_path: Path) -> None:
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+@task
+def persist_subject_info(
+    df: AnyDataFrame,                    
+    output_path: Union[str, Path],
+    maxlen: int = 1000,
+    return_data: bool = True,
+) -> Optional[Union[Dict[str, str], List[Dict[str, str]]]]:
+    if df.empty:
+        raise ValueError("DataFrame is empty")
+
+    required_columns = [
+        "subject_name",
+        "additional__Bio",
+        "additional__DOB",
+        "additional__sex",
+        "additional__notes",
+        "additional__country",
+        "additional__distribution",
+        "additional__status",
+    ]
+    missing = [c for c in required_columns if c not in df.columns]
+    if missing:
+        raise KeyError(
+            f"Required columns {missing} don't exist in the dataframe. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    output_path = Path(output_path)
+    output_path.mkdir(parents=True, exist_ok=True)  # make the target dir itself
+
+    def process_single_subject(row: pd.Series) -> Dict[str, str]:
+        bio = safe_strip(row.get("additional__Bio", ""))
+        if len(bio) > maxlen:
+            bio = truncate_at_sentence(bio, maxlen)
+
+        status_value = safe_strip(row.get("additional__status", ""))
+        status_color = "green" if status_value.lower() == "active" else "red"
+
+        dob_formatted = format_date(safe_strip(row.get("additional__DOB", "")))
+
+        subject_info = {
+            "subject_name": safe_strip(row.get("subject_name", "")).title(),
+            "dob": dob_formatted,
+            "sex": safe_strip(row.get("additional__sex", "")).capitalize(),
+            "country": safe_strip(row.get("additional__country", "")),
+            "notes": safe_strip(row.get("additional__notes", "")),
+            "status": f'<span style="color: {status_color};">{status_value}</span>',
+            "status_raw": status_value,
+            "bio": bio,
+            "distribution": safe_strip(row.get("additional__distribution", "")),
+        }
+        return {k: ("" if v is None else str(v)) for k, v in subject_info.items()}
+
+    processed_data: Union[Dict[str, str], List[Dict[str, str]]]
+    if len(df) == 1:
+        processed_data = process_single_subject(df.iloc[0])
+    else:
+        processed_data = [process_single_subject(row) for _, row in df.iterrows()]
+
+    # Persist JSON with a stable, collision-resistant filename
+    try:
+        # Hash the input frame (values+index) so the filename reflects the content
+        df_hash = hashlib.sha256(pd.util.hash_pandas_object(df, index=True).values).hexdigest()
+        filename = f"subject_info_{df_hash[:8]}.json"
+        file_path = output_path / filename
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(processed_data, f, indent=2, ensure_ascii=False)
+
+        print(f"Subject info successfully saved to: {file_path}")
+
+    except Exception as e:
+        print(f"Error saving subject info: {e}")
+        raise
+
+    return processed_data if return_data else None
 
 @task
 def split_gdf_by_column(

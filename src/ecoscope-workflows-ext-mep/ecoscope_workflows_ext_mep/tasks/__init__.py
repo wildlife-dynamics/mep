@@ -17,7 +17,7 @@ from ._map_utils import (
 from ._zip import zip_grouped_by_key
 from ._mep_utils import (
     get_area_bounds,
-    get_subjects_task,
+    get_subjects_info,
     download_profile_photo,
     persist_subject_info,
     split_gdf_by_column,
@@ -26,6 +26,8 @@ from ._mep_utils import (
     create_seasonal_labels,
 )
 
+from ._file import create_directory
+from ._inspect import view_df
 __all__ = [
     "calculate_collar_voltage",
     "load_landdx_aoi",
@@ -43,10 +45,12 @@ __all__ = [
     "create_layer_from_gdf",
     "zip_grouped_by_key",
     "get_area_bounds",
-    "get_subjects_task",
+    "get_subjects_info",
     "download_profile_photo",
     "persist_subject_info",
     "split_gdf_by_column",
     "calculate_etd_by_groups",
     "create_seasonal_labels",
+    "create_directory",
+    "view_df",
 ]

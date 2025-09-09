@@ -19,6 +19,9 @@ define_time_range:
   since: "2025-09-01T00:00:00Z"
   until: "2025-09-08T23:59:59Z"
 
+create_output_dir:
+  path_name: "/home/ttemu/ecoscope-workflows/OUTPUTS"
+
 # Desired basemap layers
 configure_base_maps:
   base_maps:
@@ -30,8 +33,8 @@ configure_base_maps:
       min_zoom: null
 
 #Link to retrieve landDx db
-retrieve_ldx_db:
-  url: "https://maraelephant.maps.arcgis.com/sharing/rest/content/items/6da0c9bdd43d4dd0ac59a4f3cd73dcab/data"
+# retrieve_ldx_db:
+#   url: "https://maraelephant.maps.arcgis.com/sharing/rest/content/items/6da0c9bdd43d4dd0ac59a4f3cd73dcab/data"
 
 # Specific AOI to use from LandDX db
 load_aoi:
@@ -70,6 +73,15 @@ create_styled_ldx_layers:
       labels: ["Community Conservancy","National Reserve", "National Park"]
       colors: ["#556b2f","#8fbc8b","#fffacd"]
 
+
+subject_df:
+  subject_group_name: "MEP_Elephants_Tsavo"
+
+# view_subj_df:
+#   name: View Subject DataFrame
+
+# view_trajectory_data:
+#   name: View Subject DataFrame
 
 # Subject group name
 subject_observations:

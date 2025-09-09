@@ -33,7 +33,7 @@
         "data_source"
       ],
       "type": "object",
-      "title": "Select Google Earth Engine Data Source"
+      "title": "Set Google Earth Engine Data Source"
     },
     "er_client": {
       "additionalProperties": false,
@@ -299,19 +299,23 @@
       "description": "Choose the period of time to analyze.",
       "title": "Define time range"
     },
+    "create_output_dir": {
+      "additionalProperties": false,
+      "properties": {
+        "path_name": {
+          "default": "/home/ttemu/ecoscope-workflows/mep/.pixi/envs/compile/lib/python3.12/site-packages/ecoscope_workflows_ext_mep/tasks/output",
+          "title": "Path Name",
+          "type": "string",
+          "description": "Path to the directory that should be created"
+        }
+      },
+      "type": "object",
+      "required": [],
+      "title": "Create output directory"
+    },
     "retrieve_ldx_db": {
       "additionalProperties": false,
       "properties": {
-        "url": {
-          "title": "Url",
-          "type": "string",
-          "description": "URL to retrieve the LandDx database"
-        },
-        "path": {
-          "title": "Path",
-          "type": "string",
-          "description": "Local path to save the LandDx database copy"
-        },
         "overwrite_existing": {
           "default": false,
           "title": "Overwrite Existing",
@@ -325,10 +329,7 @@
           "description": "Whether to unzip the downloaded file"
         }
       },
-      "required": [
-        "url",
-        "path"
-      ],
+      "required": [],
       "type": "object",
       "title": "Retrieve and unpack landDX db"
     },
@@ -507,28 +508,18 @@
       "type": "object",
       "title": "Get subject dataframe"
     },
-    "get_events_data": {
+    "download_subject_info": {
       "additionalProperties": false,
       "properties": {
-        "event_types": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Event Types",
-          "type": "array",
-          "description": "Specify the event type(s) to analyze (optional). Leave this section empty to analyze all event types. Only V1 Event Types can be analyzed at this time."
-        },
-        "include_null_geometry": {
+        "return_data": {
           "default": true,
-          "title": "Include Events Without a Geometry (point or polygon)",
+          "title": "Return Data",
           "type": "boolean"
         }
       },
-      "required": [
-        "event_types"
-      ],
+      "required": [],
       "type": "object",
-      "title": "Retrieve events from ER"
+      "title": "Download subject info and persist"
     },
     "subject_observations": {
       "additionalProperties": false,
@@ -543,23 +534,6 @@
       ],
       "type": "object",
       "title": "Get subject group observations from ER"
-    },
-    "subject_relocations": {
-      "additionalProperties": false,
-      "properties": {
-        "filter_point_coords": {
-          "items": {
-            "$ref": "#/$defs/Coordinate"
-          },
-          "title": "Filter Point Coords",
-          "type": "array"
-        }
-      },
-      "required": [
-        "filter_point_coords"
-      ],
-      "type": "object",
-      "title": "Transform observations to relocations"
     },
     "convert_to_trajectories": {
       "additionalProperties": false,
@@ -742,12 +716,7 @@
       "type": "string"
     },
     "ValueGrouper": {
-      "oneOf": [
-        {
-          "const": "name",
-          "title": "ROI Name"
-        }
-      ],
+      "oneOf": [],
       "title": "Category",
       "type": "string"
     },
@@ -772,26 +741,6 @@
         }
       },
       "title": "MapStyleConfig",
-      "type": "object"
-    },
-    "Coordinate": {
-      "properties": {
-        "y": {
-          "description": "Example -0.15293",
-          "title": "Latitude",
-          "type": "number"
-        },
-        "x": {
-          "description": "Example 37.30906",
-          "title": "Longitude",
-          "type": "number"
-        }
-      },
-      "required": [
-        "y",
-        "x"
-      ],
-      "title": "Coordinate",
       "type": "object"
     },
     "TrajectorySegmentFilter": {
@@ -902,8 +851,6 @@
     },
     "retrieve_ldx_db": {
       "ui:order": [
-        "url",
-        "path",
         "overwrite_existing",
         "unzip"
       ]
@@ -920,12 +867,6 @@
         "ids",
         "max_ids_per_request",
         "raise_on_empty"
-      ]
-    },
-    "get_events_data": {
-      "ui:order": [
-        "event_types",
-        "include_null_geometry"
       ]
     },
     "generate_seasonal_etd": {
@@ -949,13 +890,13 @@
       "configure_base_maps",
       "configure_grouping_strategy",
       "define_time_range",
+      "create_output_dir",
       "retrieve_ldx_db",
       "load_aoi",
       "create_styled_ldx_layers",
       "subject_df",
-      "get_events_data",
+      "download_subject_info",
       "subject_observations",
-      "subject_relocations",
       "convert_to_trajectories",
       "generate_seasonal_etd",
       "sort_trajs_by_speed",

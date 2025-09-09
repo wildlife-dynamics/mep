@@ -6,54 +6,16 @@ requirements:
   - name: ecoscope-workflows-ext-ecoscope
     version: "0.7.2.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
+    
   - name: ecoscope-workflows-ext-mep
     version: "*"
     channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
-
-rjsf-overrides:
-  $defs:
-    ValueGrouper.oneOf: [
-      {"const": "name", "title": "ROI Name"},
-    ]
-
 workflow:
-# workflow details 
-# connection details to ER
-# connection details to GEE
-# time range
-# groupers
-# 1. retrieve subject df
-# retrieve subject group observations 
-# retrieve events df 
-# rename columns for consistency ie name for both subject and  observations
-# split subject df by group
-# download profile photo of subject and persist as png
-# download subject details and persist as json 
-
-# 2. Download landDX db 
-# retrieve AOI from landDX db
-# 3. convert observations to relocations and filter by landDX AOI  ie KE and TZ
-# split relocations by group 
-# generate nsd plots and persist as html
-# generate mcp asymptote plots and persist as html
-# generate speed plots and persist as html
-# generate collar events plots and persist as html
-# generate mcp gdf 
-# generate season windows --> should be a gdf that will eventually be added on all reloc plots 
-
-# convert relocations to trajectories
-# generate seasons labels 
-# split trajs by group
-# generate seasonal home ranges and mcp--polyline and persist as html
-# generate home range etds and persist as html
-# generate speedmaps and persist as html
-# 
-
   - name: Set Workflow Details
     id: workflow_details
     task: set_workflow_details
 
-  - name: Select Google Earth Engine Data Source
+  - name: Set Google Earth Engine Data Source
     id: gee_client
     task: set_gee_connection
   
@@ -75,11 +37,16 @@ workflow:
     partial:
       time_format: "%d %b %Y %H:%M:%S %Z"
 
+  - name: Create output directory
+    id: create_output_dir
+    task: create_directory
+
   - name: Retrieve and unpack landDX db 
     id: retrieve_ldx_db
     task: download_land_dx
     partial:
-      map_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      path: ${{ workflow.create_output_dir.return }}
+      url: "https://maraelephant.maps.arcgis.com/sharing/rest/content/items/6da0c9bdd43d4dd0ac59a4f3cd73dcab/data"
   
   - name: Load AOI from landDX
     id: load_aoi
@@ -105,10 +72,11 @@ workflow:
     task: create_map_layers_from_annotated_dict
     partial:
       annotated_dict: ${{ workflow.annotate_geom_types.return }}
-  
+
+  # subjects
   - name: Get subject dataframe 
     id: subject_df
-    task: get_subjects_task # write custom task for this
+    task: get_subjects_info # write custom task for this
     partial:
       client: ${{ workflow.er_client.return }}
       include_inactive: True 
@@ -155,13 +123,20 @@ workflow:
 
       df: ${{ workflow.normalize_subject_info.return }}
 
+  - name: view subject df 
+    id: view_subj_df
+    task: view_df
+    partial:
+      name: Subject DataFrame
+      gdf: ${{ workflow.rename_subject_cols.return }}
+  
   - name: split subjects df by group
-    id: split_subject_by_group # use name or id 
+    id: split_subject_by_group # use subject_name
     task: split_groups
     partial:
       df: ${{ workflow.rename_subject_cols.return }}
       groupers: ${{ workflow.configure_grouping_strategy.return }}
-
+  
   - name: Download subject profile photo
     id: download_profile_pic
     task: download_profile_photo
@@ -169,7 +144,7 @@ workflow:
       image_type: ".png"
       column: additional__id_photo
       overwrite_existing: true
-      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      output_path: ${{ workflow.create_output_dir.return }}
     mapvalues:
       argnames: df
       argvalues: ${{ workflow.split_subject_by_group.return }}
@@ -179,111 +154,118 @@ workflow:
     task: persist_subject_info
     partial:
       maxlen: 1000
-      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      output_path: ${{ workflow.create_output_dir.return }}
     mapvalues:
       argnames: df
       argvalues: ${{ workflow.split_subject_by_group.return }}
 
-  # get events
-  - name : Retrieve events from ER
-    id: get_events_data
-    task: get_events
-    partial:
-      client: ${{ workflow.er_client.return }}
-      time_range: ${{ workflow.define_time_range.return }}
-      include_details: true
-      raise_on_empty: true
-      event_columns: 
-        - id 
-        - time 
-        - event_type
-        - event_category
-        - reported_by
-        - serial_number
-        - geometry
-        - event_details
+  # events
+  # - name : Retrieve events from ER
+  #   id: get_events_data
+  #   task: get_events
+  #   partial:
+  #     client: ${{ workflow.er_client.return }}
+  #     time_range: ${{ workflow.define_time_range.return }}
+  #     include_details: true
+  #     raise_on_empty: true
+  #     event_columns: 
+  #       - id 
+  #       - time 
+  #       - event_type
+  #       - event_category
+  #       - reported_by
+  #       - serial_number
+  #       - geometry
+  #       - event_details
 
-  - name: Normalize event details 
-    id: normalize_event_details
-    task: normalize_column
-    partial:
-      column: event_details
-      df: ${{ workflow.get_events_data.return }}
+  # - name: Normalize event details 
+  #   id: normalize_event_details
+  #   task: normalize_column
+  #   partial:
+  #     column: event_details
+  #     df: ${{ workflow.get_events_data.return }}
 
-  - name: Rename event columns 
-    id: rename_event_cols
-    task: map_columns
-    partial:
-      drop_columns:
-        - id
-        - index
-        - end_time
-        - message
-        - provenance
-        - attributes
-        - comment
-        - title 
-        - is_contained_in 
-        - patrol_segments
-        - icon_id 
-        - url 
-        - image_url
-        - serial_number
-        - related_subjects
-        - patrols
-        - event_details_updates
+  # - name: Rename event columns 
+  #   id: rename_event_cols
+  #   task: map_columns
+  #   partial:
+  #     drop_columns:
+  #       - id
+  #       - index
+  #       - end_time
+  #       - message
+  #       - provenance
+  #       - attributes
+  #       - comment
+  #       - title 
+  #       - is_contained_in 
+  #       - patrol_segments
+  #       - icon_id 
+  #       - url 
+  #       - image_url
+  #       - serial_number
+  #       - related_subjects
+  #       - patrols
+  #       - event_details_updates
 
-      retain_columns:
-        - location
-        - time 
-        - event_type
-        - event_category
-        - priority
-        - priority_label
-        - reported_by
-        - state
-        - sort_at 
-        - geometry
-        - updated_at
-        - created_at
-        - geojson
-        - is_collection
-        - event_details__pic
-        - event_details__region
-        - event_details__source
-        - event_details__details	
-        - event_details__subject
-        - event_details__source_id	
-        - event_details__subject_id
-        - event_details__collaring_type
-        - event_details__collaring_reason
-        - event_details__collar_checked_by
+  #     retain_columns:
+  #       - location
+  #       - time 
+  #       - event_type
+  #       - event_category
+  #       - priority
+  #       - priority_label
+  #       - reported_by
+  #       - state
+  #       - sort_at 
+  #       - geometry
+  #       - updated_at
+  #       - created_at
+  #       - geojson
+  #       - is_collection
+  #       - event_details__pic
+  #       - event_details__region
+  #       - event_details__source
+  #       - event_details__details	
+  #       - event_details__subject
+  #       - event_details__source_id	
+  #       - event_details__subject_id
+  #       - event_details__collaring_type
+  #       - event_details__collaring_reason
+  #       - event_details__collar_checked_by
 
-      rename_columns:
-        id: groupby_col
-        name: subject_name
-        hex: hex_color
-        event_details__pic: pic
-        event_details__region: region
-        event_details__source: source
-        event_details__details: details
-        event_details__subject: groupby_col
-        event_details__source_id: source_id
-        event_details__subject_id: subject_name
-        event_details__collaring_type: collaring_type
-        event_details__collaring_reason: collaring_reason
-        event_details__collar_checked_by: collar_checked_by
+  #     rename_columns:
+  #       id: groupby_col
+  #       name: subject_name
+  #       hex: hex_color
+  #       event_details__pic: pic
+  #       event_details__region: region
+  #       event_details__source: source
+  #       event_details__details: details
+  #       event_details__subject: groupby_col
+  #       event_details__source_id: source_id
+  #       event_details__subject_id: subject_name
+  #       event_details__collaring_type: collaring_type
+  #       event_details__collaring_reason: collaring_reason
+  #       event_details__collar_checked_by: collar_checked_by
 
-      df: ${{ workflow.normalize_event_details.return }}
+  #     df: ${{ workflow.normalize_event_details.return }}
 
-  - name: split events by group
-    id: split_events_by_group # use name or id 
-    task: split_groups
-    partial:
-      df: ${{ workflow.rename_event_cols.return }}
-      groupers: ${{ workflow.configure_grouping_strategy.return }}
+  # - name: view events df
+  #   id: view_events_df
+  #   task: view_df
+  #   partial:
 
-  # generate subject observations 
+  #     gdf: ${{ workflow.rename_event_cols.return }}
+
+  # - name: split events by group
+  #   id: split_events_by_group # use name or id 
+  #   task: split_groups
+  #   partial:
+  #     df: ${{ workflow.rename_event_cols.return }}
+  #     groupers: ${{ workflow.configure_grouping_strategy.return }}
+  
+  # retrieve subject observations 
   - name: Get subject group observations from ER 
     id: subject_observations
     task: get_subjectgroup_observations
@@ -310,12 +292,43 @@ workflow:
         - extra__subject__name
         - extra__subject__subject_subtype
 
+      filter_point_coords:
+        - x: 180.000000
+          y: 90.000000
+        - x: 0.000000
+          y: 0.000000
+        - x: 1.000000
+          y: 1.000000
+
+  # rename reloc columns 
+  - name: Rename reloc columns 
+    id: rename_reloc_cols
+    task: map_columns
+    partial:
+      drop_columns: []
+      retain_columns: []
+      rename_columns:
+        extra__subject__name: subject_name
+        extra__subject__hex: hex_color
+        extra__subject__sex: subject_sex
+        extra__subject__subject_subtype: subject_subtype
+        extra__created_at: created_at
+        
+      df: ${{ workflow.subject_observations.return }}
+  
+  - name: view reloc df
+    id: view_reloc_df
+    task: view_df
+    partial:
+      name: Subject Relocations DataFrame
+      gdf: ${{ workflow.rename_reloc_cols.return }}
+
   # convert relocations to trajectories
   - name: Convert relocations to trajectories
     id: convert_to_trajectories
     task: relocations_to_trajectory
     partial:
-      relocations: ${{ workflow.subject_relocations.return }}
+      relocations: ${{ workflow.rename_reloc_cols.return }}
   
   # Add temporal index to subject trajectories using segment_start
   - name: Add temporal index to trajectories
@@ -342,7 +355,7 @@ workflow:
       label_options:
         label_ranges: false
         label_decimals: 1
-
+  
   # generate seasonal home range etd 
   - name: Generate seasonal home range etd
     id: generate_seasonal_etd
@@ -361,6 +374,30 @@ workflow:
       band_count: 1
       trajectory_gdf: ${{ workflow.classify_trajectory_speed_bins.return }}
 
+  # rename trajectory columns
+  - name: Rename trajectory columns 
+    id: rename_trajectory_cols
+    task: map_columns
+    partial:
+      drop_columns: []
+      retain_columns: []
+      rename_columns:
+        extra__subject_name: subject_name
+        extra__hex_color: hex_color
+        extra__subject_sex: subject_sex
+        extra__subject_subtype: subject_subtype
+
+      df: ${{ workflow.classify_trajectory_speed_bins.return }}
+
+  # view trajectory data
+  - name: View trajectory data
+    id: view_trajectory_data
+    task: view_df
+    partial:
+      name: Subject Trajectory DataFrame
+      gdf: ${{ workflow.rename_trajectory_cols.return }}
+
+
   # wet/dry season windows based on ndvi and roi
   - name: Determine seasonal windows
     id: determine_seasonal_windows
@@ -375,9 +412,18 @@ workflow:
     id: add_season_labels
     task: create_seasonal_labels
     partial:
-      traj: ${{ workflow.classify_trajectory_speed_bins.return }}
+      traj: ${{ workflow.rename_trajectory_cols.return }}
       total_percentiles: ${{ workflow.determine_seasonal_windows.return }}
   
+  # view seasonal labels 
+  - name: View seasonal labels
+    id: view_seasonal_labels
+    task: view_df
+    partial:
+      name: Subject Trajectory DataFrame with Seasonal Labels
+      gdf: ${{ workflow.add_season_labels.return }}
+  
+  # Generate speed map ,season range ecomap  and home range ecomap
   - name: Split trajectories by group
     id: split_trajs_by_group
     task: split_groups 
@@ -453,15 +499,17 @@ workflow:
         label_column: speed_bins_formatted
         color_column: speed_bins_colormap
       tooltip_columns:
-        - extra__name
-        - segment_start
+        - subject_name
+        - subject_sex
+        - subject_subtype
+        - speed_kmhr
+        - speed_bins
         - dist_meters
-        - timespan_seconds
-        - extra__sex
+
     mapvalues:
       argnames: geodataframe
       argvalues: ${{ workflow.format_speed_values.return }}
-  
+
   - name: Zoom speed trajectories by view state
     id: zoom_traj_view
     task: create_view_state_from_gdf
@@ -688,6 +736,7 @@ workflow:
     task: merge_widget_views
     partial:
       widgets: ${{ workflow.create_hr_ecomap_widgets.return }}
+
 
   # Seasons
   - name: time density colormap
