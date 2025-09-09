@@ -196,12 +196,14 @@ def download_profile_photo(
 def safe_strip(x) -> str:
     return "" if x is None else str(x).strip()
 
+
 def truncate_at_sentence(text: str, maxlen: int) -> str:
     if len(text) <= maxlen:
         return text
     cut = text[:maxlen]
     dot = cut.rfind(".")
     return (cut[: dot + 1] if dot >= 40 else cut.rstrip()) + ("..." if dot < 40 else "")
+
 
 def format_date(date_str: str) -> str:
     s = safe_strip(date_str)
@@ -214,6 +216,7 @@ def format_date(date_str: str) -> str:
             continue
     return s
 
+
 def save_as_json(data: Union[Dict, List], output_path: Path) -> None:
     """Save data as JSON file."""
     if not str(output_path).endswith(".json"):
@@ -221,6 +224,7 @@ def save_as_json(data: Union[Dict, List], output_path: Path) -> None:
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
 
 @task
 def persist_subject_info(
