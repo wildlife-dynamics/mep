@@ -292,6 +292,37 @@ class DownloadSubjectInfo(BaseModel):
     return_data: Optional[bool] = Field(True, title="Return Data")
 
 
+class GetEventsData(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    event_types: List[str] = Field(
+        ...,
+        description="Specify the event type(s) to analyze (optional). Leave this section empty to analyze all event types. Only V1 Event Types can be analyzed at this time.",
+        title="Event Types",
+    )
+    include_null_geometry: Optional[bool] = Field(
+        True, title="Include Events Without a Geometry (point or polygon)"
+    )
+    include_updates: Optional[bool] = Field(
+        False,
+        description="Whether or not to include event updates",
+        title="Include Updates",
+    )
+    include_related_events: Optional[bool] = Field(
+        False,
+        description="Whether or not to include related events",
+        title="Include Related Events",
+    )
+
+
+class ViewEventsDf(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    name: str = Field(..., title="Name")
+
+
 class SubjectObservations(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -305,6 +336,42 @@ class SortTrajsBySpeed(BaseModel):
     )
     ascending: Optional[bool] = Field(
         True, description="Sort ascending if true", title="Ascending"
+    )
+
+
+class ZoomTrajView(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    zoom_value: Optional[float] = Field(14, title="Zoom Value")
+
+
+class ZoomHrView(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    zoom_value: Optional[float] = Field(14, title="Zoom Value")
+
+
+class ZoomSeasonView(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    zoom_value: Optional[float] = Field(14, title="Zoom Value")
+
+
+class Filetype(str, Enum):
+    csv = "csv"
+    gpkg = "gpkg"
+    geoparquet = "geoparquet"
+
+
+class PersistSubjectSeasonWins(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    filetype: Optional[Filetype] = Field(
+        "csv", description="The output format", title="Filetype"
     )
 
 
@@ -514,6 +581,10 @@ class Params(BaseModel):
     download_subject_info: Optional[DownloadSubjectInfo] = Field(
         None, title="Download subject info and persist"
     )
+    get_events_data: Optional[GetEventsData] = Field(
+        None, title="Retrieve events from ER"
+    )
+    view_events_df: Optional[ViewEventsDf] = Field(None, title="view events df")
     subject_observations: Optional[SubjectObservations] = Field(
         None, title="Get subject group observations from ER"
     )
@@ -526,4 +597,16 @@ class Params(BaseModel):
     sort_trajs_by_speed: Optional[SortTrajsBySpeed] = Field(
         None, title="Sort trajectories by speed bins"
     )
+    zoom_traj_view: Optional[ZoomTrajView] = Field(
+        None, title="Zoom speed trajectories by view state"
+    )
     generate_etd: Optional[GenerateEtd] = Field(None, title="Generate hr etd")
+    zoom_hr_view: Optional[ZoomHrView] = Field(
+        None, title="Zoom hr movement by view state"
+    )
+    zoom_season_view: Optional[ZoomSeasonView] = Field(
+        None, title="Zoom seasons by view state"
+    )
+    persist_subject_season_wins: Optional[PersistSubjectSeasonWins] = Field(
+        None, title="Persist seasonal windows as csv"
+    )

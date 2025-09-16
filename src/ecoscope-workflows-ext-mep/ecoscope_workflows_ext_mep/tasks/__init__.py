@@ -24,6 +24,9 @@ from ._mep_utils import (
     generate_mcp_gdf,
     calculate_etd_by_groups,
     create_seasonal_labels,
+    generate_seasonal_nsd_plot,
+    generate_seasonal_mcp_asymptote_plot,
+    generate_seasonal_speed_plot,
 )
 
 from ._file import create_directory
@@ -54,5 +57,8 @@ __all__ = [
     "create_seasonal_labels",
     "create_directory",
     "generate_mcp_gdf",
+    "generate_seasonal_nsd_plot",
+    "generate_seasonal_mcp_asymptote_plot",
+    "generate_seasonal_speed_plot",
     "view_df",
 ]

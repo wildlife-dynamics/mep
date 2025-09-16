@@ -33,6 +33,11 @@ from ecoscope_workflows_core.tasks.groupby import split_groups
 from ecoscope_workflows_ext_mep.tasks import download_profile_photo
 from ecoscope_workflows_ext_mep.tasks import persist_subject_info
 
+get_events = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
+    func_name="get_events",  # 🧪
+)  # 🧪
+
 get_subjectgroup_observations = create_task_magicmock(  # 🧪
     anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
     func_name="get_subjectgroup_observations",  # 🧪
@@ -69,6 +74,15 @@ from ecoscope_workflows_core.tasks.results import merge_widget_views
 from ecoscope_workflows_ext_mep.tasks import calculate_etd_by_groups
 from ecoscope_workflows_ext_mep.tasks import generate_mcp_gdf
 from ecoscope_workflows_ext_ecoscope.tasks.results import create_polygon_layer
+
+determine_season_windows = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
+    func_name="determine_season_windows",  # 🧪
+)  # 🧪
+from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df
+from ecoscope_workflows_ext_mep.tasks import generate_seasonal_nsd_plot
+from ecoscope_workflows_ext_mep.tasks import generate_seasonal_speed_plot
+from ecoscope_workflows_ext_mep.tasks import generate_seasonal_mcp_asymptote_plot
 
 from ..params import Params
 
@@ -286,6 +300,87 @@ def main(params: Params):
         .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
     )
 
+    get_events_data = (
+        get_events.validate()
+        .handle_errors(task_instance_id="get_events_data")
+        .partial(
+            client=er_client,
+            time_range=define_time_range,
+            include_details=True,
+            raise_on_empty=True,
+            event_columns=[
+                "id",
+                "time",
+                "event_type",
+                "event_category",
+                "reported_by",
+                "serial_number",
+                "geometry",
+                "event_details",
+            ],
+            **(params_dict.get("get_events_data") or {}),
+        )
+        .call()
+    )
+
+    normalize_event_details = (
+        normalize_column.validate()
+        .handle_errors(task_instance_id="normalize_event_details")
+        .partial(
+            column="event_details",
+            df=get_events_data,
+            **(params_dict.get("normalize_event_details") or {}),
+        )
+        .call()
+    )
+
+    view_events_df = (
+        view_df.validate()
+        .handle_errors(task_instance_id="view_events_df")
+        .partial(
+            gdf=normalize_event_details, **(params_dict.get("view_events_df") or {})
+        )
+        .call()
+    )
+
+    rename_event_cols = (
+        map_columns.validate()
+        .handle_errors(task_instance_id="rename_event_cols")
+        .partial(
+            drop_columns=[],
+            retain_columns=[],
+            rename_columns={
+                "id": "groupby_col",
+                "name": "subject_name",
+                "hex": "hex_color",
+                "event_details__pic": "pic",
+                "event_details__region": "region",
+                "event_details__source": "source",
+                "event_details__details": "details",
+                "event_details__subject": "groupby_col",
+                "event_details__source_id": "source_id",
+                "event_details__subject_id": "subject_name",
+                "event_details__collaring_type": "collaring_type",
+                "event_details__collaring_reason": "collaring_reason",
+                "event_details__collar_checked_by": "collar_checked_by",
+            },
+            df=normalize_event_details,
+            **(params_dict.get("rename_event_cols") or {}),
+        )
+        .call()
+    )
+
+    split_events_by_group = (
+        split_groups.validate()
+        .handle_errors(task_instance_id="split_events_by_group")
+        .partial(
+            df=rename_event_cols,
+            groupers=configure_grouping_strategy,
+            **(params_dict.get("split_events_by_group") or {}),
+        )
+        .call()
+    )
+
     subject_observations = (
         get_subjectgroup_observations.validate()
         .handle_errors(task_instance_id="subject_observations")
@@ -352,6 +447,17 @@ def main(params: Params):
             name="Subject Relocations DataFrame",
             gdf=rename_reloc_cols,
             **(params_dict.get("view_reloc_df") or {}),
+        )
+        .call()
+    )
+
+    split_relocs_by_group = (
+        split_groups.validate()
+        .handle_errors(task_instance_id="split_relocs_by_group")
+        .partial(
+            df=rename_reloc_cols,
+            groupers=configure_grouping_strategy,
+            **(params_dict.get("split_relocs_by_group") or {}),
         )
         .call()
     )
@@ -922,4 +1028,109 @@ def main(params: Params):
         .call()
     )
 
-    return season_grouped_map_widget
+    determine_subject_season_win = (
+        determine_season_windows.validate()
+        .handle_errors(task_instance_id="determine_subject_season_win")
+        .partial(
+            client=gee_client,
+            time_range=define_time_range,
+            **(params_dict.get("determine_subject_season_win") or {}),
+        )
+        .mapvalues(argnames=["roi"], argvalues=generate_etd)
+    )
+
+    persist_subject_season_wins = (
+        persist_df.validate()
+        .handle_errors(task_instance_id="persist_subject_season_wins")
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            **(params_dict.get("persist_subject_season_wins") or {}),
+        )
+        .mapvalues(argnames=["df"], argvalues=determine_subject_season_win)
+    )
+
+    zip_nsd_values = (
+        zip_grouped_by_key.validate()
+        .handle_errors(task_instance_id="zip_nsd_values")
+        .partial(
+            left=split_relocs_by_group,
+            right=persist_subject_season_wins,
+            **(params_dict.get("zip_nsd_values") or {}),
+        )
+        .call()
+    )
+
+    generate_nsd_plot = (
+        generate_seasonal_nsd_plot.validate()
+        .handle_errors(task_instance_id="generate_nsd_plot")
+        .partial(**(params_dict.get("generate_nsd_plot") or {}))
+        .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_nsd_values)
+    )
+
+    persist_seasonal_nsd_plots = (
+        persist_text.validate()
+        .handle_errors(task_instance_id="persist_seasonal_nsd_plots")
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            **(params_dict.get("persist_seasonal_nsd_plots") or {}),
+        )
+        .mapvalues(argnames=["text"], argvalues=generate_nsd_plot)
+    )
+
+    zip_speed_values = (
+        zip_grouped_by_key.validate()
+        .handle_errors(task_instance_id="zip_speed_values")
+        .partial(
+            left=split_relocs_by_group,
+            right=persist_subject_season_wins,
+            **(params_dict.get("zip_speed_values") or {}),
+        )
+        .call()
+    )
+
+    generate_speed_plot = (
+        generate_seasonal_speed_plot.validate()
+        .handle_errors(task_instance_id="generate_speed_plot")
+        .partial(**(params_dict.get("generate_speed_plot") or {}))
+        .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_speed_values)
+    )
+
+    persist_seasonal_speed_plots = (
+        persist_text.validate()
+        .handle_errors(task_instance_id="persist_seasonal_speed_plots")
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            **(params_dict.get("persist_seasonal_speed_plots") or {}),
+        )
+        .mapvalues(argnames=["text"], argvalues=generate_speed_plot)
+    )
+
+    zip_mcp_asymp_values = (
+        zip_grouped_by_key.validate()
+        .handle_errors(task_instance_id="zip_mcp_asymp_values")
+        .partial(
+            left=split_relocs_by_group,
+            right=persist_subject_season_wins,
+            **(params_dict.get("zip_mcp_asymp_values") or {}),
+        )
+        .call()
+    )
+
+    generate_mcp_asymp_plot = (
+        generate_seasonal_mcp_asymptote_plot.validate()
+        .handle_errors(task_instance_id="generate_mcp_asymp_plot")
+        .partial(**(params_dict.get("generate_mcp_asymp_plot") or {}))
+        .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_mcp_asymp_values)
+    )
+
+    persist_mcp_asymp_plots = (
+        persist_text.validate()
+        .handle_errors(task_instance_id="persist_mcp_asymp_plots")
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            **(params_dict.get("persist_mcp_asymp_plots") or {}),
+        )
+        .mapvalues(argnames=["text"], argvalues=generate_mcp_asymp_plot)
+    )
+
+    return persist_mcp_asymp_plots

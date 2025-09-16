@@ -30,6 +30,7 @@ from ecoscope_workflows_ext_mep.tasks import view_df
 from ecoscope_workflows_core.tasks.groupby import split_groups
 from ecoscope_workflows_ext_mep.tasks import download_profile_photo
 from ecoscope_workflows_ext_mep.tasks import persist_subject_info
+from ecoscope_workflows_ext_ecoscope.tasks.io import get_events
 from ecoscope_workflows_ext_ecoscope.tasks.io import get_subjectgroup_observations
 from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import process_relocations
 from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
@@ -59,6 +60,10 @@ from ecoscope_workflows_core.tasks.results import merge_widget_views
 from ecoscope_workflows_ext_mep.tasks import calculate_etd_by_groups
 from ecoscope_workflows_ext_mep.tasks import generate_mcp_gdf
 from ecoscope_workflows_ext_ecoscope.tasks.results import create_polygon_layer
+from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df
+from ecoscope_workflows_ext_mep.tasks import generate_seasonal_nsd_plot
+from ecoscope_workflows_ext_mep.tasks import generate_seasonal_speed_plot
+from ecoscope_workflows_ext_mep.tasks import generate_seasonal_mcp_asymptote_plot
 
 # %% [markdown]
 # ## Set Workflow Details
@@ -509,6 +514,150 @@ download_subject_info = (
 
 
 # %% [markdown]
+# ## Retrieve events from ER
+
+# %%
+# parameters
+
+get_events_data_params = dict(
+    event_types=...,
+    include_null_geometry=...,
+    include_updates=...,
+    include_related_events=...,
+)
+
+# %%
+# call the task
+
+
+get_events_data = (
+    get_events.handle_errors(task_instance_id="get_events_data")
+    .partial(
+        client=er_client,
+        time_range=define_time_range,
+        include_details=True,
+        raise_on_empty=True,
+        event_columns=[
+            "id",
+            "time",
+            "event_type",
+            "event_category",
+            "reported_by",
+            "serial_number",
+            "geometry",
+            "event_details",
+        ],
+        **get_events_data_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Normalize event details
+
+# %%
+# parameters
+
+normalize_event_details_params = dict()
+
+# %%
+# call the task
+
+
+normalize_event_details = (
+    normalize_column.handle_errors(task_instance_id="normalize_event_details")
+    .partial(
+        column="event_details", df=get_events_data, **normalize_event_details_params
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## view events df
+
+# %%
+# parameters
+
+view_events_df_params = dict(
+    name=...,
+)
+
+# %%
+# call the task
+
+
+view_events_df = (
+    view_df.handle_errors(task_instance_id="view_events_df")
+    .partial(gdf=normalize_event_details, **view_events_df_params)
+    .call()
+)
+
+
+# %% [markdown]
+# ## Rename event columns
+
+# %%
+# parameters
+
+rename_event_cols_params = dict()
+
+# %%
+# call the task
+
+
+rename_event_cols = (
+    map_columns.handle_errors(task_instance_id="rename_event_cols")
+    .partial(
+        drop_columns=[],
+        retain_columns=[],
+        rename_columns={
+            "id": "groupby_col",
+            "name": "subject_name",
+            "hex": "hex_color",
+            "event_details__pic": "pic",
+            "event_details__region": "region",
+            "event_details__source": "source",
+            "event_details__details": "details",
+            "event_details__subject": "groupby_col",
+            "event_details__source_id": "source_id",
+            "event_details__subject_id": "subject_name",
+            "event_details__collaring_type": "collaring_type",
+            "event_details__collaring_reason": "collaring_reason",
+            "event_details__collar_checked_by": "collar_checked_by",
+        },
+        df=normalize_event_details,
+        **rename_event_cols_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## split events by group
+
+# %%
+# parameters
+
+split_events_by_group_params = dict()
+
+# %%
+# call the task
+
+
+split_events_by_group = (
+    split_groups.handle_errors(task_instance_id="split_events_by_group")
+    .partial(
+        df=rename_event_cols,
+        groupers=configure_grouping_strategy,
+        **split_events_by_group_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
 # ## Get subject group observations from ER
 
 # %%
@@ -623,6 +772,29 @@ view_reloc_df = (
         name="Subject Relocations DataFrame",
         gdf=rename_reloc_cols,
         **view_reloc_df_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Split relocations by group
+
+# %%
+# parameters
+
+split_relocs_by_group_params = dict()
+
+# %%
+# call the task
+
+
+split_relocs_by_group = (
+    split_groups.handle_errors(task_instance_id="split_relocs_by_group")
+    .partial(
+        df=rename_reloc_cols,
+        groupers=configure_grouping_strategy,
+        **split_relocs_by_group_params,
     )
     .call()
 )
@@ -1029,7 +1201,9 @@ generate_speedmap_layers = (
 # %%
 # parameters
 
-zoom_traj_view_params = dict()
+zoom_traj_view_params = dict(
+    zoom_value=...,
+)
 
 # %%
 # call the task
@@ -1092,7 +1266,9 @@ speedvalues_view_zip = (
 # %%
 # parameters
 
-draw_speedmap_params = dict()
+draw_speedmap_params = dict(
+    widget_id=...,
+)
 
 # %%
 # call the task
@@ -1121,6 +1297,7 @@ draw_speedmap = (
 
 persist_speed_ecomap_urls_params = dict(
     filename=...,
+    filename_suffix=...,
 )
 
 # %%
@@ -1296,7 +1473,9 @@ generate_etd_ecomap_layers = (
 # %%
 # parameters
 
-zoom_hr_view_params = dict()
+zoom_hr_view_params = dict(
+    zoom_value=...,
+)
 
 # %%
 # call the task
@@ -1357,7 +1536,9 @@ hr_view_zip = (
 # %%
 # parameters
 
-draw_hr_ecomaps_params = dict()
+draw_hr_ecomaps_params = dict(
+    widget_id=...,
+)
 
 # %%
 # call the task
@@ -1386,6 +1567,7 @@ draw_hr_ecomaps = (
 
 persist_hr_ecomap_urls_params = dict(
     filename=...,
+    filename_suffix=...,
 )
 
 # %%
@@ -1570,7 +1752,9 @@ zip_season_mcp_hr = (
 # %%
 # parameters
 
-zoom_season_view_params = dict()
+zoom_season_view_params = dict(
+    zoom_value=...,
+)
 
 # %%
 # call the task
@@ -1629,7 +1813,9 @@ seasons_view_zip = (
 # %%
 # parameters
 
-seasonal_ecomap_params = dict()
+seasonal_ecomap_params = dict(
+    widget_id=...,
+)
 
 # %%
 # call the task
@@ -1658,6 +1844,7 @@ seasonal_ecomap = (
 
 season_etd_ecomap_html_url_params = dict(
     filename=...,
+    filename_suffix=...,
 )
 
 # %%
@@ -1720,4 +1907,263 @@ season_grouped_map_widget = (
     merge_widget_views.handle_errors(task_instance_id="season_grouped_map_widget")
     .partial(widgets=season_etd_widgets_single_view, **season_grouped_map_widget_params)
     .call()
+)
+
+
+# %% [markdown]
+# ## Determine seasonal windows for each subject
+
+# %%
+# parameters
+
+determine_subject_season_win_params = dict()
+
+# %%
+# call the task
+
+
+determine_subject_season_win = (
+    determine_season_windows.handle_errors(
+        task_instance_id="determine_subject_season_win"
+    )
+    .partial(
+        client=gee_client,
+        time_range=define_time_range,
+        **determine_subject_season_win_params,
+    )
+    .mapvalues(argnames=["roi"], argvalues=generate_etd)
+)
+
+
+# %% [markdown]
+# ## Persist seasonal windows as csv
+
+# %%
+# parameters
+
+persist_subject_season_wins_params = dict(
+    filename=...,
+    filetype=...,
+)
+
+# %%
+# call the task
+
+
+persist_subject_season_wins = (
+    persist_df.handle_errors(task_instance_id="persist_subject_season_wins")
+    .partial(
+        root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        **persist_subject_season_wins_params,
+    )
+    .mapvalues(argnames=["df"], argvalues=determine_subject_season_win)
+)
+
+
+# %% [markdown]
+# ## Zip gdf and seasonal windows
+
+# %%
+# parameters
+
+zip_nsd_values_params = dict()
+
+# %%
+# call the task
+
+
+zip_nsd_values = (
+    zip_grouped_by_key.handle_errors(task_instance_id="zip_nsd_values")
+    .partial(
+        left=split_relocs_by_group,
+        right=persist_subject_season_wins,
+        **zip_nsd_values_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Generate seasonal nsd plot
+
+# %%
+# parameters
+
+generate_nsd_plot_params = dict(
+    widget_id=...,
+)
+
+# %%
+# call the task
+
+
+generate_nsd_plot = (
+    generate_seasonal_nsd_plot.handle_errors(task_instance_id="generate_nsd_plot")
+    .partial(**generate_nsd_plot_params)
+    .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_nsd_values)
+)
+
+
+# %% [markdown]
+# ## Persist seasonal nsd plots
+
+# %%
+# parameters
+
+persist_seasonal_nsd_plots_params = dict(
+    filename=...,
+    filename_suffix=...,
+)
+
+# %%
+# call the task
+
+
+persist_seasonal_nsd_plots = (
+    persist_text.handle_errors(task_instance_id="persist_seasonal_nsd_plots")
+    .partial(
+        root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        **persist_seasonal_nsd_plots_params,
+    )
+    .mapvalues(argnames=["text"], argvalues=generate_nsd_plot)
+)
+
+
+# %% [markdown]
+# ## zip gdf and seasonal windows for speed_plot
+
+# %%
+# parameters
+
+zip_speed_values_params = dict()
+
+# %%
+# call the task
+
+
+zip_speed_values = (
+    zip_grouped_by_key.handle_errors(task_instance_id="zip_speed_values")
+    .partial(
+        left=split_relocs_by_group,
+        right=persist_subject_season_wins,
+        **zip_speed_values_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Generate seasonal speed plot
+
+# %%
+# parameters
+
+generate_speed_plot_params = dict(
+    widget_id=...,
+)
+
+# %%
+# call the task
+
+
+generate_speed_plot = (
+    generate_seasonal_speed_plot.handle_errors(task_instance_id="generate_speed_plot")
+    .partial(**generate_speed_plot_params)
+    .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_speed_values)
+)
+
+
+# %% [markdown]
+# ## Persist seasonal speed plots
+
+# %%
+# parameters
+
+persist_seasonal_speed_plots_params = dict(
+    filename=...,
+    filename_suffix=...,
+)
+
+# %%
+# call the task
+
+
+persist_seasonal_speed_plots = (
+    persist_text.handle_errors(task_instance_id="persist_seasonal_speed_plots")
+    .partial(
+        root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        **persist_seasonal_speed_plots_params,
+    )
+    .mapvalues(argnames=["text"], argvalues=generate_speed_plot)
+)
+
+
+# %% [markdown]
+# ## Zip gdf for mcp asymptote plot
+
+# %%
+# parameters
+
+zip_mcp_asymp_values_params = dict()
+
+# %%
+# call the task
+
+
+zip_mcp_asymp_values = (
+    zip_grouped_by_key.handle_errors(task_instance_id="zip_mcp_asymp_values")
+    .partial(
+        left=split_relocs_by_group,
+        right=persist_subject_season_wins,
+        **zip_mcp_asymp_values_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Generate mcp asymptote plot
+
+# %%
+# parameters
+
+generate_mcp_asymp_plot_params = dict(
+    widget_id=...,
+)
+
+# %%
+# call the task
+
+
+generate_mcp_asymp_plot = (
+    generate_seasonal_mcp_asymptote_plot.handle_errors(
+        task_instance_id="generate_mcp_asymp_plot"
+    )
+    .partial(**generate_mcp_asymp_plot_params)
+    .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_mcp_asymp_values)
+)
+
+
+# %% [markdown]
+# ## Persist mcp asymptote plots
+
+# %%
+# parameters
+
+persist_mcp_asymp_plots_params = dict(
+    filename=...,
+    filename_suffix=...,
+)
+
+# %%
+# call the task
+
+
+persist_mcp_asymp_plots = (
+    persist_text.handle_errors(task_instance_id="persist_mcp_asymp_plots")
+    .partial(
+        root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        **persist_mcp_asymp_plots_params,
+    )
+    .mapvalues(argnames=["text"], argvalues=generate_mcp_asymp_plot)
 )

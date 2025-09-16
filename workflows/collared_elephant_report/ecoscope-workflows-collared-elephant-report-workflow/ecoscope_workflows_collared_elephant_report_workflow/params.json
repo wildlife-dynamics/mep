@@ -521,6 +521,57 @@
       "type": "object",
       "title": "Download subject info and persist"
     },
+    "get_events_data": {
+      "additionalProperties": false,
+      "properties": {
+        "event_types": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Event Types",
+          "type": "array",
+          "description": "Specify the event type(s) to analyze (optional). Leave this section empty to analyze all event types. Only V1 Event Types can be analyzed at this time."
+        },
+        "include_null_geometry": {
+          "default": true,
+          "title": "Include Events Without a Geometry (point or polygon)",
+          "type": "boolean"
+        },
+        "include_updates": {
+          "default": false,
+          "title": "Include Updates",
+          "type": "boolean",
+          "description": "Whether or not to include event updates",
+          "ecoscope:advanced": true
+        },
+        "include_related_events": {
+          "default": false,
+          "title": "Include Related Events",
+          "type": "boolean",
+          "description": "Whether or not to include related events",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [
+        "event_types"
+      ],
+      "type": "object",
+      "title": "Retrieve events from ER"
+    },
+    "view_events_df": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "title": "view events df"
+    },
     "subject_observations": {
       "additionalProperties": false,
       "properties": {
@@ -612,6 +663,19 @@
       "type": "object",
       "title": "Sort trajectories by speed bins"
     },
+    "zoom_traj_view": {
+      "additionalProperties": false,
+      "properties": {
+        "zoom_value": {
+          "default": 14,
+          "title": "Zoom Value",
+          "type": "number"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Zoom speed trajectories by view state"
+    },
     "generate_etd": {
       "additionalProperties": false,
       "properties": {
@@ -648,6 +712,51 @@
       "required": [],
       "type": "object",
       "title": "Generate hr etd"
+    },
+    "zoom_hr_view": {
+      "additionalProperties": false,
+      "properties": {
+        "zoom_value": {
+          "default": 14,
+          "title": "Zoom Value",
+          "type": "number"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Zoom hr movement by view state"
+    },
+    "zoom_season_view": {
+      "additionalProperties": false,
+      "properties": {
+        "zoom_value": {
+          "default": 14,
+          "title": "Zoom Value",
+          "type": "number"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Zoom seasons by view state"
+    },
+    "persist_subject_season_wins": {
+      "additionalProperties": false,
+      "properties": {
+        "filetype": {
+          "default": "csv",
+          "enum": [
+            "csv",
+            "gpkg",
+            "geoparquet"
+          ],
+          "title": "Filetype",
+          "type": "string",
+          "description": "The output format"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Persist seasonal windows as csv"
     }
   },
   "$defs": {
@@ -869,6 +978,14 @@
         "raise_on_empty"
       ]
     },
+    "get_events_data": {
+      "ui:order": [
+        "event_types",
+        "include_null_geometry",
+        "include_updates",
+        "include_related_events"
+      ]
+    },
     "generate_seasonal_etd": {
       "ui:order": [
         "auto_scale_or_custom_cell_size",
@@ -896,11 +1013,17 @@
       "create_styled_ldx_layers",
       "subject_df",
       "download_subject_info",
+      "get_events_data",
+      "view_events_df",
       "subject_observations",
       "convert_to_trajectories",
       "generate_seasonal_etd",
       "sort_trajs_by_speed",
-      "generate_etd"
+      "zoom_traj_view",
+      "generate_etd",
+      "zoom_hr_view",
+      "zoom_season_view",
+      "persist_subject_season_wins"
     ]
   },
   "additionalProperties": false

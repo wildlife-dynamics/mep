@@ -194,36 +194,40 @@ def create_map_layers(file_dict: Dict[str, AnyGeoDataFrame], style_config: MapSt
     print(f"Successfully created {len(layers)} map layers")
     return layers
 
+def _zoom_from_bbox(minx, miny, maxx, maxy, map_width_px=800, map_height_px=600) -> float:
+    """
+    Calculate zoom level to fit bounding box in a given map size.
+    This approach considers both dimensions for optimal fitting.
 
-def _zoom_from_bbox(
-    minx,
-    miny,
-    maxx,
-    maxy,
-    viewport_width_px=1000,
-    viewport_height_px=1000,
-    padding_frac=0.10,
-    min_zoom=0.0,
-    max_zoom=20.0,
-    tile_size=256.0,
-):
-    padding_frac = max(0.0, min(0.3, float(padding_frac)))
+    Args:
+        minx, miny, maxx, maxy (float): bounding box coordinates, must be in EPSG:4326
+        map_width_px, map_height_px (int): target map dimensions in pixels
 
-    usable_width = max(1, int(viewport_width_px * (1.0 - 2.0 * padding_frac)))
-    usable_height = max(1, int(viewport_height_px * (1.0 - 2.0 * padding_frac)))
+    Returns:
+        float: zoom level that fits the bbox in the map
+    """
+    width_deg = abs(maxx - minx)
+    height_deg = abs(maxy - miny)
+    center_lat = (miny + maxy) / 2
 
-    lat_span = max(1e-12, maxy - miny)
-    lon_span = max(1e-12, maxx - minx)
+    # Convert to km
+    height_km = height_deg * 111.0
+    width_km = width_deg * 111.0 * abs(math.cos(math.radians(center_lat)))
 
-    zoom_for_width = math.log2(usable_width * 360.0 / (lon_span * tile_size))
-    zoom_for_height = math.log2(usable_height * 180.0 / (lat_span * tile_size))
-    zoom_level = min(zoom_for_width, zoom_for_height)
+    world_width_km = 40075
+    world_height_km = 40075
 
-    return round(max(min_zoom, min(max_zoom, zoom_level)), 2)
+    zoom_for_width = math.log2(world_width_km * map_width_px / (512 * width_km))
+    zoom_for_height = math.log2(world_height_km * map_height_px / (512 * height_km))
 
+    zoom = min(zoom_for_width, zoom_for_height)
+    zoom = round(max(0, min(20, zoom)), 2)
+    return zoom
 
 @task
-def create_view_state_from_gdf(gdf: AnyGeoDataFrame, pitch: int = 0, bearing: int = 0) -> ViewState:
+def create_view_state_from_gdf(
+    gdf: AnyGeoDataFrame, pitch: int = 0, bearing: int = 0, zoom_value: float = 14
+) -> ViewState:
     if gdf.empty:
         raise ValueError("GeoDataFrame is empty. Cannot compute ViewState.")
 
@@ -235,20 +239,8 @@ def create_view_state_from_gdf(gdf: AnyGeoDataFrame, pitch: int = 0, bearing: in
     center_lon = (minx + maxx) / 2.0
     center_lat = (miny + maxy) / 2.0
 
-    zoom = _zoom_from_bbox(
-        minx,
-        miny,
-        maxx,
-        maxy,
-        viewport_width_px=1000,  # tweak if your map container differs
-        viewport_height_px=700,
-        padding_frac=0.12,  # increase to zoom out slightly; decrease to zoom in
-        tile_size=512,
-        min_zoom=2.0,
-        max_zoom=20.0,
-    )
-
-    print(f"View State zoom: {zoom}")
+    zoom = _zoom_from_bbox(minx, miny, maxx, maxy)
+    # zoom_value=zoom_value)
     return ViewState(longitude=center_lon, latitude=center_lat, zoom=zoom, pitch=pitch, bearing=bearing)
 
 

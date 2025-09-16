@@ -5,14 +5,18 @@ import pandas as pd
 import geopandas as gpd
 from pathlib import Path
 from datetime import datetime
+from plotly.graph_objs import Figure
+from ecoscope.plotting.plot import nsd
+from ecoscope.trajectory import Trajectory
+from ecoscope.relocations import Relocations
 from pydantic.json_schema import SkipJsonSchema
 from pydantic import Field, BaseModel, ConfigDict
 from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_ext_ecoscope.connections import EarthRangerClient
+from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import ExportArgs
 from typing import Sequence, Tuple, Union, Annotated, cast, Optional, Dict, List, Literal
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AdvancedField, AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.tasks.analysis import calculate_elliptical_time_density
-
 
 class AutoScaleGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Auto-scale"})
@@ -24,7 +28,6 @@ class AutoScaleGridCellSize(BaseModel):
             description="Define the resolution of the raster grid (in meters per pixel).",
         ),
     ] = "Auto-scale"
-
 
 class CustomGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Customize"})
@@ -46,7 +49,6 @@ class CustomGridCellSize(BaseModel):
             json_schema_extra={"exclusiveMinimum": 0, "exclusiveMaximum": 10000},
         ),
     ] = 5000
-
 
 @task
 def get_area_bounds(
@@ -196,14 +198,12 @@ def download_profile_photo(
 def safe_strip(x) -> str:
     return "" if x is None else str(x).strip()
 
-
 def truncate_at_sentence(text: str, maxlen: int) -> str:
     if len(text) <= maxlen:
         return text
     cut = text[:maxlen]
     dot = cut.rfind(".")
     return (cut[: dot + 1] if dot >= 40 else cut.rstrip()) + ("..." if dot < 40 else "")
-
 
 def format_date(date_str: str) -> str:
     s = safe_strip(date_str)
@@ -568,3 +568,158 @@ def create_seasonal_labels(traj: AnyGeoDataFrame, total_percentiles: AnyDataFram
 
         traceback.print_exc()
         return None
+
+def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
+    """
+    Add shaded seasonal rectangles and labels to a Plotly time series figure.
+
+    Args:
+        fig (Figure): A Plotly figure object (typically from NSD plotting).
+        season_df (AnyDataFrame): DataFrame with columns ['start', 'end', 'season'].
+
+    Returns:
+        Figure: The updated Plotly figure with season annotations.
+    """
+
+    # Convert to subplot if not already
+    if not hasattr(fig, "_grid_ref"):  # Avoid re-wrapping
+        fig = make_subplots(figure=fig, specs=[[{"secondary_y": True}]])
+
+    for _, row in dataframe.iterrows():
+        try:
+            start_dt = pd.to_datetime(row["start"])
+            end_dt = pd.to_datetime(row["end"])
+            if end_dt <= start_dt:
+                continue  # Skip invalid intervals
+        except Exception:
+            continue  # Skip malformed datetime rows
+
+        season_type = row.get("season", "").strip().lower()
+
+        # Season-based fill color
+        fillcolor = {"wet": "rgba(0,0,255,0.4)", "dry": "rgba(0,0,255,0.1)"}.get(
+            season_type, "rgba(0,0,0,0.1)"
+        )  
+
+        fig.add_shape(
+            type="rect",
+            x0=start_dt,
+            x1=end_dt,
+            y0=0,
+            y1=1,
+            yref="paper",
+            fillcolor=fillcolor,
+            line_width=0,
+            layer="below",
+        )
+
+        midpoint = start_dt + (end_dt - start_dt) / 2
+        fig.add_annotation(
+            x=midpoint,
+            y=1.02,
+            text=row.get("season", "Season").capitalize(),
+            showarrow=False,
+            xanchor="center",
+            yanchor="bottom",
+            font=dict(size=12),
+        )
+
+    return fig
+
+def _load_seasons_df(seasons_df: Union[str, Path, AnyDataFrame]) -> AnyDataFrame:
+    if seasons_df is None:
+        raise ValueError("Seasonal windows input is None.")
+    p = Path(seasons_df)
+    if not p.exists():
+        raise FileNotFoundError(f"Seasonal windows file not found: {p}")
+    if p.suffix.lower() in {".csv"}:
+        return pd.read_csv(p)
+    elif p.suffix.lower() in {".parquet"}:
+        return pd.read_parquet(p)
+    else:
+        return pd.read_csv(p)
+
+def _validate_seasons_df(df: AnyDataFrame) -> None:
+    if df.empty:
+        raise ValueError("Seasonal windows DataFrame is empty.")
+
+@task 
+def generate_seasonal_nsd_plot(
+    gdf: AnyGeoDataFrame,
+    seasons_df: Union[str, Path, AnyDataFrame],
+    widget_id: Annotated[
+        str | None,
+        Field(
+            description=(
+                "The id of the dashboard widget that this tile layer belongs to. "
+                "If set this MUST match the widget title as defined downstream in create_widget tasks"
+            ),
+            exclude=True,
+        ),
+    ] = None,
+) -> Annotated[str, Field()]:
+    if gdf is None or getattr(gdf, "empty", True):
+        raise ValueError("Input GeoDataFrame is empty.")
+
+    seasons_df = _load_seasons_df(seasons_df)
+    _validate_seasons_df(seasons_df)
+
+    gdf = Relocations.from_gdf(gdf)
+    figure = nsd(gdf)
+    figure = add_seasons_square(figure, seasons_df)
+    return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
+
+
+@task 
+def generate_seasonal_speed_plot(
+    gdf : AnyGeoDataFrame,
+    seasons_df: Union[str, Path, AnyDataFrame],
+    widget_id: Annotated[
+        str | None,
+        Field(
+            description=(
+                "The id of the dashboard widget that this tile layer belongs to. "
+                "If set this MUST match the widget title as defined downstream in create_widget tasks"
+            ),
+            exclude=True,
+        ),
+    ] = None,
+) -> Annotated[str, Field()]:
+    if gdf is None or getattr(gdf, "empty", True):
+        raise ValueError("Input GeoDataFrame is empty.")
+
+    seasons_df = _load_seasons_df(seasons_df)
+    _validate_seasons_df(seasons_df)
+
+    gdf = Relocations.from_gdf(gdf)
+    trajs = Trajectory.from_relocations(gdf)
+    figure = ecoscope.plotting.speed(trajs)
+    figure = add_seasons_square(figure, seasons_df)
+    return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
+
+@task
+def generate_seasonal_mcp_asymptote_plot(
+    gdf: AnyGeoDataFrame,   
+    seasons_df: Union[str, Path, AnyDataFrame],
+    widget_id: Annotated[
+        str | None,
+        Field(
+            description=(
+                "The id of the dashboard widget that this tile layer belongs to. "
+                "If set this MUST match the widget title as defined downstream in create_widget tasks"
+            ),
+            exclude=True,
+        ),
+    ] = None,
+)-> Annotated[str, Field()]:
+
+    if gdf is None or getattr(gdf, "empty", True):
+        raise ValueError("Input GeoDataFrame is empty.")
+
+    seasons_df = _load_seasons_df(seasons_df)
+    _validate_seasons_df(seasons_df)
+
+    gdf = Relocations.from_gdf(gdf)
+    figure = ecoscope.plotting.mcp(gdf)
+    figure = add_seasons_square(figure, seasons_df)
+    return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
