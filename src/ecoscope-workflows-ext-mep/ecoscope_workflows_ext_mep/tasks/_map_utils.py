@@ -194,6 +194,7 @@ def create_map_layers(file_dict: Dict[str, AnyGeoDataFrame], style_config: MapSt
     print(f"Successfully created {len(layers)} map layers")
     return layers
 
+
 def _zoom_from_bbox(minx, miny, maxx, maxy, map_width_px=800, map_height_px=600) -> float:
     """
     Calculate zoom level to fit bounding box in a given map size.
@@ -223,6 +224,7 @@ def _zoom_from_bbox(minx, miny, maxx, maxy, map_width_px=800, map_height_px=600)
     zoom = min(zoom_for_width, zoom_for_height)
     zoom = round(max(0, min(20, zoom)), 2)
     return zoom
+
 
 @task
 def create_view_state_from_gdf(

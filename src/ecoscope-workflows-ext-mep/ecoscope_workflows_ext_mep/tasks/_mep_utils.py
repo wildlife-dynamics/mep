@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from plotly.graph_objs import Figure
 from ecoscope.plotting.plot import nsd
+from plotly.subplots import make_subplots
 from ecoscope.trajectory import Trajectory
 from ecoscope.relocations import Relocations
 from pydantic.json_schema import SkipJsonSchema
@@ -18,6 +19,7 @@ from typing import Sequence, Tuple, Union, Annotated, cast, Optional, Dict, List
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AdvancedField, AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.tasks.analysis import calculate_elliptical_time_density
 
+
 class AutoScaleGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Auto-scale"})
     auto_scale_or_custom: Annotated[
@@ -28,6 +30,7 @@ class AutoScaleGridCellSize(BaseModel):
             description="Define the resolution of the raster grid (in meters per pixel).",
         ),
     ] = "Auto-scale"
+
 
 class CustomGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Customize"})
@@ -49,6 +52,7 @@ class CustomGridCellSize(BaseModel):
             json_schema_extra={"exclusiveMinimum": 0, "exclusiveMaximum": 10000},
         ),
     ] = 5000
+
 
 @task
 def get_area_bounds(
@@ -198,12 +202,14 @@ def download_profile_photo(
 def safe_strip(x) -> str:
     return "" if x is None else str(x).strip()
 
+
 def truncate_at_sentence(text: str, maxlen: int) -> str:
     if len(text) <= maxlen:
         return text
     cut = text[:maxlen]
     dot = cut.rfind(".")
     return (cut[: dot + 1] if dot >= 40 else cut.rstrip()) + ("..." if dot < 40 else "")
+
 
 def format_date(date_str: str) -> str:
     s = safe_strip(date_str)
@@ -569,6 +575,7 @@ def create_seasonal_labels(traj: AnyGeoDataFrame, total_percentiles: AnyDataFram
         traceback.print_exc()
         return None
 
+
 def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
     """
     Add shaded seasonal rectangles and labels to a Plotly time series figure.
@@ -597,9 +604,7 @@ def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
         season_type = row.get("season", "").strip().lower()
 
         # Season-based fill color
-        fillcolor = {"wet": "rgba(0,0,255,0.4)", "dry": "rgba(0,0,255,0.1)"}.get(
-            season_type, "rgba(0,0,0,0.1)"
-        )  
+        fillcolor = {"wet": "rgba(0,0,255,0.4)", "dry": "rgba(0,0,255,0.1)"}.get(season_type, "rgba(0,0,0,0.1)")
 
         fig.add_shape(
             type="rect",
@@ -626,6 +631,7 @@ def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
 
     return fig
 
+
 def _load_seasons_df(seasons_df: Union[str, Path, AnyDataFrame]) -> AnyDataFrame:
     if seasons_df is None:
         raise ValueError("Seasonal windows input is None.")
@@ -639,11 +645,13 @@ def _load_seasons_df(seasons_df: Union[str, Path, AnyDataFrame]) -> AnyDataFrame
     else:
         return pd.read_csv(p)
 
+
 def _validate_seasons_df(df: AnyDataFrame) -> None:
     if df.empty:
         raise ValueError("Seasonal windows DataFrame is empty.")
 
-@task 
+
+@task
 def generate_seasonal_nsd_plot(
     gdf: AnyGeoDataFrame,
     seasons_df: Union[str, Path, AnyDataFrame],
@@ -670,9 +678,9 @@ def generate_seasonal_nsd_plot(
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
 
-@task 
+@task
 def generate_seasonal_speed_plot(
-    gdf : AnyGeoDataFrame,
+    gdf: AnyGeoDataFrame,
     seasons_df: Union[str, Path, AnyDataFrame],
     widget_id: Annotated[
         str | None,
@@ -697,9 +705,10 @@ def generate_seasonal_speed_plot(
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
+
 @task
 def generate_seasonal_mcp_asymptote_plot(
-    gdf: AnyGeoDataFrame,   
+    gdf: AnyGeoDataFrame,
     seasons_df: Union[str, Path, AnyDataFrame],
     widget_id: Annotated[
         str | None,
@@ -711,8 +720,7 @@ def generate_seasonal_mcp_asymptote_plot(
             exclude=True,
         ),
     ] = None,
-)-> Annotated[str, Field()]:
-
+) -> Annotated[str, Field()]:
     if gdf is None or getattr(gdf, "empty", True):
         raise ValueError("Input GeoDataFrame is empty.")
 
