@@ -25,8 +25,12 @@ requirements:
     - ecoscope-workflows-core
     - ecoscope-workflows-ext-mep
     - ecoscope-workflows-ext-ecoscope
+    - ecoscope-workflows-ext-custom
     - shapely
     - ecoscope
+    - docxtpl # for word document template generation
+    - playwright # html to image conversion
+    - PyPDF2
 about:
   license: BSD-3-Clause
 

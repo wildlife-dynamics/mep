@@ -4,6 +4,7 @@
 name = "ecoscope-workflows-collared-elephant-report-workflow"
 channels = [
     "file:///tmp/ecoscope-workflows-custom/release/artifacts/",
+    "https://repo.prefix.dev/ecoscope-workflows-custom/",
     "https://repo.prefix.dev/ecoscope-workflows/",
     "conda-forge",
     "microsoft",
@@ -21,6 +22,10 @@ linux = "4.4.0"
 [dependencies.ecoscope-workflows-core]
 version = "0.7.8.*"
 channel = "https://repo.prefix.dev/ecoscope-workflows/"
+
+[dependencies.ecoscope-workflows-ext-custom]
+version = "0.0.3.*"
+channel = "https://repo.prefix.dev/ecoscope-workflows-custom/"
 
 [dependencies.ecoscope-workflows-ext-ecoscope]
 version = "0.7.8.*"

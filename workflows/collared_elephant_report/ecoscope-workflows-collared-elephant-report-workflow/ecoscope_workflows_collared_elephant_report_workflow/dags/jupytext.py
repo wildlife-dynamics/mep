@@ -19,6 +19,7 @@ from ecoscope_workflows_core.tasks.groupby import set_groupers
 from ecoscope_workflows_core.tasks.filter import set_time_range
 from ecoscope_workflows_ext_mep.tasks import create_directory
 from ecoscope_workflows_ext_mep.tasks import download_land_dx
+from ecoscope_workflows_ext_mep.tasks import download_file_and_persist
 from ecoscope_workflows_ext_mep.tasks import load_landdx_aoi
 from ecoscope_workflows_ext_mep.tasks import split_gdf_by_column
 from ecoscope_workflows_ext_mep.tasks import annotate_gdf_dict_with_geometry_type
@@ -26,29 +27,24 @@ from ecoscope_workflows_ext_mep.tasks import create_map_layers_from_annotated_di
 from ecoscope_workflows_ext_mep.tasks import get_subjects_info
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import normalize_column
 from ecoscope_workflows_core.tasks.transformation import map_columns
-from ecoscope_workflows_ext_mep.tasks import view_df
+from ecoscope_workflows_ext_ecoscope.tasks.io import get_subjectgroup_observations
+from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import process_relocations
+from ecoscope_workflows_ext_mep.tasks import compute_maturity
 from ecoscope_workflows_core.tasks.groupby import split_groups
 from ecoscope_workflows_ext_mep.tasks import download_profile_photo
 from ecoscope_workflows_ext_mep.tasks import persist_subject_info
 from ecoscope_workflows_ext_ecoscope.tasks.io import get_events
-from ecoscope_workflows_ext_ecoscope.tasks.io import get_subjectgroup_observations
-from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import process_relocations
+from ecoscope_workflows_core.tasks.skip import any_is_empty_df
+from ecoscope_workflows_core.tasks.skip import any_dependency_skipped
 from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
     relocations_to_trajectory,
 )
 from ecoscope_workflows_core.tasks.transformation import add_temporal_index
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import apply_classification
-from ecoscope_workflows_ext_ecoscope.tasks.analysis import (
-    calculate_elliptical_time_density,
-)
-from ecoscope_workflows_ext_ecoscope.tasks.io import determine_season_windows
-from ecoscope_workflows_ext_mep.tasks import create_seasonal_labels
 from ecoscope_workflows_core.tasks.transformation import sort_values
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import apply_color_map
 from ecoscope_workflows_core.tasks.transformation import map_values_with_unit
 from ecoscope_workflows_ext_ecoscope.tasks.results import create_polyline_layer
-from ecoscope_workflows_core.tasks.skip import any_is_empty_df
-from ecoscope_workflows_core.tasks.skip import any_dependency_skipped
 from ecoscope_workflows_ext_mep.tasks import create_view_state_from_gdf
 from ecoscope_workflows_ext_mep.tasks import combine_map_layers
 from ecoscope_workflows_ext_mep.tasks import zip_grouped_by_key
@@ -57,13 +53,26 @@ from ecoscope_workflows_core.tasks.io import persist_text
 from ecoscope_workflows_core.tasks.results import create_map_widget_single_view
 from ecoscope_workflows_core.tasks.skip import never
 from ecoscope_workflows_core.tasks.results import merge_widget_views
-from ecoscope_workflows_ext_mep.tasks import calculate_etd_by_groups
+from ecoscope_workflows_ext_ecoscope.tasks.analysis import (
+    calculate_elliptical_time_density,
+)
+from ecoscope_workflows_ext_ecoscope.tasks.io import determine_season_windows
+from ecoscope_workflows_ext_mep.tasks import create_seasonal_labels
 from ecoscope_workflows_ext_mep.tasks import generate_mcp_gdf
 from ecoscope_workflows_ext_ecoscope.tasks.results import create_polygon_layer
+from ecoscope_workflows_ext_mep.tasks import calculate_seasonal_home_range
+from ecoscope_workflows_ext_ecoscope.tasks.skip import all_geometry_are_none
 from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df
 from ecoscope_workflows_ext_mep.tasks import generate_seasonal_nsd_plot
 from ecoscope_workflows_ext_mep.tasks import generate_seasonal_speed_plot
+from ecoscope_workflows_ext_mep.tasks import generate_collared_seasonal_plot
 from ecoscope_workflows_ext_mep.tasks import generate_seasonal_mcp_asymptote_plot
+from ecoscope_workflows_ext_mep.tasks import get_subject_stats
+from ecoscope_workflows_ext_mep.tasks import build_template_region_lookup
+from ecoscope_workflows_ext_mep.tasks import compute_template_regions
+from ecoscope_workflows_ext_mep.tasks import compute_subject_occupancy
+from ecoscope_workflows_ext_custom.tasks import html_to_png
+from ecoscope_workflows_core.tasks.results import gather_dashboard
 
 # %% [markdown]
 # ## Set Workflow Details
@@ -236,6 +245,141 @@ retrieve_ldx_db = (
         path=create_output_dir,
         url="https://maraelephant.maps.arcgis.com/sharing/rest/content/items/6da0c9bdd43d4dd0ac59a4f3cd73dcab/data",
         **retrieve_ldx_db_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Download Logo
+
+# %%
+# parameters
+
+download_logo_params = dict(
+    url=...,
+    retries=...,
+)
+
+# %%
+# call the task
+
+
+download_logo = (
+    download_file_and_persist.handle_errors(task_instance_id="download_logo")
+    .partial(
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        overwrite_existing=False,
+        unzip=True,
+        **download_logo_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Download report cover page
+
+# %%
+# parameters
+
+download_cover_page_params = dict(
+    retries=...,
+    unzip=...,
+)
+
+# %%
+# call the task
+
+
+download_cover_page = (
+    download_file_and_persist.handle_errors(task_instance_id="download_cover_page")
+    .partial(
+        url="https://www.dropbox.com/scl/fi/my6cd3fhs8wtkv34sqb0l/cover_page.pdf?rlkey=45ejxhslkmpa05nhdv6ehxnod&dl=1",
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        overwrite_existing=False,
+        **download_cover_page_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Download template one
+
+# %%
+# parameters
+
+download_template_one_params = dict(
+    retries=...,
+    unzip=...,
+)
+
+# %%
+# call the task
+
+
+download_template_one = (
+    download_file_and_persist.handle_errors(task_instance_id="download_template_one")
+    .partial(
+        url="https://www.dropbox.com/scl/fi/m35nrobegmfrbzeavd42g/template_1.html?rlkey=xsnkvxpsjlvd6hyozjxp4die3&st=fiobix4t&dl=0",
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        overwrite_existing=False,
+        **download_template_one_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Download template two
+
+# %%
+# parameters
+
+download_template_two_params = dict(
+    retries=...,
+    unzip=...,
+)
+
+# %%
+# call the task
+
+
+download_template_two = (
+    download_file_and_persist.handle_errors(task_instance_id="download_template_two")
+    .partial(
+        url="https://www.dropbox.com/scl/fi/6skjcsspv9rf5jgsyedgt/template_2.html?rlkey=lk73uq9m506ve9qsmghkk57k2&st=6lbck9k3&dl=0",
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        overwrite_existing=False,
+        **download_template_two_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Download template three
+
+# %%
+# parameters
+
+download_template_three_params = dict(
+    retries=...,
+    unzip=...,
+)
+
+# %%
+# call the task
+
+
+download_template_three = (
+    download_file_and_persist.handle_errors(task_instance_id="download_template_three")
+    .partial(
+        url="https://www.dropbox.com/scl/fi/44yv82b85lws8u657nuoy/template_3.html?rlkey=b0bdy09kb2oom13rvmd6r3gbc&st=550bazn1&dl=0",
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        overwrite_existing=False,
+        **download_template_three_params,
     )
     .call()
 )
@@ -417,241 +561,19 @@ rename_subject_cols = (
             "id": "groupby_col",
             "name": "subject_name",
             "hex": "hex_color",
+            "additional__rgb": "rgb",
+            "additional__Bio": "subject_bio",
+            "additional__sex": "subject_sex",
+            "additional__DOB": "date_of_birth",
+            "additional__notes": "notes",
+            "additional__status": "status",
+            "additional__region": "region",
+            "additional__country": "country",
+            "additional__id_photo": "photo",
+            "additional__distribution": "distribution",
         },
         df=normalize_subject_info,
         **rename_subject_cols_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## view subject df
-
-# %%
-# parameters
-
-view_subj_df_params = dict()
-
-# %%
-# call the task
-
-
-view_subj_df = (
-    view_df.handle_errors(task_instance_id="view_subj_df")
-    .partial(name="Subject DataFrame", gdf=rename_subject_cols, **view_subj_df_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## split subjects df by group
-
-# %%
-# parameters
-
-split_subject_by_group_params = dict()
-
-# %%
-# call the task
-
-
-split_subject_by_group = (
-    split_groups.handle_errors(task_instance_id="split_subject_by_group")
-    .partial(
-        df=rename_subject_cols,
-        groupers=configure_grouping_strategy,
-        **split_subject_by_group_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## Download subject profile photo
-
-# %%
-# parameters
-
-download_profile_pic_params = dict()
-
-# %%
-# call the task
-
-
-download_profile_pic = (
-    download_profile_photo.handle_errors(task_instance_id="download_profile_pic")
-    .partial(
-        image_type=".png",
-        column="additional__id_photo",
-        overwrite_existing=True,
-        output_path=create_output_dir,
-        **download_profile_pic_params,
-    )
-    .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
-)
-
-
-# %% [markdown]
-# ## Download subject info and persist
-
-# %%
-# parameters
-
-download_subject_info_params = dict(
-    return_data=...,
-)
-
-# %%
-# call the task
-
-
-download_subject_info = (
-    persist_subject_info.handle_errors(task_instance_id="download_subject_info")
-    .partial(maxlen=1000, output_path=create_output_dir, **download_subject_info_params)
-    .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
-)
-
-
-# %% [markdown]
-# ## Retrieve events from ER
-
-# %%
-# parameters
-
-get_events_data_params = dict(
-    event_types=...,
-    include_null_geometry=...,
-    include_updates=...,
-    include_related_events=...,
-)
-
-# %%
-# call the task
-
-
-get_events_data = (
-    get_events.handle_errors(task_instance_id="get_events_data")
-    .partial(
-        client=er_client,
-        time_range=define_time_range,
-        include_details=True,
-        raise_on_empty=True,
-        event_columns=[
-            "id",
-            "time",
-            "event_type",
-            "event_category",
-            "reported_by",
-            "serial_number",
-            "geometry",
-            "event_details",
-        ],
-        **get_events_data_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## Normalize event details
-
-# %%
-# parameters
-
-normalize_event_details_params = dict()
-
-# %%
-# call the task
-
-
-normalize_event_details = (
-    normalize_column.handle_errors(task_instance_id="normalize_event_details")
-    .partial(
-        column="event_details", df=get_events_data, **normalize_event_details_params
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## view events df
-
-# %%
-# parameters
-
-view_events_df_params = dict(
-    name=...,
-)
-
-# %%
-# call the task
-
-
-view_events_df = (
-    view_df.handle_errors(task_instance_id="view_events_df")
-    .partial(gdf=normalize_event_details, **view_events_df_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## Rename event columns
-
-# %%
-# parameters
-
-rename_event_cols_params = dict()
-
-# %%
-# call the task
-
-
-rename_event_cols = (
-    map_columns.handle_errors(task_instance_id="rename_event_cols")
-    .partial(
-        drop_columns=[],
-        retain_columns=[],
-        rename_columns={
-            "id": "groupby_col",
-            "name": "subject_name",
-            "hex": "hex_color",
-            "event_details__pic": "pic",
-            "event_details__region": "region",
-            "event_details__source": "source",
-            "event_details__details": "details",
-            "event_details__subject": "groupby_col",
-            "event_details__source_id": "source_id",
-            "event_details__subject_id": "subject_name",
-            "event_details__collaring_type": "collaring_type",
-            "event_details__collaring_reason": "collaring_reason",
-            "event_details__collar_checked_by": "collar_checked_by",
-        },
-        df=normalize_event_details,
-        **rename_event_cols_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## split events by group
-
-# %%
-# parameters
-
-split_events_by_group_params = dict()
-
-# %%
-# call the task
-
-
-split_events_by_group = (
-    split_groups.handle_errors(task_instance_id="split_events_by_group")
-    .partial(
-        df=rename_event_cols,
-        groupers=configure_grouping_strategy,
-        **split_events_by_group_params,
     )
     .call()
 )
@@ -755,23 +677,226 @@ rename_reloc_cols = (
 
 
 # %% [markdown]
-# ## view reloc df
+# ## Compute subject maturity
 
 # %%
 # parameters
 
-view_reloc_df_params = dict()
+compute_subject_maturity_params = dict(
+    time_column=...,
+)
 
 # %%
 # call the task
 
 
-view_reloc_df = (
-    view_df.handle_errors(task_instance_id="view_reloc_df")
+compute_subject_maturity = (
+    compute_maturity.handle_errors(task_instance_id="compute_subject_maturity")
     .partial(
-        name="Subject Relocations DataFrame",
-        gdf=rename_reloc_cols,
-        **view_reloc_df_params,
+        subject_df=rename_subject_cols,
+        relocations_gdf=rename_reloc_cols,
+        months_duration=6,
+        **compute_subject_maturity_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## split subjects df by group
+
+# %%
+# parameters
+
+split_subject_by_group_params = dict()
+
+# %%
+# call the task
+
+
+split_subject_by_group = (
+    split_groups.handle_errors(task_instance_id="split_subject_by_group")
+    .partial(
+        df=compute_subject_maturity,
+        groupers=configure_grouping_strategy,
+        **split_subject_by_group_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Download subject profile photo
+
+# %%
+# parameters
+
+download_profile_pic_params = dict()
+
+# %%
+# call the task
+
+
+download_profile_pic = (
+    download_profile_photo.handle_errors(task_instance_id="download_profile_pic")
+    .partial(
+        image_type=".png",
+        column="photo",
+        overwrite_existing=True,
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        **download_profile_pic_params,
+    )
+    .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
+)
+
+
+# %% [markdown]
+# ## Download subject info and persist
+
+# %%
+# parameters
+
+download_subject_info_params = dict(
+    return_data=...,
+)
+
+# %%
+# call the task
+
+
+download_subject_info = (
+    persist_subject_info.handle_errors(task_instance_id="download_subject_info")
+    .partial(
+        maxlen=1000,
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        **download_subject_info_params,
+    )
+    .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
+)
+
+
+# %% [markdown]
+# ## Retrieve events from ER
+
+# %%
+# parameters
+
+get_events_data_params = dict(
+    event_types=...,
+    include_null_geometry=...,
+    include_updates=...,
+    include_related_events=...,
+)
+
+# %%
+# call the task
+
+
+get_events_data = (
+    get_events.handle_errors(task_instance_id="get_events_data")
+    .partial(
+        client=er_client,
+        time_range=define_time_range,
+        include_details=True,
+        raise_on_empty=True,
+        event_columns=[
+            "id",
+            "time",
+            "event_type",
+            "event_category",
+            "reported_by",
+            "serial_number",
+            "geometry",
+            "event_details",
+        ],
+        **get_events_data_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Normalize event details
+
+# %%
+# parameters
+
+normalize_event_details_params = dict()
+
+# %%
+# call the task
+
+
+normalize_event_details = (
+    normalize_column.handle_errors(task_instance_id="normalize_event_details")
+    .partial(
+        column="event_details", df=get_events_data, **normalize_event_details_params
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Rename event columns
+
+# %%
+# parameters
+
+rename_event_cols_params = dict()
+
+# %%
+# call the task
+
+
+rename_event_cols = (
+    map_columns.handle_errors(task_instance_id="rename_event_cols")
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        drop_columns=[],
+        retain_columns=[],
+        rename_columns={
+            "event_details__pic": "pic",
+            "event_details__region": "region",
+            "event_details__source": "source",
+            "event_details__details": "details",
+            "event_details__subject": "groupby_col",
+            "event_details__source_id": "source_id",
+            "event_details__subject_id": "subject_name",
+            "event_details__collaring_type": "collaring_type",
+            "event_details__collaring_reason": "collaring_reason",
+            "event_details__collar_checked_by": "collar_checked_by",
+        },
+        df=normalize_event_details,
+        **rename_event_cols_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## split events by group
+
+# %%
+# parameters
+
+split_events_by_group_params = dict()
+
+# %%
+# call the task
+
+
+split_events_by_group = (
+    split_groups.handle_errors(task_instance_id="split_events_by_group")
+    .partial(
+        df=rename_event_cols,
+        groupers=configure_grouping_strategy,
+        **split_events_by_group_params,
     )
     .call()
 )
@@ -876,38 +1001,6 @@ classify_trajectory_speed_bins = (
 
 
 # %% [markdown]
-# ## Generate seasonal home range etd
-
-# %%
-# parameters
-
-generate_seasonal_etd_params = dict(
-    auto_scale_or_custom_cell_size=...,
-    max_speed_factor=...,
-    expansion_factor=...,
-)
-
-# %%
-# call the task
-
-
-generate_seasonal_etd = (
-    calculate_elliptical_time_density.handle_errors(
-        task_instance_id="generate_seasonal_etd"
-    )
-    .partial(
-        crs="ESRI:53042",
-        percentiles=[50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 99.0],
-        nodata_value="nan",
-        band_count=1,
-        trajectory_gdf=classify_trajectory_speed_bins,
-        **generate_seasonal_etd_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
 # ## Rename trajectory columns
 
 # %%
@@ -938,101 +1031,6 @@ rename_trajectory_cols = (
 
 
 # %% [markdown]
-# ## View trajectory data
-
-# %%
-# parameters
-
-view_trajectory_data_params = dict()
-
-# %%
-# call the task
-
-
-view_trajectory_data = (
-    view_df.handle_errors(task_instance_id="view_trajectory_data")
-    .partial(
-        name="Subject Trajectory DataFrame",
-        gdf=rename_trajectory_cols,
-        **view_trajectory_data_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## Determine seasonal windows
-
-# %%
-# parameters
-
-determine_seasonal_windows_params = dict()
-
-# %%
-# call the task
-
-
-determine_seasonal_windows = (
-    determine_season_windows.handle_errors(
-        task_instance_id="determine_seasonal_windows"
-    )
-    .partial(
-        client=gee_client,
-        roi=generate_seasonal_etd,
-        time_range=define_time_range,
-        **determine_seasonal_windows_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## Generate seasonal column
-
-# %%
-# parameters
-
-add_season_labels_params = dict()
-
-# %%
-# call the task
-
-
-add_season_labels = (
-    create_seasonal_labels.handle_errors(task_instance_id="add_season_labels")
-    .partial(
-        traj=rename_trajectory_cols,
-        total_percentiles=determine_seasonal_windows,
-        **add_season_labels_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## View seasonal labels
-
-# %%
-# parameters
-
-view_seasonal_labels_params = dict()
-
-# %%
-# call the task
-
-
-view_seasonal_labels = (
-    view_df.handle_errors(task_instance_id="view_seasonal_labels")
-    .partial(
-        name="Subject Trajectory DataFrame with Seasonal Labels",
-        gdf=add_season_labels,
-        **view_seasonal_labels_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
 # ## Split trajectories by group
 
 # %%
@@ -1047,7 +1045,7 @@ split_trajs_by_group_params = dict()
 split_trajs_by_group = (
     split_groups.handle_errors(task_instance_id="split_trajs_by_group")
     .partial(
-        df=add_season_labels,
+        df=rename_trajectory_cols,
         groupers=configure_grouping_strategy,
         **split_trajs_by_group_params,
     )
@@ -1361,7 +1359,7 @@ merge_speed_ecomap_widgets = (
 
 
 # %% [markdown]
-# ## Generate hr etd
+# ## Generate home range ecomap
 
 # %%
 # parameters
@@ -1377,17 +1375,84 @@ generate_etd_params = dict(
 
 
 generate_etd = (
-    calculate_etd_by_groups.handle_errors(task_instance_id="generate_etd")
+    calculate_elliptical_time_density.handle_errors(task_instance_id="generate_etd")
     .partial(
         crs="ESRI:53042",
-        percentiles=[50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 99.0],
+        percentiles=[50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 99.9],
         nodata_value="nan",
         band_count=1,
-        include_groups=True,
-        groupby_cols=["season"],
         **generate_etd_params,
     )
     .mapvalues(argnames=["trajectory_gdf"], argvalues=split_trajs_by_group)
+)
+
+
+# %% [markdown]
+# ## Determine Seasonal Windows
+
+# %%
+# parameters
+
+determine_seasonal_windows_params = dict()
+
+# %%
+# call the task
+
+
+determine_seasonal_windows = (
+    determine_season_windows.handle_errors(
+        task_instance_id="determine_seasonal_windows"
+    )
+    .partial(
+        client=gee_client,
+        time_range=define_time_range,
+        **determine_seasonal_windows_params,
+    )
+    .mapvalues(argnames=["roi"], argvalues=generate_etd)
+)
+
+
+# %% [markdown]
+# ## Zip ETD and grouped trajs
+
+# %%
+# parameters
+
+zip_etd_and_grouped_trajs_params = dict()
+
+# %%
+# call the task
+
+
+zip_etd_and_grouped_trajs = (
+    zip_grouped_by_key.handle_errors(task_instance_id="zip_etd_and_grouped_trajs")
+    .partial(
+        left=determine_seasonal_windows,
+        right=split_trajs_by_group,
+        **zip_etd_and_grouped_trajs_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Generate seasonal labels
+
+# %%
+# parameters
+
+add_season_labels_params = dict()
+
+# %%
+# call the task
+
+
+add_season_labels = (
+    create_seasonal_labels.handle_errors(task_instance_id="add_season_labels")
+    .partial(**add_season_labels_params)
+    .mapvalues(
+        argnames=["total_percentiles", "traj"], argvalues=zip_etd_and_grouped_trajs
+    )
 )
 
 
@@ -1405,7 +1470,7 @@ calculate_mcp_params = dict()
 
 calculate_mcp = (
     generate_mcp_gdf.handle_errors(task_instance_id="calculate_mcp")
-    .partial(planar_crs="ESRI:102022", **calculate_mcp_params)
+    .partial(planar_crs="ESRI:53042", **calculate_mcp_params)
     .mapvalues(argnames=["gdf"], argvalues=split_trajs_by_group)
 )
 
@@ -1631,6 +1696,36 @@ merge_hr_ecomap_widgets = (
 
 
 # %% [markdown]
+# ## Calculate seasonal home range
+
+# %%
+# parameters
+
+seasonal_home_range_params = dict(
+    percentiles=...,
+    auto_scale_or_custom_cell_size=...,
+)
+
+# %%
+# call the task
+
+
+seasonal_home_range = (
+    calculate_seasonal_home_range.handle_errors(task_instance_id="seasonal_home_range")
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            all_geometry_are_none,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(groupby_cols=["subject_name", "season"], **seasonal_home_range_params)
+    .mapvalues(argnames=["gdf"], argvalues=add_season_labels)
+)
+
+
+# %% [markdown]
 # ## time density colormap
 
 # %%
@@ -1650,7 +1745,7 @@ season_colormap = (
         colormap=["#f57c00", "#4cf3f7"],
         **season_colormap_params,
     )
-    .mapvalues(argnames=["df"], argvalues=generate_etd)
+    .mapvalues(argnames=["df"], argvalues=seasonal_home_range)
 )
 
 
@@ -1862,7 +1957,7 @@ season_etd_ecomap_html_url = (
 
 
 # %% [markdown]
-# ## Create Map Widgets for Trajectories
+# ## Create Map Widgets for seasons
 
 # %%
 # parameters
@@ -1911,31 +2006,6 @@ season_grouped_map_widget = (
 
 
 # %% [markdown]
-# ## Determine seasonal windows for each subject
-
-# %%
-# parameters
-
-determine_subject_season_win_params = dict()
-
-# %%
-# call the task
-
-
-determine_subject_season_win = (
-    determine_season_windows.handle_errors(
-        task_instance_id="determine_subject_season_win"
-    )
-    .partial(
-        client=gee_client,
-        time_range=define_time_range,
-        **determine_subject_season_win_params,
-    )
-    .mapvalues(argnames=["roi"], argvalues=generate_etd)
-)
-
-
-# %% [markdown]
 # ## Persist seasonal windows as csv
 
 # %%
@@ -1956,7 +2026,7 @@ persist_subject_season_wins = (
         root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         **persist_subject_season_wins_params,
     )
-    .mapvalues(argnames=["df"], argvalues=determine_subject_season_win)
+    .mapvalues(argnames=["df"], argvalues=determine_seasonal_windows)
 )
 
 
@@ -2010,7 +2080,7 @@ generate_nsd_plot = (
 # %%
 # parameters
 
-persist_seasonal_nsd_plots_params = dict(
+persist_nsd_html_urls_params = dict(
     filename=...,
     filename_suffix=...,
 )
@@ -2019,13 +2089,61 @@ persist_seasonal_nsd_plots_params = dict(
 # call the task
 
 
-persist_seasonal_nsd_plots = (
-    persist_text.handle_errors(task_instance_id="persist_seasonal_nsd_plots")
+persist_nsd_html_urls = (
+    persist_text.handle_errors(task_instance_id="persist_nsd_html_urls")
     .partial(
         root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        **persist_seasonal_nsd_plots_params,
+        **persist_nsd_html_urls_params,
     )
     .mapvalues(argnames=["text"], argvalues=generate_nsd_plot)
+)
+
+
+# %% [markdown]
+# ## Create widget for nsd plot
+
+# %%
+# parameters
+
+nsd_plot_widgets_single_view_params = dict()
+
+# %%
+# call the task
+
+
+nsd_plot_widgets_single_view = (
+    create_map_widget_single_view.handle_errors(
+        task_instance_id="nsd_plot_widgets_single_view"
+    )
+    .skipif(
+        conditions=[
+            never,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        title="Net Square Displacement (NSD)", **nsd_plot_widgets_single_view_params
+    )
+    .map(argnames=["view", "data"], argvalues=persist_nsd_html_urls)
+)
+
+
+# %% [markdown]
+# ## Merge nsd plot widgets
+
+# %%
+# parameters
+
+grouped_nsd_plot_widget_params = dict()
+
+# %%
+# call the task
+
+
+grouped_nsd_plot_widget = (
+    merge_widget_views.handle_errors(task_instance_id="grouped_nsd_plot_widget")
+    .partial(widgets=nsd_plot_widgets_single_view, **grouped_nsd_plot_widget_params)
+    .call()
 )
 
 
@@ -2079,7 +2197,7 @@ generate_speed_plot = (
 # %%
 # parameters
 
-persist_seasonal_speed_plots_params = dict(
+persist_speed_html_urls_params = dict(
     filename=...,
     filename_suffix=...,
 )
@@ -2088,13 +2206,181 @@ persist_seasonal_speed_plots_params = dict(
 # call the task
 
 
-persist_seasonal_speed_plots = (
-    persist_text.handle_errors(task_instance_id="persist_seasonal_speed_plots")
+persist_speed_html_urls = (
+    persist_text.handle_errors(task_instance_id="persist_speed_html_urls")
     .partial(
         root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        **persist_seasonal_speed_plots_params,
+        **persist_speed_html_urls_params,
     )
     .mapvalues(argnames=["text"], argvalues=generate_speed_plot)
+)
+
+
+# %% [markdown]
+# ## Create widget for speed plot
+
+# %%
+# parameters
+
+speed_plot_widgets_single_view_params = dict()
+
+# %%
+# call the task
+
+
+speed_plot_widgets_single_view = (
+    create_map_widget_single_view.handle_errors(
+        task_instance_id="speed_plot_widgets_single_view"
+    )
+    .skipif(
+        conditions=[
+            never,
+        ],
+        unpack_depth=1,
+    )
+    .partial(title="Speed", **speed_plot_widgets_single_view_params)
+    .map(argnames=["view", "data"], argvalues=persist_speed_html_urls)
+)
+
+
+# %% [markdown]
+# ## Merge speed plot widgets
+
+# %%
+# parameters
+
+grouped_speed_plot_widget_params = dict()
+
+# %%
+# call the task
+
+
+grouped_speed_plot_widget = (
+    merge_widget_views.handle_errors(task_instance_id="grouped_speed_plot_widget")
+    .partial(widgets=speed_plot_widgets_single_view, **grouped_speed_plot_widget_params)
+    .call()
+)
+
+
+# %% [markdown]
+# ## Zip gdf for collared subject plot
+
+# %%
+# parameters
+
+zip_collared_subject_values_params = dict()
+
+# %%
+# call the task
+
+
+zip_collared_subject_values = (
+    zip_grouped_by_key.handle_errors(task_instance_id="zip_collared_subject_values")
+    .partial(
+        left=split_relocs_by_group,
+        right=persist_subject_season_wins,
+        **zip_collared_subject_values_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Generate collared subject plot
+
+# %%
+# parameters
+
+generate_colared_subject_plot_params = dict(
+    widget_id=...,
+)
+
+# %%
+# call the task
+
+
+generate_colared_subject_plot = (
+    generate_collared_seasonal_plot.handle_errors(
+        task_instance_id="generate_colared_subject_plot"
+    )
+    .partial(
+        events_gdf=rename_event_cols,
+        filter_col="subject_name",
+        **generate_colared_subject_plot_params,
+    )
+    .mapvalues(
+        argnames=["relocations_gdf", "seasons_df"],
+        argvalues=zip_collared_subject_values,
+    )
+)
+
+
+# %% [markdown]
+# ## Persist collared subject plots
+
+# %%
+# parameters
+
+persist_collared_subject_plots_params = dict(
+    filename=...,
+    filename_suffix=...,
+)
+
+# %%
+# call the task
+
+
+persist_collared_subject_plots = (
+    persist_text.handle_errors(task_instance_id="persist_collared_subject_plots")
+    .partial(
+        root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        **persist_collared_subject_plots_params,
+    )
+    .mapvalues(argnames=["text"], argvalues=generate_colared_subject_plot)
+)
+
+
+# %% [markdown]
+# ## Create widget for collared subject plot
+
+# %%
+# parameters
+
+collared_widget_view_params = dict()
+
+# %%
+# call the task
+
+
+collared_widget_view = (
+    create_map_widget_single_view.handle_errors(task_instance_id="collared_widget_view")
+    .skipif(
+        conditions=[
+            never,
+        ],
+        unpack_depth=1,
+    )
+    .partial(title="Collared Subject Plot", **collared_widget_view_params)
+    .map(argnames=["view", "data"], argvalues=persist_collared_subject_plots)
+)
+
+
+# %% [markdown]
+# ## Merge collared plot widgets
+
+# %%
+# parameters
+
+grouped_collared_widget_params = dict()
+
+# %%
+# call the task
+
+
+grouped_collared_widget = (
+    merge_widget_views.handle_errors(task_instance_id="grouped_collared_widget")
+    .partial(widgets=collared_widget_view, **grouped_collared_widget_params)
+    .call()
 )
 
 
@@ -2150,7 +2436,7 @@ generate_mcp_asymp_plot = (
 # %%
 # parameters
 
-persist_mcp_asymp_plots_params = dict(
+persist_mcp_html_urls_params = dict(
     filename=...,
     filename_suffix=...,
 )
@@ -2159,11 +2445,406 @@ persist_mcp_asymp_plots_params = dict(
 # call the task
 
 
-persist_mcp_asymp_plots = (
-    persist_text.handle_errors(task_instance_id="persist_mcp_asymp_plots")
+persist_mcp_html_urls = (
+    persist_text.handle_errors(task_instance_id="persist_mcp_html_urls")
     .partial(
         root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        **persist_mcp_asymp_plots_params,
+        **persist_mcp_html_urls_params,
     )
     .mapvalues(argnames=["text"], argvalues=generate_mcp_asymp_plot)
+)
+
+
+# %% [markdown]
+# ## Create widget for mcp plot
+
+# %%
+# parameters
+
+mcp_plot_widgets_single_view_params = dict()
+
+# %%
+# call the task
+
+
+mcp_plot_widgets_single_view = (
+    create_map_widget_single_view.handle_errors(
+        task_instance_id="mcp_plot_widgets_single_view"
+    )
+    .skipif(
+        conditions=[
+            never,
+        ],
+        unpack_depth=1,
+    )
+    .partial(title="MCP Asymptote", **mcp_plot_widgets_single_view_params)
+    .map(argnames=["view", "data"], argvalues=persist_mcp_html_urls)
+)
+
+
+# %% [markdown]
+# ## Merge mcp plot widgets
+
+# %%
+# parameters
+
+grouped_mcp_plot_widget_params = dict()
+
+# %%
+# call the task
+
+
+grouped_mcp_plot_widget = (
+    merge_widget_views.handle_errors(task_instance_id="grouped_mcp_plot_widget")
+    .partial(widgets=mcp_plot_widgets_single_view, **grouped_mcp_plot_widget_params)
+    .call()
+)
+
+
+# %% [markdown]
+# ## Zip traj gdf and etd gdf
+
+# %%
+# parameters
+
+zip_traj_etd_gdf_params = dict()
+
+# %%
+# call the task
+
+
+zip_traj_etd_gdf = (
+    zip_grouped_by_key.handle_errors(task_instance_id="zip_traj_etd_gdf")
+    .partial(left=generate_etd, right=split_trajs_by_group, **zip_traj_etd_gdf_params)
+    .call()
+)
+
+
+# %% [markdown]
+# ## Generate subject stats and persist
+
+# %%
+# parameters
+
+generate_subject_stats_params = dict()
+
+# %%
+# call the task
+
+
+generate_subject_stats = (
+    get_subject_stats.handle_errors(task_instance_id="generate_subject_stats")
+    .partial(
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        subject_df=compute_subject_maturity,
+        groupby_col="subject_name",
+        **generate_subject_stats_params,
+    )
+    .mapvalues(argnames=["etd_df", "traj_gdf"], argvalues=zip_traj_etd_gdf)
+)
+
+
+# %% [markdown]
+# ## Load Unfiltered Landdx
+
+# %%
+# parameters
+
+load_unfiltered_ldx_params = dict(
+    aoi=...,
+)
+
+# %%
+# call the task
+
+
+load_unfiltered_ldx = (
+    load_landdx_aoi.handle_errors(task_instance_id="load_unfiltered_ldx")
+    .partial(map_path=retrieve_ldx_db, **load_unfiltered_ldx_params)
+    .call()
+)
+
+
+# %% [markdown]
+# ## Zip etd gdf and subject df
+
+# %%
+# parameters
+
+zip_etd_subjects_params = dict()
+
+# %%
+# call the task
+
+
+zip_etd_subjects = (
+    zip_grouped_by_key.handle_errors(task_instance_id="zip_etd_subjects")
+    .partial(left=generate_etd, right=split_subject_by_group, **zip_etd_subjects_params)
+    .call()
+)
+
+
+# %% [markdown]
+# ## Build regional lookup from landDx db
+
+# %%
+# parameters
+
+build_region_lookup_params = dict(
+    categories=...,
+    static_ids=...,
+)
+
+# %%
+# call the task
+
+
+build_region_lookup = (
+    build_template_region_lookup.handle_errors(task_instance_id="build_region_lookup")
+    .partial(gdf=load_unfiltered_ldx, **build_region_lookup_params)
+    .call()
+)
+
+
+# %% [markdown]
+# ## Compute template regions
+
+# %%
+# parameters
+
+comp_template_regions_params = dict()
+
+# %%
+# call the task
+
+
+comp_template_regions = (
+    compute_template_regions.handle_errors(task_instance_id="comp_template_regions")
+    .partial(
+        geodataframe=load_unfiltered_ldx,
+        template_lookup=build_region_lookup,
+        crs="ESRI:53042",
+        **comp_template_regions_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Calculate subject occupancy
+
+# %%
+# parameters
+
+process_subject_occupancy_params = dict()
+
+# %%
+# call the task
+
+
+process_subject_occupancy = (
+    compute_subject_occupancy.handle_errors(
+        task_instance_id="process_subject_occupancy"
+    )
+    .partial(
+        crs="ESRI:53042",
+        regions_gdf=comp_template_regions,
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        **process_subject_occupancy_params,
+    )
+    .mapvalues(argnames=["etd_gdf", "subjects_df"], argvalues=zip_etd_subjects)
+)
+
+
+# %% [markdown]
+# ## Convert range ecomap html to png
+
+# %%
+# parameters
+
+convt_range_html_png_params = dict()
+
+# %%
+# call the task
+
+
+convt_range_html_png = (
+    html_to_png.handle_errors(task_instance_id="convt_range_html_png")
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={"wait_for_timeout": 100, "width": 765, "height": 525},
+        **convt_range_html_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_hr_ecomap_urls)
+)
+
+
+# %% [markdown]
+# ## Convert speedmap html to png
+
+# %%
+# parameters
+
+convt_speedmap_html_png_params = dict()
+
+# %%
+# call the task
+
+
+convt_speedmap_html_png = (
+    html_to_png.handle_errors(task_instance_id="convt_speedmap_html_png")
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={"wait_for_timeout": 100, "width": 765, "height": 525},
+        **convt_speedmap_html_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_speed_ecomap_urls)
+)
+
+
+# %% [markdown]
+# ## Convert seasons ecomap html to png
+
+# %%
+# parameters
+
+convt_seasons_html_png_params = dict()
+
+# %%
+# call the task
+
+
+convt_seasons_html_png = (
+    html_to_png.handle_errors(task_instance_id="convt_seasons_html_png")
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={"wait_for_timeout": 100, "width": 602, "height": 855},
+        **convt_seasons_html_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=season_etd_ecomap_html_url)
+)
+
+
+# %% [markdown]
+# ## Convert nsd plot html to png
+
+# %%
+# parameters
+
+convt_nsdp_html_png_params = dict()
+
+# %%
+# call the task
+
+
+convt_nsdp_html_png = (
+    html_to_png.handle_errors(task_instance_id="convt_nsdp_html_png")
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={"wait_for_timeout": 100, "width": 2238, "height": 450},
+        **convt_nsdp_html_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_nsd_html_urls)
+)
+
+
+# %% [markdown]
+# ## Convert mcp plot html to png
+
+# %%
+# parameters
+
+convt_mcp_html_png_params = dict()
+
+# %%
+# call the task
+
+
+convt_mcp_html_png = (
+    html_to_png.handle_errors(task_instance_id="convt_mcp_html_png")
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={"wait_for_timeout": 10, "width": 2238, "height": 450},
+        **convt_mcp_html_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_mcp_html_urls)
+)
+
+
+# %% [markdown]
+# ## Convert speed plot html to png
+
+# %%
+# parameters
+
+convt_speedp_html_png_params = dict()
+
+# %%
+# call the task
+
+
+convt_speedp_html_png = (
+    html_to_png.handle_errors(task_instance_id="convt_speedp_html_png")
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={"wait_for_timeout": 10, "width": 2238, "height": 450},
+        **convt_speedp_html_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_speed_html_urls)
+)
+
+
+# %% [markdown]
+# ## Convert collared events plot html to png
+
+# %%
+# parameters
+
+convt_colev_html_png_params = dict()
+
+# %%
+# call the task
+
+
+convt_colev_html_png = (
+    html_to_png.handle_errors(task_instance_id="convt_colev_html_png")
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={"wait_for_timeout": 10, "width": 2238, "height": 450},
+        **convt_colev_html_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_collared_subject_plots)
+)
+
+
+# %% [markdown]
+# ## Collared Elephant Report Dashboard
+
+# %%
+# parameters
+
+collared_report_template_params = dict()
+
+# %%
+# call the task
+
+
+collared_report_template = (
+    gather_dashboard.handle_errors(task_instance_id="collared_report_template")
+    .partial(
+        details=workflow_details,
+        widgets=[
+            merge_speed_ecomap_widgets,
+            merge_hr_ecomap_widgets,
+            season_grouped_map_widget,
+            grouped_nsd_plot_widget,
+            grouped_speed_plot_widget,
+            grouped_collared_widget,
+            grouped_mcp_plot_widget,
+        ],
+        time_range=define_time_range,
+        groupers=configure_grouping_strategy,
+        **collared_report_template_params,
+    )
+    .call()
 )

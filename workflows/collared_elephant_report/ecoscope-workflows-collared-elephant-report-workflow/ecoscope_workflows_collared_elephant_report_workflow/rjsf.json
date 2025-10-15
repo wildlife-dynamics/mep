@@ -333,20 +333,132 @@
       "type": "object",
       "title": "Retrieve and unpack landDX db"
     },
+    "download_logo": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string",
+          "description": "URL to download the file from"
+        },
+        "retries": {
+          "default": 3,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer",
+          "description": "Number of retries on failure"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object",
+      "title": "Download Logo"
+    },
+    "download_cover_page": {
+      "additionalProperties": false,
+      "properties": {
+        "retries": {
+          "default": 3,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer",
+          "description": "Number of retries on failure"
+        },
+        "unzip": {
+          "default": false,
+          "title": "Unzip",
+          "type": "boolean",
+          "description": "Whether to unzip the file if it's a zip archive"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Download report cover page"
+    },
+    "download_template_one": {
+      "additionalProperties": false,
+      "properties": {
+        "retries": {
+          "default": 3,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer",
+          "description": "Number of retries on failure"
+        },
+        "unzip": {
+          "default": false,
+          "title": "Unzip",
+          "type": "boolean",
+          "description": "Whether to unzip the file if it's a zip archive"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Download template one"
+    },
+    "download_template_two": {
+      "additionalProperties": false,
+      "properties": {
+        "retries": {
+          "default": 3,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer",
+          "description": "Number of retries on failure"
+        },
+        "unzip": {
+          "default": false,
+          "title": "Unzip",
+          "type": "boolean",
+          "description": "Whether to unzip the file if it's a zip archive"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Download template two"
+    },
+    "download_template_three": {
+      "additionalProperties": false,
+      "properties": {
+        "retries": {
+          "default": 3,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer",
+          "description": "Number of retries on failure"
+        },
+        "unzip": {
+          "default": false,
+          "title": "Unzip",
+          "type": "boolean",
+          "description": "Whether to unzip the file if it's a zip archive"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Download template three"
+    },
     "load_aoi": {
       "additionalProperties": false,
       "properties": {
         "aoi": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Aoi",
-          "type": "array"
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aoi"
         }
       },
-      "required": [
-        "aoi"
-      ],
+      "required": [],
       "type": "object",
       "title": "Load AOI from landDX"
     },
@@ -508,6 +620,34 @@
       "type": "object",
       "title": "Get subject dataframe"
     },
+    "subject_observations": {
+      "additionalProperties": false,
+      "properties": {
+        "subject_group_name": {
+          "title": "Subject Group Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject_group_name"
+      ],
+      "type": "object",
+      "title": "Get subject group observations from ER"
+    },
+    "compute_subject_maturity": {
+      "additionalProperties": false,
+      "properties": {
+        "time_column": {
+          "default": "fixtime",
+          "title": "Time Column",
+          "type": "string",
+          "description": "Name of the datetime column in the DataFrame."
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Compute subject maturity"
+    },
     "download_subject_info": {
       "additionalProperties": false,
       "properties": {
@@ -558,34 +698,6 @@
       "type": "object",
       "title": "Retrieve events from ER"
     },
-    "view_events_df": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "title": "Name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "type": "object",
-      "title": "view events df"
-    },
-    "subject_observations": {
-      "additionalProperties": false,
-      "properties": {
-        "subject_group_name": {
-          "title": "Subject Group Name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "subject_group_name"
-      ],
-      "type": "object",
-      "title": "Get subject group observations from ER"
-    },
     "convert_to_trajectories": {
       "additionalProperties": false,
       "properties": {
@@ -611,43 +723,6 @@
       "required": [],
       "type": "object",
       "title": "Convert relocations to trajectories"
-    },
-    "generate_seasonal_etd": {
-      "additionalProperties": false,
-      "properties": {
-        "auto_scale_or_custom_cell_size": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AutoScaleGridCellSize"
-            },
-            {
-              "$ref": "#/$defs/CustomGridCellSize"
-            }
-          ],
-          "default": {
-            "auto_scale_or_custom": "Auto-scale"
-          },
-          "title": "Grid Cell Size",
-          "ecoscope:advanced": true
-        },
-        "max_speed_factor": {
-          "default": 1.05,
-          "title": "Max Speed Factor (Kilometers per Hour)",
-          "type": "number",
-          "description": "An estimate of the subject's maximum speed as a factor of the maximum measured speed value in the dataset.",
-          "ecoscope:advanced": true
-        },
-        "expansion_factor": {
-          "default": 1.05,
-          "title": "Shape Buffer Expansion Factor",
-          "type": "number",
-          "description": "Controls how far time density values spread across the grid, affecting the smoothness of the output.",
-          "ecoscope:advanced": true
-        }
-      },
-      "required": [],
-      "type": "object",
-      "title": "Generate seasonal home range etd"
     },
     "sort_trajs_by_speed": {
       "additionalProperties": false,
@@ -691,27 +766,27 @@
           "default": {
             "auto_scale_or_custom": "Auto-scale"
           },
-          "title": "Auto Scale Or Custom Grid Cell Size",
+          "title": "Grid Cell Size",
           "ecoscope:advanced": true
         },
         "max_speed_factor": {
           "default": 1.05,
           "title": "Max Speed Factor (Kilometers per Hour)",
           "type": "number",
-          "description": "An estimate of the subject's maximum speed.",
+          "description": "An estimate of the subject's maximum speed as a factor of the maximum measured speed value in the dataset.",
           "ecoscope:advanced": true
         },
         "expansion_factor": {
-          "default": 1.3,
+          "default": 1.05,
           "title": "Shape Buffer Expansion Factor",
           "type": "number",
-          "description": "Controls how far time density values spread across the grid.",
+          "description": "Controls how far time density values spread across the grid, affecting the smoothness of the output.",
           "ecoscope:advanced": true
         }
       },
       "required": [],
       "type": "object",
-      "title": "Generate hr etd"
+      "title": "Generate home range ecomap"
     },
     "zoom_hr_view": {
       "additionalProperties": false,
@@ -725,6 +800,44 @@
       "required": [],
       "type": "object",
       "title": "Zoom hr movement by view state"
+    },
+    "seasonal_home_range": {
+      "additionalProperties": false,
+      "properties": {
+        "percentiles": {
+          "default": [
+            25.0,
+            50.0,
+            75.0,
+            90.0,
+            95.0,
+            99.9
+          ],
+          "items": {
+            "type": "number"
+          },
+          "title": "Percentiles",
+          "type": "array"
+        },
+        "auto_scale_or_custom_cell_size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AutoScaleGridCellSize"
+            },
+            {
+              "$ref": "#/$defs/CustomGridCellSize"
+            }
+          ],
+          "default": {
+            "auto_scale_or_custom": "Auto-scale"
+          },
+          "title": "Auto Scale Or Custom Grid Cell Size",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Calculate seasonal home range"
     },
     "zoom_season_view": {
       "additionalProperties": false,
@@ -757,6 +870,73 @@
       "required": [],
       "type": "object",
       "title": "Persist seasonal windows as csv"
+    },
+    "load_unfiltered_ldx": {
+      "additionalProperties": false,
+      "properties": {
+        "aoi": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aoi"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Load Unfiltered Landdx"
+    },
+    "build_region_lookup": {
+      "additionalProperties": false,
+      "properties": {
+        "categories": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Categories"
+        },
+        "static_ids": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Static Ids"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Build regional lookup from landDx db"
     }
   },
   "$defs": {
@@ -964,6 +1144,36 @@
         "unzip"
       ]
     },
+    "download_logo": {
+      "ui:order": [
+        "url",
+        "retries"
+      ]
+    },
+    "download_cover_page": {
+      "ui:order": [
+        "retries",
+        "unzip"
+      ]
+    },
+    "download_template_one": {
+      "ui:order": [
+        "retries",
+        "unzip"
+      ]
+    },
+    "download_template_two": {
+      "ui:order": [
+        "retries",
+        "unzip"
+      ]
+    },
+    "download_template_three": {
+      "ui:order": [
+        "retries",
+        "unzip"
+      ]
+    },
     "subject_df": {
       "ui:order": [
         "bbox",
@@ -986,18 +1196,23 @@
         "include_related_events"
       ]
     },
-    "generate_seasonal_etd": {
+    "generate_etd": {
       "ui:order": [
         "auto_scale_or_custom_cell_size",
         "max_speed_factor",
         "expansion_factor"
       ]
     },
-    "generate_etd": {
+    "seasonal_home_range": {
       "ui:order": [
-        "auto_scale_or_custom_cell_size",
-        "max_speed_factor",
-        "expansion_factor"
+        "percentiles",
+        "auto_scale_or_custom_cell_size"
+      ]
+    },
+    "build_region_lookup": {
+      "ui:order": [
+        "categories",
+        "static_ids"
       ]
     },
     "ui:order": [
@@ -1009,21 +1224,28 @@
       "define_time_range",
       "create_output_dir",
       "retrieve_ldx_db",
+      "download_logo",
+      "download_cover_page",
+      "download_template_one",
+      "download_template_two",
+      "download_template_three",
       "load_aoi",
       "create_styled_ldx_layers",
       "subject_df",
+      "subject_observations",
+      "compute_subject_maturity",
       "download_subject_info",
       "get_events_data",
-      "view_events_df",
-      "subject_observations",
       "convert_to_trajectories",
-      "generate_seasonal_etd",
       "sort_trajs_by_speed",
       "zoom_traj_view",
       "generate_etd",
       "zoom_hr_view",
+      "seasonal_home_range",
       "zoom_season_view",
-      "persist_subject_season_wins"
+      "persist_subject_season_wins",
+      "load_unfiltered_ldx",
+      "build_region_lookup"
     ]
   },
   "additionalProperties": false

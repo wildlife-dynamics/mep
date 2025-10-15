@@ -33,9 +33,8 @@ TEST_CASES_YAML = ARTIFACTS.parent / "test-cases.yaml"
 ENTRYPOINT = "pixi run -e default ecoscope-workflows-collared-elephant-report-workflow"
 MATCHSPEC_OVERRIDE = "ecoscope-workflows-collared-elephant-report-workflow"
 IO_TASKS_IMPORTABLE_REFERENCES = [
-    "ecoscope_workflows_ext_ecoscope.tasks.io.get_events",
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_subjectgroup_observations",
-    "ecoscope_workflows_ext_ecoscope.tasks.io.determine_season_windows",
+    "ecoscope_workflows_ext_ecoscope.tasks.io.get_events",
     "ecoscope_workflows_ext_ecoscope.tasks.io.determine_season_windows",
 ]
 

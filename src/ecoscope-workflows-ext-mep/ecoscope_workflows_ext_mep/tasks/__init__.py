@@ -14,7 +14,7 @@ from ._map_utils import (
     load_map_files,
     create_layer_from_gdf,
 )
-from ._zip import zip_grouped_by_key
+
 from ._mep_utils import (
     get_area_bounds,
     get_subjects_info,
@@ -22,17 +22,30 @@ from ._mep_utils import (
     persist_subject_info,
     split_gdf_by_column,
     generate_mcp_gdf,
-    calculate_etd_by_groups,
+    calculate_seasonal_home_range,
     create_seasonal_labels,
     generate_seasonal_nsd_plot,
     generate_seasonal_mcp_asymptote_plot,
     generate_seasonal_speed_plot,
+    generate_collared_seasonal_plot,
+    compute_maturity,
+    get_subject_stats,
+    build_template_region_lookup,
+    compute_template_regions,
+    compute_subject_occupancy,
+    download_file_and_persist
 )
 
 from ._file import create_directory
-from ._inspect import view_df
-
+from ._inspect import view_df,print_output
+from ._zip import zip_grouped_by_key,flatten_tuple
 __all__ = [
+    "download_file_and_persist",
+    "build_template_region_lookup",
+    "compute_template_regions",
+    "compute_subject_occupancy",
+    "print_output",
+    "flatten_tuple",
     "calculate_collar_voltage",
     "load_landdx_aoi",
     "download_land_dx",
@@ -53,12 +66,15 @@ __all__ = [
     "download_profile_photo",
     "persist_subject_info",
     "split_gdf_by_column",
-    "calculate_etd_by_groups",
+    "calculate_seasonal_home_range",
     "create_seasonal_labels",
     "create_directory",
     "generate_mcp_gdf",
     "generate_seasonal_nsd_plot",
     "generate_seasonal_mcp_asymptote_plot",
     "generate_seasonal_speed_plot",
+    "generate_collared_seasonal_plot",
     "view_df",
+    "compute_maturity",
+    "get_subject_stats",
 ]

@@ -13,6 +13,7 @@ from pydantic import (
     Field,
     RootModel,
     confloat,
+    conint,
     constr,
 )
 
@@ -224,11 +225,77 @@ class RetrieveLdxDb(BaseModel):
     )
 
 
+class DownloadLogo(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    url: str = Field(..., description="URL to download the file from", title="Url")
+    retries: Optional[conint(ge=0)] = Field(
+        3, description="Number of retries on failure", title="Retries"
+    )
+
+
+class DownloadCoverPage(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    retries: Optional[conint(ge=0)] = Field(
+        3, description="Number of retries on failure", title="Retries"
+    )
+    unzip: Optional[bool] = Field(
+        False,
+        description="Whether to unzip the file if it's a zip archive",
+        title="Unzip",
+    )
+
+
+class DownloadTemplateOne(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    retries: Optional[conint(ge=0)] = Field(
+        3, description="Number of retries on failure", title="Retries"
+    )
+    unzip: Optional[bool] = Field(
+        False,
+        description="Whether to unzip the file if it's a zip archive",
+        title="Unzip",
+    )
+
+
+class DownloadTemplateTwo(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    retries: Optional[conint(ge=0)] = Field(
+        3, description="Number of retries on failure", title="Retries"
+    )
+    unzip: Optional[bool] = Field(
+        False,
+        description="Whether to unzip the file if it's a zip archive",
+        title="Unzip",
+    )
+
+
+class DownloadTemplateThree(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    retries: Optional[conint(ge=0)] = Field(
+        3, description="Number of retries on failure", title="Retries"
+    )
+    unzip: Optional[bool] = Field(
+        False,
+        description="Whether to unzip the file if it's a zip archive",
+        title="Unzip",
+    )
+
+
 class LoadAoi(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    aoi: List[str] = Field(..., title="Aoi")
+    aoi: Optional[List[str]] = Field(None, title="Aoi")
 
 
 class SubjectDf(BaseModel):
@@ -285,6 +352,24 @@ class SubjectDf(BaseModel):
     )
 
 
+class SubjectObservations(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    subject_group_name: str = Field(..., title="Subject Group Name")
+
+
+class ComputeSubjectMaturity(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    time_column: Optional[str] = Field(
+        "fixtime",
+        description="Name of the datetime column in the DataFrame.",
+        title="Time Column",
+    )
+
+
 class DownloadSubjectInfo(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -314,20 +399,6 @@ class GetEventsData(BaseModel):
         description="Whether or not to include related events",
         title="Include Related Events",
     )
-
-
-class ViewEventsDf(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    name: str = Field(..., title="Name")
-
-
-class SubjectObservations(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    subject_group_name: str = Field(..., title="Subject Group Name")
 
 
 class SortTrajsBySpeed(BaseModel):
@@ -373,6 +444,21 @@ class PersistSubjectSeasonWins(BaseModel):
     filetype: Optional[Filetype] = Field(
         "csv", description="The output format", title="Filetype"
     )
+
+
+class LoadUnfilteredLdx(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    aoi: Optional[List[str]] = Field(None, title="Aoi")
+
+
+class BuildRegionLookup(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    categories: Optional[Dict[str, List[str]]] = Field(None, title="Categories")
+    static_ids: Optional[Dict[str, List[str]]] = Field(None, title="Static Ids")
 
 
 class GoogleEarthEngineConnection(BaseModel):
@@ -500,7 +586,7 @@ class ConvertToTrajectories(BaseModel):
     )
 
 
-class GenerateSeasonalEtd(BaseModel):
+class GenerateEtd(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -519,25 +605,18 @@ class GenerateSeasonalEtd(BaseModel):
     )
 
 
-class GenerateEtd(BaseModel):
+class SeasonalHomeRange(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
+    )
+    percentiles: Optional[List[float]] = Field(
+        [25.0, 50.0, 75.0, 90.0, 95.0, 99.9], title="Percentiles"
     )
     auto_scale_or_custom_cell_size: Optional[
         Union[AutoScaleGridCellSize, CustomGridCellSize]
     ] = Field(
         {"auto_scale_or_custom": "Auto-scale"},
         title="Auto Scale Or Custom Grid Cell Size",
-    )
-    max_speed_factor: Optional[float] = Field(
-        1.05,
-        description="An estimate of the subject's maximum speed.",
-        title="Max Speed Factor (Kilometers per Hour)",
-    )
-    expansion_factor: Optional[float] = Field(
-        1.3,
-        description="Controls how far time density values spread across the grid.",
-        title="Shape Buffer Expansion Factor",
     )
 
 
@@ -573,26 +652,38 @@ class Params(BaseModel):
     retrieve_ldx_db: Optional[RetrieveLdxDb] = Field(
         None, title="Retrieve and unpack landDX db"
     )
+    download_logo: Optional[DownloadLogo] = Field(None, title="Download Logo")
+    download_cover_page: Optional[DownloadCoverPage] = Field(
+        None, title="Download report cover page"
+    )
+    download_template_one: Optional[DownloadTemplateOne] = Field(
+        None, title="Download template one"
+    )
+    download_template_two: Optional[DownloadTemplateTwo] = Field(
+        None, title="Download template two"
+    )
+    download_template_three: Optional[DownloadTemplateThree] = Field(
+        None, title="Download template three"
+    )
     load_aoi: Optional[LoadAoi] = Field(None, title="Load AOI from landDX")
     create_styled_ldx_layers: Optional[CreateStyledLdxLayers] = Field(
         None, title="Style landDX map layers"
     )
     subject_df: Optional[SubjectDf] = Field(None, title="Get subject dataframe")
+    subject_observations: Optional[SubjectObservations] = Field(
+        None, title="Get subject group observations from ER"
+    )
+    compute_subject_maturity: Optional[ComputeSubjectMaturity] = Field(
+        None, title="Compute subject maturity"
+    )
     download_subject_info: Optional[DownloadSubjectInfo] = Field(
         None, title="Download subject info and persist"
     )
     get_events_data: Optional[GetEventsData] = Field(
         None, title="Retrieve events from ER"
     )
-    view_events_df: Optional[ViewEventsDf] = Field(None, title="view events df")
-    subject_observations: Optional[SubjectObservations] = Field(
-        None, title="Get subject group observations from ER"
-    )
     convert_to_trajectories: Optional[ConvertToTrajectories] = Field(
         None, title="Convert relocations to trajectories"
-    )
-    generate_seasonal_etd: Optional[GenerateSeasonalEtd] = Field(
-        None, title="Generate seasonal home range etd"
     )
     sort_trajs_by_speed: Optional[SortTrajsBySpeed] = Field(
         None, title="Sort trajectories by speed bins"
@@ -600,13 +691,24 @@ class Params(BaseModel):
     zoom_traj_view: Optional[ZoomTrajView] = Field(
         None, title="Zoom speed trajectories by view state"
     )
-    generate_etd: Optional[GenerateEtd] = Field(None, title="Generate hr etd")
+    generate_etd: Optional[GenerateEtd] = Field(
+        None, title="Generate home range ecomap"
+    )
     zoom_hr_view: Optional[ZoomHrView] = Field(
         None, title="Zoom hr movement by view state"
+    )
+    seasonal_home_range: Optional[SeasonalHomeRange] = Field(
+        None, title="Calculate seasonal home range"
     )
     zoom_season_view: Optional[ZoomSeasonView] = Field(
         None, title="Zoom seasons by view state"
     )
     persist_subject_season_wins: Optional[PersistSubjectSeasonWins] = Field(
         None, title="Persist seasonal windows as csv"
+    )
+    load_unfiltered_ldx: Optional[LoadUnfilteredLdx] = Field(
+        None, title="Load Unfiltered Landdx"
+    )
+    build_region_lookup: Optional[BuildRegionLookup] = Field(
+        None, title="Build regional lookup from landDx db"
     )

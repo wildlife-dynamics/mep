@@ -16,8 +16,8 @@ configure_grouping_strategy:
 
 # Desired time range
 define_time_range:
-  since: "2025-06-01T00:00:00Z"
-  until: "2025-09-09T23:59:59Z"
+  since: "2025-01-01T00:00:00Z"
+  until: "2025-01-25T23:59:59Z"
 
 create_output_dir:
   path_name: "/home/ttemu/ecoscope-workflows/OUTPUTS"
@@ -83,3 +83,6 @@ subject_df:
 # Subject group name
 subject_observations:
     subject_group_name: "MEP_Elephants_Tsavo"
+
+download_logo:
+  url: https://www.dropbox.com/scl/fi/se63iljd7h9zdi4szv2pt/MEP-logo-dark-linear.png?rlkey=usqs76f4ejd2nyqrpmwxmks0o&st=oewz7ftm&dl=0
