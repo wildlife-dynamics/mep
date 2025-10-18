@@ -69,6 +69,7 @@ ecoscope ="*"
 docxtpl="*"
 playwright="*"
 PyPDF2="*"
+selenium="*"
 # additional dependencies added by this extension
 
 

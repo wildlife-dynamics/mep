@@ -21,8 +21,6 @@ from ecoscope_workflows_core.tasks.io import set_er_connection
 from ecoscope_workflows_ext_ecoscope.tasks.results import set_base_maps
 from ecoscope_workflows_core.tasks.groupby import set_groupers
 from ecoscope_workflows_core.tasks.filter import set_time_range
-from ecoscope_workflows_ext_mep.tasks import create_directory
-from ecoscope_workflows_ext_mep.tasks import download_land_dx
 from ecoscope_workflows_ext_mep.tasks import download_file_and_persist
 from ecoscope_workflows_ext_mep.tasks import load_landdx_aoi
 from ecoscope_workflows_ext_mep.tasks import split_gdf_by_column
@@ -37,10 +35,12 @@ get_subjectgroup_observations = create_task_magicmock(  # 🧪
     func_name="get_subjectgroup_observations",  # 🧪
 )  # 🧪
 from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import process_relocations
+from ecoscope_workflows_ext_mep.tasks import view_df
 from ecoscope_workflows_ext_mep.tasks import compute_maturity
 from ecoscope_workflows_core.tasks.groupby import split_groups
 from ecoscope_workflows_ext_mep.tasks import download_profile_photo
-from ecoscope_workflows_ext_mep.tasks import persist_subject_info
+from ecoscope_workflows_ext_mep.tasks import generate_subject_info
+from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df
 
 get_events = create_task_magicmock(  # 🧪
     anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
@@ -78,7 +78,6 @@ from ecoscope_workflows_ext_mep.tasks import generate_mcp_gdf
 from ecoscope_workflows_ext_ecoscope.tasks.results import create_polygon_layer
 from ecoscope_workflows_ext_mep.tasks import calculate_seasonal_home_range
 from ecoscope_workflows_ext_ecoscope.tasks.skip import all_geometry_are_none
-from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df
 from ecoscope_workflows_ext_mep.tasks import generate_seasonal_nsd_plot
 from ecoscope_workflows_ext_mep.tasks import generate_seasonal_speed_plot
 from ecoscope_workflows_ext_mep.tasks import generate_collared_seasonal_plot
@@ -88,6 +87,11 @@ from ecoscope_workflows_ext_mep.tasks import build_template_region_lookup
 from ecoscope_workflows_ext_mep.tasks import compute_template_regions
 from ecoscope_workflows_ext_mep.tasks import compute_subject_occupancy
 from ecoscope_workflows_ext_custom.tasks import html_to_png
+from ecoscope_workflows_ext_mep.tasks import flatten_tuple
+from ecoscope_workflows_ext_mep.tasks import print_output
+from ecoscope_workflows_ext_mep.tasks import report_context
+from ecoscope_workflows_ext_mep.tasks import render_html_to_pdf
+from ecoscope_workflows_ext_mep.tasks import merge_pdfs
 from ecoscope_workflows_core.tasks.results import gather_dashboard
 
 from ..params import Params
@@ -105,8 +109,7 @@ def main(params: Params):
         "configure_base_maps": [],
         "configure_grouping_strategy": [],
         "define_time_range": [],
-        "create_output_dir": [],
-        "retrieve_ldx_db": ["create_output_dir"],
+        "retrieve_ldx_db": [],
         "download_logo": [],
         "download_cover_page": [],
         "download_template_one": [],
@@ -121,7 +124,8 @@ def main(params: Params):
         "rename_subject_cols": ["normalize_subject_info"],
         "subject_observations": ["er_client", "define_time_range"],
         "subject_relocations": ["subject_observations"],
-        "rename_reloc_cols": ["subject_observations"],
+        "inspect_relocations_df": ["subject_relocations"],
+        "rename_reloc_cols": ["subject_relocations"],
         "compute_subject_maturity": ["rename_subject_cols", "rename_reloc_cols"],
         "split_subject_by_group": [
             "compute_subject_maturity",
@@ -129,6 +133,7 @@ def main(params: Params):
         ],
         "download_profile_pic": ["split_subject_by_group"],
         "download_subject_info": ["split_subject_by_group"],
+        "persist_subject_info": ["download_subject_info"],
         "get_events_data": ["er_client", "define_time_range"],
         "normalize_event_details": ["get_events_data"],
         "rename_event_cols": ["normalize_event_details"],
@@ -228,11 +233,13 @@ def main(params: Params):
         "grouped_mcp_plot_widget": ["mcp_plot_widgets_single_view"],
         "zip_traj_etd_gdf": ["generate_etd", "split_trajs_by_group"],
         "generate_subject_stats": ["compute_subject_maturity", "zip_traj_etd_gdf"],
+        "persist_subject_stats": ["generate_subject_stats"],
         "load_unfiltered_ldx": ["retrieve_ldx_db"],
         "zip_etd_subjects": ["generate_etd", "split_subject_by_group"],
         "build_region_lookup": ["load_unfiltered_ldx"],
         "comp_template_regions": ["load_unfiltered_ldx", "build_region_lookup"],
         "process_subject_occupancy": ["comp_template_regions", "zip_etd_subjects"],
+        "persist_subject_occupancy": ["process_subject_occupancy"],
         "convt_range_html_png": ["persist_hr_ecomap_urls"],
         "convt_speedmap_html_png": ["persist_speed_ecomap_urls"],
         "convt_seasons_html_png": ["season_etd_ecomap_html_url"],
@@ -240,6 +247,28 @@ def main(params: Params):
         "convt_mcp_html_png": ["persist_mcp_html_urls"],
         "convt_speedp_html_png": ["persist_speed_html_urls"],
         "convt_colev_html_png": ["persist_collared_subject_plots"],
+        "zip_movement_range_maps": ["convt_speedmap_html_png", "convt_range_html_png"],
+        "zip_range_mov_overview": ["zip_movement_range_maps", "convt_seasons_html_png"],
+        "zip_range_subject_photo": ["zip_range_mov_overview", "download_profile_pic"],
+        "zip_items_w_collared": ["zip_range_subject_photo", "convt_colev_html_png"],
+        "zip_with_nsd": ["zip_items_w_collared", "convt_nsdp_html_png"],
+        "zip_with_speed": ["zip_with_nsd", "convt_speedp_html_png"],
+        "zip_with_mcp": ["zip_with_speed", "convt_mcp_html_png"],
+        "zip_subject_info": ["zip_with_mcp", "persist_subject_info"],
+        "zip_subject_stats": ["zip_subject_info", "persist_subject_stats"],
+        "zip_occupancy_info": ["zip_subject_stats", "persist_subject_occupancy"],
+        "flatten_collared_context": ["zip_occupancy_info"],
+        "view_flatten_data": ["flatten_collared_context"],
+        "generate_report_context": [
+            "compute_subject_maturity",
+            "download_template_one",
+            "download_template_two",
+            "download_template_three",
+            "download_logo",
+            "flatten_collared_context",
+        ],
+        "render_html_pdf": ["generate_report_context"],
+        "merge_subject_pdf": ["compute_subject_maturity", "render_html_pdf"],
         "collared_report_template": [
             "workflow_details",
             "merge_speed_ecomap_widgets",
@@ -300,20 +329,14 @@ def main(params: Params):
             | (params_dict.get("define_time_range") or {}),
             method="call",
         ),
-        "create_output_dir": Node(
-            async_task=create_directory.validate()
-            .handle_errors(task_instance_id="create_output_dir")
-            .set_executor("lithops"),
-            partial=(params_dict.get("create_output_dir") or {}),
-            method="call",
-        ),
         "retrieve_ldx_db": Node(
-            async_task=download_land_dx.validate()
+            async_task=download_file_and_persist.validate()
             .handle_errors(task_instance_id="retrieve_ldx_db")
             .set_executor("lithops"),
             partial={
-                "path": DependsOn("create_output_dir"),
+                "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
                 "url": "https://maraelephant.maps.arcgis.com/sharing/rest/content/items/6da0c9bdd43d4dd0ac59a4f3cd73dcab/data",
+                "unzip": True,
             }
             | (params_dict.get("retrieve_ldx_db") or {}),
             method="call",
@@ -325,7 +348,6 @@ def main(params: Params):
             partial={
                 "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
                 "overwrite_existing": False,
-                "unzip": True,
             }
             | (params_dict.get("download_logo") or {}),
             method="call",
@@ -347,7 +369,7 @@ def main(params: Params):
             .handle_errors(task_instance_id="download_template_one")
             .set_executor("lithops"),
             partial={
-                "url": "https://www.dropbox.com/scl/fi/m35nrobegmfrbzeavd42g/template_1.html?rlkey=xsnkvxpsjlvd6hyozjxp4die3&st=fiobix4t&dl=0",
+                "url": "https://www.dropbox.com/scl/fi/6yruu5uyino3gmzasdfy0/template_1.html?rlkey=w7haw2q8hkpv1ocsms0zq92rw&st=7bak4xbj&dl=0",
                 "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
                 "overwrite_existing": False,
             }
@@ -530,6 +552,17 @@ def main(params: Params):
             | (params_dict.get("subject_relocations") or {}),
             method="call",
         ),
+        "inspect_relocations_df": Node(
+            async_task=view_df.validate()
+            .handle_errors(task_instance_id="inspect_relocations_df")
+            .set_executor("lithops"),
+            partial={
+                "gdf": DependsOn("subject_relocations"),
+                "name": "Relocs",
+            }
+            | (params_dict.get("inspect_relocations_df") or {}),
+            method="call",
+        ),
         "rename_reloc_cols": Node(
             async_task=map_columns.validate()
             .handle_errors(task_instance_id="rename_reloc_cols")
@@ -538,13 +571,13 @@ def main(params: Params):
                 "drop_columns": [],
                 "retain_columns": [],
                 "rename_columns": {
-                    "extra__subject__name": "subject_name",
-                    "extra__subject__hex": "hex_color",
-                    "extra__subject__sex": "subject_sex",
-                    "extra__subject__subject_subtype": "subject_subtype",
-                    "extra__created_at": "created_at",
+                    "name": "subject_name",
+                    "hex": "hex_color",
+                    "sex": "subject_sex",
+                    "subject_subtype": "subject_subtype",
+                    "created_at": "created_at",
                 },
-                "df": DependsOn("subject_observations"),
+                "df": DependsOn("subject_relocations"),
             }
             | (params_dict.get("rename_reloc_cols") or {}),
             method="call",
@@ -590,7 +623,7 @@ def main(params: Params):
             },
         ),
         "download_subject_info": Node(
-            async_task=persist_subject_info.validate()
+            async_task=generate_subject_info.validate()
             .handle_errors(task_instance_id="download_subject_info")
             .set_executor("lithops"),
             partial={
@@ -602,6 +635,20 @@ def main(params: Params):
             kwargs={
                 "argnames": ["df"],
                 "argvalues": DependsOn("split_subject_by_group"),
+            },
+        ),
+        "persist_subject_info": Node(
+            async_task=persist_df.validate()
+            .handle_errors(task_instance_id="persist_subject_info")
+            .set_executor("lithops"),
+            partial={
+                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            }
+            | (params_dict.get("persist_subject_info") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["df"],
+                "argvalues": DependsOn("download_subject_info"),
             },
         ),
         "get_events_data": Node(
@@ -1705,6 +1752,20 @@ def main(params: Params):
                 "argvalues": DependsOn("zip_traj_etd_gdf"),
             },
         ),
+        "persist_subject_stats": Node(
+            async_task=persist_df.validate()
+            .handle_errors(task_instance_id="persist_subject_stats")
+            .set_executor("lithops"),
+            partial={
+                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            }
+            | (params_dict.get("persist_subject_stats") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["df"],
+                "argvalues": DependsOn("generate_subject_stats"),
+            },
+        ),
         "load_unfiltered_ldx": Node(
             async_task=load_landdx_aoi.validate()
             .handle_errors(task_instance_id="load_unfiltered_ldx")
@@ -1764,13 +1825,27 @@ def main(params: Params):
                 "argvalues": DependsOn("zip_etd_subjects"),
             },
         ),
+        "persist_subject_occupancy": Node(
+            async_task=persist_df.validate()
+            .handle_errors(task_instance_id="persist_subject_occupancy")
+            .set_executor("lithops"),
+            partial={
+                "root_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            }
+            | (params_dict.get("persist_subject_occupancy") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["df"],
+                "argvalues": DependsOn("process_subject_occupancy"),
+            },
+        ),
         "convt_range_html_png": Node(
             async_task=html_to_png.validate()
             .handle_errors(task_instance_id="convt_range_html_png")
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {"wait_for_timeout": 100, "width": 765, "height": 525},
+                "config": {"wait_for_timeout": 20, "width": 765, "height": 525},
             }
             | (params_dict.get("convt_range_html_png") or {}),
             method="mapvalues",
@@ -1785,7 +1860,7 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {"wait_for_timeout": 100, "width": 765, "height": 525},
+                "config": {"wait_for_timeout": 20, "width": 765, "height": 525},
             }
             | (params_dict.get("convt_speedmap_html_png") or {}),
             method="mapvalues",
@@ -1800,7 +1875,7 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {"wait_for_timeout": 100, "width": 602, "height": 855},
+                "config": {"wait_for_timeout": 20, "width": 602, "height": 855},
             }
             | (params_dict.get("convt_seasons_html_png") or {}),
             method="mapvalues",
@@ -1815,7 +1890,7 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {"wait_for_timeout": 100, "width": 2238, "height": 450},
+                "config": {"wait_for_timeout": 10, "width": 2238, "height": 450},
             }
             | (params_dict.get("convt_nsdp_html_png") or {}),
             method="mapvalues",
@@ -1868,6 +1943,199 @@ def main(params: Params):
                 "argnames": ["html_path"],
                 "argvalues": DependsOn("persist_collared_subject_plots"),
             },
+        ),
+        "zip_movement_range_maps": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_movement_range_maps")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("convt_speedmap_html_png"),
+                "right": DependsOn("convt_range_html_png"),
+            }
+            | (params_dict.get("zip_movement_range_maps") or {}),
+            method="call",
+        ),
+        "zip_range_mov_overview": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_range_mov_overview")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("zip_movement_range_maps"),
+                "right": DependsOn("convt_seasons_html_png"),
+            }
+            | (params_dict.get("zip_range_mov_overview") or {}),
+            method="call",
+        ),
+        "zip_range_subject_photo": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_range_subject_photo")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("zip_range_mov_overview"),
+                "right": DependsOn("download_profile_pic"),
+            }
+            | (params_dict.get("zip_range_subject_photo") or {}),
+            method="call",
+        ),
+        "zip_items_w_collared": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_items_w_collared")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("zip_range_subject_photo"),
+                "right": DependsOn("convt_colev_html_png"),
+            }
+            | (params_dict.get("zip_items_w_collared") or {}),
+            method="call",
+        ),
+        "zip_with_nsd": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_with_nsd")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("zip_items_w_collared"),
+                "right": DependsOn("convt_nsdp_html_png"),
+            }
+            | (params_dict.get("zip_with_nsd") or {}),
+            method="call",
+        ),
+        "zip_with_speed": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_with_speed")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("zip_with_nsd"),
+                "right": DependsOn("convt_speedp_html_png"),
+            }
+            | (params_dict.get("zip_with_speed") or {}),
+            method="call",
+        ),
+        "zip_with_mcp": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_with_mcp")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("zip_with_speed"),
+                "right": DependsOn("convt_mcp_html_png"),
+            }
+            | (params_dict.get("zip_with_mcp") or {}),
+            method="call",
+        ),
+        "zip_subject_info": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_subject_info")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("zip_with_mcp"),
+                "right": DependsOn("persist_subject_info"),
+            }
+            | (params_dict.get("zip_subject_info") or {}),
+            method="call",
+        ),
+        "zip_subject_stats": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_subject_stats")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("zip_subject_info"),
+                "right": DependsOn("persist_subject_stats"),
+            }
+            | (params_dict.get("zip_subject_stats") or {}),
+            method="call",
+        ),
+        "zip_occupancy_info": Node(
+            async_task=zip_grouped_by_key.validate()
+            .handle_errors(task_instance_id="zip_occupancy_info")
+            .set_executor("lithops"),
+            partial={
+                "left": DependsOn("zip_subject_stats"),
+                "right": DependsOn("persist_subject_occupancy"),
+            }
+            | (params_dict.get("zip_occupancy_info") or {}),
+            method="call",
+        ),
+        "flatten_collared_context": Node(
+            async_task=flatten_tuple.validate()
+            .handle_errors(task_instance_id="flatten_collared_context")
+            .set_executor("lithops"),
+            partial=(params_dict.get("flatten_collared_context") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["nested"],
+                "argvalues": DependsOn("zip_occupancy_info"),
+            },
+        ),
+        "view_flatten_data": Node(
+            async_task=print_output.validate()
+            .handle_errors(task_instance_id="view_flatten_data")
+            .set_executor("lithops"),
+            partial={
+                "value": DependsOn("flatten_collared_context"),
+            }
+            | (params_dict.get("view_flatten_data") or {}),
+            method="call",
+        ),
+        "generate_report_context": Node(
+            async_task=report_context.validate()
+            .handle_errors(task_instance_id="generate_report_context")
+            .set_executor("lithops"),
+            partial={
+                "subjects_df": DependsOn("compute_subject_maturity"),
+                "templates": DependsOnSequence(
+                    [
+                        DependsOn("download_template_one"),
+                        DependsOn("download_template_two"),
+                        DependsOn("download_template_three"),
+                    ],
+                ),
+                "input_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "logo": DependsOn("download_logo"),
+            }
+            | (params_dict.get("generate_report_context") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": [
+                    "movement_ecomap",
+                    "range_ecomap",
+                    "overview_map",
+                    "subject_photo",
+                    "collar_event_timeline_plot",
+                    "nsd_plot",
+                    "speed_plot",
+                    "mcp_plot",
+                    "subject_info",
+                    "subject_stats",
+                    "occupancy_info",
+                ],
+                "argvalues": DependsOn("flatten_collared_context"),
+            },
+        ),
+        "render_html_pdf": Node(
+            async_task=render_html_to_pdf.validate()
+            .handle_errors(task_instance_id="render_html_pdf")
+            .set_executor("lithops"),
+            partial={
+                "pdf_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            }
+            | (params_dict.get("render_html_pdf") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("generate_report_context"),
+            },
+        ),
+        "merge_subject_pdf": Node(
+            async_task=merge_pdfs.validate()
+            .handle_errors(task_instance_id="merge_subject_pdf")
+            .set_executor("lithops"),
+            partial={
+                "subject_df": DependsOn("compute_subject_maturity"),
+                "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "filename": "Collared Elephants Report",
+                "pdf_path_items": DependsOn("render_html_pdf"),
+            }
+            | (params_dict.get("merge_subject_pdf") or {}),
+            method="call",
         ),
         "collared_report_template": Node(
             async_task=gather_dashboard.validate()

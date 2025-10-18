@@ -341,21 +341,12 @@ def load_landdx_aoi(
     aoi: Optional[List[str]] = None,
 ) -> Optional[AnyGeoDataFrame]:
 
-    # Search recursively for landDx.gpkg
-    landDx_path = None
-    for root, _, files in os.walk(map_path):
-        if "landDx.gpkg" in files:
-            landDx_path = os.path.join(root, "landDx.gpkg")
-            print(f"Found landDx.gpkg at: {landDx_path}")
-            break
-
-    if landDx_path is None:
-        print(f"landDx.gpkg not found in {map_path}")
-        return None
+    if map_path is None: 
+        print(f"Provided map path is empty")
 
     # Load and filter
     try:
-        geodataframe = gpd.read_file(landDx_path, layer="landDx_polygons").set_index("globalid")
+        geodataframe = gpd.read_file(map_path, layer="landDx_polygons").set_index("globalid")
         
         if aoi is None or not aoi:
            print(f"Loaded landDx.gpkg — total features: {len(geodataframe)} (no filtering applied)")

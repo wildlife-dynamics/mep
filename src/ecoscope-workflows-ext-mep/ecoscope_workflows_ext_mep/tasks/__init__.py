@@ -19,7 +19,7 @@ from ._mep_utils import (
     get_area_bounds,
     get_subjects_info,
     download_profile_photo,
-    persist_subject_info,
+    generate_subject_info,
     split_gdf_by_column,
     generate_mcp_gdf,
     calculate_seasonal_home_range,
@@ -33,13 +33,21 @@ from ._mep_utils import (
     build_template_region_lookup,
     compute_template_regions,
     compute_subject_occupancy,
-    download_file_and_persist
+    download_file_and_persist,
+    initialize_jinja_env,
+    report_context,
+    render_html_to_pdf,
+    merge_pdfs
 )
 
 from ._file import create_directory
 from ._inspect import view_df,print_output
 from ._zip import zip_grouped_by_key,flatten_tuple
 __all__ = [
+    "merge_pdfs",
+    "render_html_to_pdf",
+    "report_context",
+    "initialize_jinja_env",
     "download_file_and_persist",
     "build_template_region_lookup",
     "compute_template_regions",
@@ -64,7 +72,7 @@ __all__ = [
     "get_area_bounds",
     "get_subjects_info",
     "download_profile_photo",
-    "persist_subject_info",
+    "generate_subject_info",
     "split_gdf_by_column",
     "calculate_seasonal_home_range",
     "create_seasonal_labels",

@@ -200,28 +200,17 @@ class DefineTimeRange(BaseModel):
     until: AwareDatetime = Field(..., description="The end time", title="Until")
 
 
-class CreateOutputDir(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    path_name: Optional[str] = Field(
-        "/home/ttemu/ecoscope-workflows/mep/.pixi/envs/compile/lib/python3.12/site-packages/ecoscope_workflows_ext_mep/tasks/output",
-        description="Path to the directory that should be created",
-        title="Path Name",
-    )
-
-
 class RetrieveLdxDb(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+    retries: Optional[conint(ge=0)] = Field(
+        3, description="Number of retries on failure", title="Retries"
+    )
     overwrite_existing: Optional[bool] = Field(
         False,
-        description="Overwrite the existing file if it exists",
+        description="Whether to overwrite existing files",
         title="Overwrite Existing",
-    )
-    unzip: Optional[bool] = Field(
-        True, description="Whether to unzip the downloaded file", title="Unzip"
     )
 
 
@@ -232,6 +221,11 @@ class DownloadLogo(BaseModel):
     url: str = Field(..., description="URL to download the file from", title="Url")
     retries: Optional[conint(ge=0)] = Field(
         3, description="Number of retries on failure", title="Retries"
+    )
+    unzip: Optional[bool] = Field(
+        False,
+        description="Whether to unzip the file if it's a zip archive",
+        title="Unzip",
     )
 
 
@@ -377,6 +371,21 @@ class DownloadSubjectInfo(BaseModel):
     return_data: Optional[bool] = Field(True, title="Return Data")
 
 
+class Filetype(str, Enum):
+    csv = "csv"
+    gpkg = "gpkg"
+    geoparquet = "geoparquet"
+
+
+class PersistSubjectInfo(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    filetype: Optional[Filetype] = Field(
+        "csv", description="The output format", title="Filetype"
+    )
+
+
 class GetEventsData(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -431,13 +440,23 @@ class ZoomSeasonView(BaseModel):
     zoom_value: Optional[float] = Field(14, title="Zoom Value")
 
 
-class Filetype(str, Enum):
-    csv = "csv"
-    gpkg = "gpkg"
-    geoparquet = "geoparquet"
-
-
 class PersistSubjectSeasonWins(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    filetype: Optional[Filetype] = Field(
+        "csv", description="The output format", title="Filetype"
+    )
+
+
+class GenerateSubjectStats(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    return_dataframe: Optional[bool] = Field(True, title="Return Dataframe")
+
+
+class PersistSubjectStats(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -459,6 +478,15 @@ class BuildRegionLookup(BaseModel):
     )
     categories: Optional[Dict[str, List[str]]] = Field(None, title="Categories")
     static_ids: Optional[Dict[str, List[str]]] = Field(None, title="Static Ids")
+
+
+class PersistSubjectOccupancy(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    filetype: Optional[Filetype] = Field(
+        "csv", description="The output format", title="Filetype"
+    )
 
 
 class GoogleEarthEngineConnection(BaseModel):
@@ -646,9 +674,6 @@ class FormData(BaseModel):
         description="Choose the period of time to analyze.",
         title="Define time range",
     )
-    create_output_dir: Optional[CreateOutputDir] = Field(
-        None, title="Create output directory"
-    )
     retrieve_ldx_db: Optional[RetrieveLdxDb] = Field(
         None, title="Retrieve and unpack landDX db"
     )
@@ -677,7 +702,10 @@ class FormData(BaseModel):
         None, title="Compute subject maturity"
     )
     download_subject_info: Optional[DownloadSubjectInfo] = Field(
-        None, title="Download subject info and persist"
+        None, title="Download subject information"
+    )
+    persist_subject_info: Optional[PersistSubjectInfo] = Field(
+        None, title="Persist subject information"
     )
     get_events_data: Optional[GetEventsData] = Field(
         None, title="Retrieve events from ER"
@@ -706,9 +734,18 @@ class FormData(BaseModel):
     persist_subject_season_wins: Optional[PersistSubjectSeasonWins] = Field(
         None, title="Persist seasonal windows as csv"
     )
+    generate_subject_stats: Optional[GenerateSubjectStats] = Field(
+        None, title="Generate subject stats"
+    )
+    persist_subject_stats: Optional[PersistSubjectStats] = Field(
+        None, title="Persist subject stats as csv"
+    )
     load_unfiltered_ldx: Optional[LoadUnfilteredLdx] = Field(
         None, title="Load Unfiltered Landdx"
     )
     build_region_lookup: Optional[BuildRegionLookup] = Field(
         None, title="Build regional lookup from landDx db"
+    )
+    persist_subject_occupancy: Optional[PersistSubjectOccupancy] = Field(
+        None, title="persist subject occupancy as csv"
     )

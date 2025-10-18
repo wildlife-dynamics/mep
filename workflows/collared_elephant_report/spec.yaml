@@ -48,28 +48,23 @@ workflow:
     task: set_time_range
     partial:
       time_format: "%d %b %Y %H:%M:%S %Z"
-
-# create output directory
-  - name: Create output directory
-    id: create_output_dir
-    task: create_directory
-
+      
 # download and extract landDx db
   - name: Retrieve and unpack landDX db 
     id: retrieve_ldx_db
-    task: download_land_dx
+    task: download_file_and_persist 
     partial:
-      path: ${{ workflow.create_output_dir.return }}
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       url: "https://maraelephant.maps.arcgis.com/sharing/rest/content/items/6da0c9bdd43d4dd0ac59a4f3cd73dcab/data"
+      unzip: true 
 
   # download logo and report templates
   - name: Download Logo 
     id: download_logo
-    task: download_file_and_persist #download_file_and_persist
+    task: download_file_and_persist
     partial:
       output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       overwrite_existing: false
-      unzip: true
 
   - name: Download report cover page
     id: download_cover_page
@@ -83,7 +78,7 @@ workflow:
     id: download_template_one
     task: download_file_and_persist
     partial:
-      url: https://www.dropbox.com/scl/fi/m35nrobegmfrbzeavd42g/template_1.html?rlkey=xsnkvxpsjlvd6hyozjxp4die3&st=fiobix4t&dl=0
+      url: https://www.dropbox.com/scl/fi/6yruu5uyino3gmzasdfy0/template_1.html?rlkey=w7haw2q8hkpv1ocsms0zq92rw&st=7bak4xbj&dl=0
       output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       overwrite_existing: false
 
@@ -131,7 +126,7 @@ workflow:
   # Get subjects dataframe
   - name: Get subject dataframe 
     id: subject_df
-    task: get_subjects_info # write custom task for this
+    task: get_subjects_info #custom task
     partial:
       client: ${{ workflow.er_client.return }}
       include_inactive: True 
@@ -223,6 +218,13 @@ workflow:
         - x: 1.000000
           y: 1.000000
 
+  - name: View dataframe
+    id: inspect_relocations_df
+    task: view_df
+    partial:
+      gdf: ${{ workflow.subject_relocations.return }}
+      name: Relocs
+
   # rename reloc columns 
   - name: Rename reloc columns 
     id: rename_reloc_cols
@@ -231,13 +233,18 @@ workflow:
       drop_columns: []
       retain_columns: []
       rename_columns:
-        extra__subject__name: subject_name
-        extra__subject__hex: hex_color
-        extra__subject__sex: subject_sex
-        extra__subject__subject_subtype: subject_subtype
-        extra__created_at: created_at
+        name: subject_name
+        hex: hex_color
+        sex: subject_sex
+        subject_subtype: subject_subtype
+        created_at: created_at
+        # extra__subject__name: subject_name
+        # extra__subject__hex: hex_color
+        # extra__subject__sex: subject_sex
+        # extra__subject__subject_subtype: subject_subtype
+        # extra__created_at: created_at
         
-      df: ${{ workflow.subject_observations.return }}
+      df: ${{ workflow.subject_relocations.return }}
 
 # Compute maturity (default: 6 months)
   - name: Compute subject maturity
@@ -264,21 +271,30 @@ workflow:
       image_type: ".png"
       column: photo #additional__id_photo
       overwrite_existing: true
-      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }} #${{ workflow.create_output_dir.return }}
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }} 
     mapvalues:
       argnames: df
       argvalues: ${{ workflow.split_subject_by_group.return }}
 
   # 2. Download subject info and persist
-  - name: Download subject info and persist
+  - name: Download subject information
     id: download_subject_info
-    task: persist_subject_info
+    task: generate_subject_info
     partial:
       maxlen: 1000
-      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }} #${{ workflow.create_output_dir.return }}
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }} 
     mapvalues:
       argnames: df
       argvalues: ${{ workflow.split_subject_by_group.return }}
+
+  - name: Persist subject information 
+    id: persist_subject_info
+    task: persist_df
+    partial: 
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.download_subject_info.return }}
 
   # Retrieve events from ER
   - name : Retrieve events from ER
@@ -895,7 +911,6 @@ workflow:
     partial:
       widgets: ${{ workflow.season_etd_widgets_single_view.return }}
 
-  # Generate plots from events   
   - name: Persist seasonal windows as csv 
     id: persist_subject_season_wins
     task: persist_df
@@ -912,6 +927,7 @@ workflow:
       left: ${{ workflow.split_relocs_by_group.return }}
       right: ${{ workflow.persist_subject_season_wins.return }}
 
+  # Generate plots from events
   # 1. Generate seasonal NSD plot
   - name: Generate seasonal nsd plot
     id: generate_nsd_plot
@@ -1106,7 +1122,7 @@ workflow:
       left: ${{ workflow.generate_etd.return }}
       right: ${{ workflow.split_trajs_by_group.return }}   
 
-  - name: Generate subject stats and persist
+  - name: Generate subject stats
     id: generate_subject_stats
     task: get_subject_stats
     partial:
@@ -1118,7 +1134,16 @@ workflow:
         - etd_df
         - traj_gdf
       argvalues: ${{ workflow.zip_traj_etd_gdf.return }}
-    
+  
+  - name: Persist subject stats as csv
+    id: persist_subject_stats
+    task: persist_df
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.generate_subject_stats.return }}
+
   # Calculate subject occupancy 
   - name: Load Unfiltered Landdx 
     id: load_unfiltered_ldx
@@ -1160,6 +1185,15 @@ workflow:
         - subjects_df
       argvalues: ${{ workflow.zip_etd_subjects.return }}
 
+  - name: persist subject occupancy as csv
+    id: persist_subject_occupancy
+    task: persist_df
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.process_subject_occupancy.return }}
+    
   #convert all html to png 
   # 1. Ecomaps - Range , Speedmap, Season 
   - name: Convert range ecomap html to png 
@@ -1168,7 +1202,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 100
+        wait_for_timeout: 20
         width: 765
         height: 525
     mapvalues:
@@ -1181,7 +1215,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 100
+        wait_for_timeout: 20
         width: 765
         height: 525
     mapvalues:
@@ -1194,7 +1228,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 100
+        wait_for_timeout: 20
         width: 602
         height: 855
     mapvalues:
@@ -1208,7 +1242,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 100
+        wait_for_timeout: 10
         width: 2238
         height: 450
     mapvalues:
@@ -1254,7 +1288,144 @@ workflow:
       argnames: html_path
       argvalues: ${{ workflow.persist_collared_subject_plots.return }}
 
+  # - name: Initialize jinja environment
+  #   id: set_jinja_env
+  #   task: initialize_jinja_env
+  #   partial:
+  #     input_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
   
+  - name: Zip movement and range ecomaps
+    id: zip_movement_range_maps
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.convt_speedmap_html_png.return }}
+      right: ${{ workflow.convt_range_html_png.return }}
+  
+  - name: zip movement range and overview map
+    id: zip_range_mov_overview
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.zip_movement_range_maps.return }}
+      right: ${{ workflow.convt_seasons_html_png.return }}
+  
+  - name: zip movement ,range ,overview maps and subject photo
+    id: zip_range_subject_photo
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.zip_range_mov_overview.return }}
+      right: ${{ workflow.download_profile_pic.return }}
+  
+  - name: zip existing list with collared plot
+    id: zip_items_w_collared
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.zip_range_subject_photo.return }}
+      right: ${{ workflow.convt_colev_html_png.return }}
+  
+  - name: zip existing with nsd plot
+    id: zip_with_nsd
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.zip_items_w_collared.return }}
+      right: ${{ workflow.convt_nsdp_html_png.return }}
+  
+  - name: zip existing with speed plot 
+    id: zip_with_speed
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.zip_with_nsd.return }}
+      right: ${{ workflow.convt_speedp_html_png.return }}
+  
+  - name: zip existing with mcp plot 
+    id: zip_with_mcp
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.zip_with_speed.return }}
+      right: ${{ workflow.convt_mcp_html_png.return }}
+  
+  - name: zip existing with subject info
+    id: zip_subject_info
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.zip_with_mcp.return }}
+      right: ${{ workflow.persist_subject_info.return}}
+  
+  - name: zip existing with subject stats
+    id: zip_subject_stats
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.zip_subject_info.return }}
+      right: ${{ workflow.persist_subject_stats.return }}
+  
+  - name: zip existing with occupancy info
+    id: zip_occupancy_info
+    task: zip_grouped_by_key
+    partial:
+      left: ${{ workflow.zip_subject_stats.return }}
+      right: ${{ workflow.persist_subject_occupancy.return }}
+
+  - name: Flatten zipped collared report context inputs
+    id: flatten_collared_context
+    task: flatten_tuple
+    mapvalues:
+      argnames: nested
+      argvalues: ${{ workflow.zip_occupancy_info.return }}
+
+  - name: View flatten info outputs 
+    id: view_flatten_data
+    task: print_output
+    partial:
+      value: ${{ workflow.flatten_collared_context.return  }}
+
+  - name: Generate report context
+    id: generate_report_context
+    task: report_context
+    partial:
+      subjects_df: ${{ workflow.compute_subject_maturity.return }}
+      templates:
+        - ${{ workflow.download_template_one.return }}
+        - ${{ workflow.download_template_two.return }}
+        - ${{ workflow.download_template_three.return }}
+      input_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      logo: ${{ workflow.download_logo.return }}
+    
+    mapvalues:
+      argnames:
+        - movement_ecomap
+        - range_ecomap 
+        - overview_map
+        - subject_photo
+        - collar_event_timeline_plot 
+        - nsd_plot
+        - speed_plot
+        - mcp_plot
+        - subject_info
+        - subject_stats
+        - occupancy_info
+      argvalues: ${{ workflow.flatten_collared_context.return }}
+
+  - name: Render html to pdf 
+    id: render_html_pdf
+    task: render_html_to_pdf
+    partial:
+      #html_path: ${{ workflow.generate_report_context.return }}
+      pdf_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: html_path
+      argvalues: ${{ workflow.generate_report_context.return }}
+
+  - name: Merge pdfs
+    id: merge_subject_pdf
+    task: merge_pdfs
+    partial:
+      subject_df: ${{ workflow.compute_subject_maturity.return }}
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: Collared Elephants Report
+      pdf_path_items: ${{ workflow.render_html_pdf.return }}
+    # mapvalues:
+    #   argnames: pdf_path_items
+    #   argvalues: ${{ workflow.render_html_pdf.return }}
+      
   # combine all these outputs and have them on the dashboard 
   - name: Collared Elephant Report Dashboard 
     id: collared_report_template 
