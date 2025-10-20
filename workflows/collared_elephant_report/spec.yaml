@@ -65,15 +65,7 @@ workflow:
     partial:
       output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       overwrite_existing: false
-
-  - name: Download report cover page
-    id: download_cover_page
-    task: download_file_and_persist
-    partial:
-      url: https://www.dropbox.com/scl/fi/my6cd3fhs8wtkv34sqb0l/cover_page.pdf?rlkey=45ejxhslkmpa05nhdv6ehxnod&dl=1
-      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      overwrite_existing: false
-
+      
   - name: Download template one
     id: download_template_one
     task: download_file_and_persist
@@ -273,7 +265,7 @@ workflow:
       overwrite_existing: true
       output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }} 
     mapvalues:
-      argnames: df
+      argnames: subject_df
       argvalues: ${{ workflow.split_subject_by_group.return }}
 
   # 2. Download subject info and persist
@@ -284,7 +276,7 @@ workflow:
       maxlen: 1000
       output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }} 
     mapvalues:
-      argnames: df
+      argnames: subject_df
       argvalues: ${{ workflow.split_subject_by_group.return }}
 
   - name: Persist subject information 
@@ -934,7 +926,7 @@ workflow:
     task: generate_seasonal_nsd_plot
     mapvalues:
       argnames:
-        - gdf
+        - relocations_gdf
         - seasons_df
       argvalues:
         - ${{ workflow.zip_nsd_values.return }}
@@ -982,7 +974,7 @@ workflow:
     task: generate_seasonal_speed_plot
     mapvalues:
       argnames:
-        - gdf
+        - relocations_gdf
         - seasons_df
       argvalues:
         - ${{ workflow.zip_speed_values.return }}
@@ -1079,7 +1071,7 @@ workflow:
     task: generate_seasonal_mcp_asymptote_plot
     mapvalues:
       argnames:
-        - gdf
+        - relocations_gdf
         - seasons_df
       argvalues:  
         - ${{ workflow.zip_mcp_asymp_values.return }}
@@ -1202,7 +1194,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 20
+        wait_for_timeout: 200
         width: 765
         height: 525
     mapvalues:
@@ -1215,7 +1207,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 20
+        wait_for_timeout: 200
         width: 765
         height: 525
     mapvalues:
@@ -1228,7 +1220,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 20
+        wait_for_timeout: 200
         width: 602
         height: 855
     mapvalues:

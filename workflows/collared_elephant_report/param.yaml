@@ -17,7 +17,7 @@ configure_grouping_strategy:
 # Desired time range
 define_time_range:
   since: "2025-01-01T00:00:00Z"
-  until: "2025-01-15T23:59:59Z"
+  until: "2025-01-14T23:59:59Z"
 
 # create_output_dir:
 #   path_name: "/home/ttemu/ecoscope-workflows/OUTPUTS"

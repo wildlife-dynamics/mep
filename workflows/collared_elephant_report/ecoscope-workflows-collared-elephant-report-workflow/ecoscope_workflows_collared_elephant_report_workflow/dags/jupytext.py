@@ -262,33 +262,6 @@ download_logo = (
 
 
 # %% [markdown]
-# ## Download report cover page
-
-# %%
-# parameters
-
-download_cover_page_params = dict(
-    retries=...,
-    unzip=...,
-)
-
-# %%
-# call the task
-
-
-download_cover_page = (
-    download_file_and_persist.handle_errors(task_instance_id="download_cover_page")
-    .partial(
-        url="https://www.dropbox.com/scl/fi/my6cd3fhs8wtkv34sqb0l/cover_page.pdf?rlkey=45ejxhslkmpa05nhdv6ehxnod&dl=1",
-        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        overwrite_existing=False,
-        **download_cover_page_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
 # ## Download template one
 
 # %%
@@ -749,7 +722,7 @@ download_profile_pic = (
         output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         **download_profile_pic_params,
     )
-    .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
+    .mapvalues(argnames=["subject_df"], argvalues=split_subject_by_group)
 )
 
 
@@ -774,7 +747,7 @@ download_subject_info = (
         output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         **download_subject_info_params,
     )
-    .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
+    .mapvalues(argnames=["subject_df"], argvalues=split_subject_by_group)
 )
 
 
@@ -2098,7 +2071,7 @@ generate_nsd_plot_params = dict(
 generate_nsd_plot = (
     generate_seasonal_nsd_plot.handle_errors(task_instance_id="generate_nsd_plot")
     .partial(**generate_nsd_plot_params)
-    .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_nsd_values)
+    .mapvalues(argnames=["relocations_gdf", "seasons_df"], argvalues=zip_nsd_values)
 )
 
 
@@ -2215,7 +2188,7 @@ generate_speed_plot_params = dict(
 generate_speed_plot = (
     generate_seasonal_speed_plot.handle_errors(task_instance_id="generate_speed_plot")
     .partial(**generate_speed_plot_params)
-    .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_speed_values)
+    .mapvalues(argnames=["relocations_gdf", "seasons_df"], argvalues=zip_speed_values)
 )
 
 
@@ -2454,7 +2427,9 @@ generate_mcp_asymp_plot = (
         task_instance_id="generate_mcp_asymp_plot"
     )
     .partial(**generate_mcp_asymp_plot_params)
-    .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_mcp_asymp_values)
+    .mapvalues(
+        argnames=["relocations_gdf", "seasons_df"], argvalues=zip_mcp_asymp_values
+    )
 )
 
 
@@ -2554,9 +2529,7 @@ zip_traj_etd_gdf = (
 # %%
 # parameters
 
-generate_subject_stats_params = dict(
-    return_dataframe=...,
-)
+generate_subject_stats_params = dict()
 
 # %%
 # call the task
@@ -2752,7 +2725,7 @@ convt_range_html_png = (
     html_to_png.handle_errors(task_instance_id="convt_range_html_png")
     .partial(
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        config={"wait_for_timeout": 20, "width": 765, "height": 525},
+        config={"wait_for_timeout": 200, "width": 765, "height": 525},
         **convt_range_html_png_params,
     )
     .mapvalues(argnames=["html_path"], argvalues=persist_hr_ecomap_urls)
@@ -2775,7 +2748,7 @@ convt_speedmap_html_png = (
     html_to_png.handle_errors(task_instance_id="convt_speedmap_html_png")
     .partial(
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        config={"wait_for_timeout": 20, "width": 765, "height": 525},
+        config={"wait_for_timeout": 200, "width": 765, "height": 525},
         **convt_speedmap_html_png_params,
     )
     .mapvalues(argnames=["html_path"], argvalues=persist_speed_ecomap_urls)
@@ -2798,7 +2771,7 @@ convt_seasons_html_png = (
     html_to_png.handle_errors(task_instance_id="convt_seasons_html_png")
     .partial(
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        config={"wait_for_timeout": 20, "width": 602, "height": 855},
+        config={"wait_for_timeout": 200, "width": 602, "height": 855},
         **convt_seasons_html_png_params,
     )
     .mapvalues(argnames=["html_path"], argvalues=season_etd_ecomap_html_url)

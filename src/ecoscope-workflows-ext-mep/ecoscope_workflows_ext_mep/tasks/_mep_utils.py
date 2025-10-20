@@ -3,7 +3,9 @@ import json
 import time
 import base64
 import jinja2
+import zipfile
 import hashlib
+import logging
 import ecoscope
 import numpy as np
 import pandas as pd
@@ -37,6 +39,9 @@ from typing import Sequence, Tuple, Union, Annotated, cast, Optional, Dict, List
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AdvancedField, AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.tasks.analysis import calculate_elliptical_time_density
 
+logger = logging.getLogger(__name__)
+
+
 class AutoScaleGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Auto-scale"})
     auto_scale_or_custom: Annotated[
@@ -69,45 +74,74 @@ class CustomGridCellSize(BaseModel):
         ),
     ] = 5000
 
+def normalize_file_url(path: str) -> str:
+    """Convert file:// URL to local path, handling malformed Windows URLs."""
+    if not path.startswith("file://"):
+        return path
+
+    path = path[7:]
+    
+    if os.name == 'nt':
+        # Remove leading slash before drive letter: /C:/path -> C:/path
+        if path.startswith('/') and len(path) > 2 and path[2] in (':', '|'):
+            path = path[1:]
+
+        path = path.replace('/', '\\')
+        path = path.replace('|', ':')
+    else:
+        if not path.startswith('/'):
+            path = '/' + path
+    return path
+
+def encode_image_to_base64(image_path: str) -> str:
+    """Convert an image file to base64 data URI."""
+    try:
+        path = Path(image_path).resolve()
+        if not path.exists():
+            logger.error(f"Image file not found: {image_path}")
+            return ""
+        
+        with open(path, "rb") as img_file:
+            encoded = base64.b64encode(img_file.read()).decode('utf-8')
+        ext = path.suffix.lower()
+        mime_type = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.svg': 'image/svg+xml',
+            '.webp': 'image/webp',
+        }.get(ext, 'image/png')
+        
+        return f'data:{mime_type};base64,{encoded}'
+    except Exception as e:
+        logger.error(f"Error encoding image {image_path}: {e}")
+        return ""
+
 @task
 def get_area_bounds(
     gdf: AnyGeoDataFrame,
     names: Union[str, Sequence[str]],
     column: str,
 ) -> Tuple[float, float, float, float]:
-    """
-    Return (xmin, ymin, xmax, ymax) for all rows where `gdf[column]` matches any of `names`.
+    """Return (xmin, ymin, xmax, ymax) for all rows where `gdf[column]` matches any of `names`"""
 
-    Parameters
-    ----------
-    gdf : AnyGeoDataFrame
-        GeoDataFrame containing polygon geometries.
-    names : str or list of str
-        Value(s) to match in the specified column.
-    column : str
-        Column name to filter on.
-
-    Returns
-    -------
-    (xmin, ymin, xmax, ymax) : tuple of float
-        Bounding box coordinates for the selected rows.
-    """
     if column not in gdf.columns:
-        raise KeyError(f"Column '{column}' not found. Available: {list(gdf.columns)}")
+        raise KeyError(f"`get_area_bounds`:Column '{column}' not found. Available: {list(gdf.columns)}")
 
-    # Normalize names to a list
     if isinstance(names, str):
         names = [names]
     if not names:
-        raise ValueError("`names` must not be empty.")
-
+        raise ValueError("`get_area_bounds`:`names` column must not be empty.")
     subset = gdf[gdf[column].isin(names)]
+
     if subset.empty:
-        raise ValueError(f"No match found for {names} in column '{column}'.")
+        raise ValueError(f"`get_area_bounds`:No match found for {names} in column '{column}'.")
 
     xmin, ymin, xmax, ymax = subset.total_bounds
     return xmin, ymin, xmax, ymax
 
+# doesnt exist on workflows yet
 @task
 def get_subjects_info(
     client: EarthRangerClient,
@@ -165,33 +199,36 @@ def get_subjects_info(
 
     if raise_on_empty and df.empty:
         raise ValueError("No data returned from EarthRanger for get_subjects")
-
     return df
 
 @task
 def download_profile_photo(
-    df: AnyDataFrame,
+    subject_df: AnyDataFrame,
     column: str,
-    output_path: Union[str, Path],
+    output_path: Union[str, Path] = None,
     image_type: str = ".png",
     overwrite_existing: bool = True,
 ) -> Optional[str]:
-    if output_path.startswith("file://"):
-        parsed = urlparse(output_path)
-        output_path = url2pathname(parsed.path)
-    if column not in df.columns:
-        raise KeyError(f"Column '{column}' not found. Available: {list(df.columns)}")
 
-    output_path = Path(output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
+    if output_path is None or str(output_path).strip() == "":
+        output_path = os.getcwd()
+    else:
+        output_path = str(output_path).strip()
 
-    for idx, url in df[column].dropna().items():
+    output_path = normalize_file_url(output_path)
+    output_path = Path(output_path) 
+    output_path.mkdir(parents=True, exist_ok=True) 
+
+    if column not in subject_df.columns:
+        raise KeyError(f"`download_profile_photo`: Column '{column}' not found. Available: {list(subject_df.columns)}") 
+
+    for idx, url in subject_df[column].dropna().items():
         if not isinstance(url, str) or not url.startswith(("http://", "https://")):
-            print(f"Skipping invalid URL at index {idx}: {url}")
+            logger.warning(f"Skipping invalid URL at index {idx}: {url}")
             continue
 
         try:
-            df_subset = df.loc[[idx]]
+            df_subset = subject_df.loc[[idx]]
             row_hash = hashlib.sha256(pd.util.hash_pandas_object(df_subset, index=True).values).hexdigest()
             filename = f"{row_hash[:8]}_{idx}"
 
@@ -201,13 +238,12 @@ def download_profile_photo(
             file_path = output_path / f"{filename}{image_type}"
             processed_url = url.replace("dl=0", "dl=1") if "dropbox.com" in url else url
             ecoscope.io.utils.download_file(processed_url, str(file_path), overwrite_existing)
-            print(f"Downloaded profile photo for index {idx} to {file_path}")
+            logger.info(f"Downloaded profile photo for index {idx} to {file_path}")
         except Exception as e:
-            print(f"Error processing URL at index {idx} ({url}): {e}")
+            logger.error(f"Error processing URL at index {idx} ({url}): {e}") 
             continue
+    
     return str(file_path) if "file_path" in locals() else None
-
-
 def safe_strip(x) -> str:
     return "" if x is None else str(x).strip()
 
@@ -231,49 +267,34 @@ def format_date(date_str: str) -> str:
 
 @task
 def generate_subject_info(
-    df: AnyDataFrame,
+    subject_df: AnyDataFrame,
     output_path: Union[str, Path],
     maxlen: int = 1000,
     return_data: bool = True,
 ) -> Optional[AnyDataFrame]:
-    """
-    Process and persist subject information to JSON, optionally returning as DataFrame.
+
+    if output_path is None or str(output_path).strip() == "":
+        output_path = os.getcwd()
+    else:
+        output_path = str(output_path).strip()
+    output_path = normalize_file_url(output_path)
+    os.makedirs(output_path,exist_ok=True)
     
-    Args:
-        df: Input DataFrame containing subject information
-        output_path: Directory path to save the JSON file
-        maxlen: Maximum length for bio text truncation
-        return_data: If True, return processed data as DataFrame
-        
-    Returns:
-        Processed DataFrame if return_data=True, else None
-    """
-    if df.empty:
-        raise ValueError("DataFrame is empty")
-
-    if output_path.startswith("file://"):
-        parsed = urlparse(output_path)
-        output_path = url2pathname(parsed.path)
-
+    if subject_df.empty:
+        raise ValueError("`generate_subject_info`:DataFrame is empty")
+    
     required_columns = [
-        "subject_name",
-        "subject_bio",
-        "date_of_birth",
-        "subject_sex",
-        "notes",
-        "country",
-        "distribution",
+        "subject_name","subject_bio","date_of_birth",
+        "subject_sex","notes","country","distribution",
         "status",
     ]
-    missing = [c for c in required_columns if c not in df.columns]
+
+    missing = [c for c in required_columns if c not in subject_df.columns]
     if missing:
         raise KeyError(
             f"Required columns {missing} don't exist in the dataframe. "
-            f"Available columns: {list(df.columns)}"
+            f"Available columns: {list(subject_df.columns)}"
         )
-
-    output_path = Path(output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
 
     def process_single_subject(row: pd.Series) -> Dict[str, str]:
         bio = safe_strip(row.get("subject_bio", ""))
@@ -298,7 +319,7 @@ def generate_subject_info(
         return {k: ("" if v is None else str(v)) for k, v in subject_info.items()}
 
     # Process all rows into a list of dicts
-    processed_records = [process_single_subject(row) for _, row in df.iterrows()]
+    processed_records = [process_single_subject(row) for _, row in subject_df.iterrows()]
     return cast(AnyDataFrame, pd.DataFrame(processed_records))
 
 @task
@@ -308,16 +329,12 @@ def split_gdf_by_column(
 ) -> Dict[str, AnyGeoDataFrame]:
     """
     Splits a GeoDataFrame into a dictionary of GeoDataFrames based on unique values in the specified column.
-
-    Args:
-        gdf (gpd.GeoDataFrame): The GeoDataFrame to split.
-        column (str): The column to split by.
-
-    Returns:
-        Dict[str, gpd.GeoDataFrame]: Dictionary where keys are unique values of the column are GeoDataFrames.
     """
+    if gdf is None or gdf.empty:
+        raise ValueError("`split_gdf_by_column`:gdf is empty.")
+
     if column not in gdf.columns:
-        raise ValueError(f"Column '{column}' not found in GeoDataFrame.")
+        raise ValueError(f"`split_gdf_by_column`:Column '{column}' not found in GeoDataFrame.")
 
     grouped = {str(k): v for k, v in gdf.groupby(column)}
     return grouped
@@ -331,24 +348,21 @@ def generate_mcp_gdf(
     Create a Minimum Convex Polygon (MCP) from input point geometries and compute its area.
     """
     if gdf is None or gdf.empty:
-        raise ValueError("Input GeoDataFrame is empty.")
+        raise ValueError("`generate_mcp_gdf`:gdf is empty.")
     if gdf.geometry is None:
-        raise ValueError("Input GeoDataFrame has no 'geometry' column.")
+        raise ValueError("`generate_mcp_gdf`:gdf has no 'geometry' column.")
     if gdf.crs is None:
-        raise ValueError("Input GeoDataFrame must have a CRS set (e.g., EPSG:4326).")
+        raise ValueError("`generate_mcp_gdf`:gdf must have a CRS set (e.g., EPSG:4326).")
 
     original_crs = gdf.crs
-
-    # Filter out empty or null geometries
     valid_points_gdf = gdf[~gdf.geometry.is_empty & gdf.geometry.notnull()].copy()
     if valid_points_gdf.empty:
-        raise ValueError("No valid geometries in input GeoDataFrame.")
-
-    # Ensure only points (fallback: centroid of non-point geometries)
-    if not all(valid_points_gdf.geometry.geom_type.isin(["Point"])):
-        valid_points_gdf.geometry = valid_points_gdf.geometry.centroid
-
+        raise ValueError("`generate_mcp_gdf`:No valid geometries in gdf.")
+    
     projected_gdf = valid_points_gdf.to_crs(planar_crs)
+    if not all(projected_gdf.geometry.geom_type.isin(["Point"])):
+        projected_gdf.geometry = projected_gdf.geometry.centroid
+
     convex_hull = projected_gdf.geometry.unary_union.convex_hull
 
     area_sq_meters = float(convex_hull.area)
@@ -356,72 +370,64 @@ def generate_mcp_gdf(
     convex_hull_original_crs = gpd.GeoSeries([convex_hull], crs=planar_crs).to_crs(original_crs).iloc[0]
 
     result_gdf = gpd.GeoDataFrame(
-        {"area_m2": [area_sq_meters], "area_km2": [area_sq_km], "mcp": "mcp"},
+        {
+            "area_m2": [area_sq_meters], 
+            "area_km2": [area_sq_km], 
+            "mcp": "mcp"
+        },
         geometry=[convex_hull_original_crs],
         crs=original_crs,
     )
     return result_gdf
 
 @task
-def create_seasonal_labels(traj: AnyGeoDataFrame, total_percentiles: AnyDataFrame) -> Optional[AnyGeoDataFrame]:
+def create_seasonal_labels(
+    traj: AnyGeoDataFrame, 
+    total_percentiles: AnyDataFrame
+    ) -> Optional[AnyGeoDataFrame]:
     """
     Annotates trajectory segments with seasonal labels (wet/dry) based on NDVI-derived windows.
     Applies to the entire trajectory without grouping.
     """
     try:
-        print("Calculating seasonal ETD percentiles for entire trajectory")
-        print(f"Total percentiles shape: {total_percentiles.shape}")
-        print(f"Available seasons: {total_percentiles['season'].unique()}")
+        if traj is None or traj.empty:
+            raise ValueError("`create_seasonal_labels`:traj gdf is empty.")
+        if total_percentiles is None or total_percentiles.empty:
+            raise ValueError("`create_seasonal_labels `:total_percentiles df is empty.")
 
-        # Since total_percentiles contains the seasonal windows directly,
-        # we don't need determine_season_windows() - we can use it directly
         seasonal_wins = total_percentiles.copy()
-
-        # Filter to trajectory time range if needed
         traj_start = traj["segment_start"].min()
         traj_end = traj["segment_end"].max()
 
-        # Keep only seasonal windows that overlap with trajectory timeframe
         seasonal_wins = seasonal_wins[
             (seasonal_wins["end"] >= traj_start) & (seasonal_wins["start"] <= traj_end)
         ].reset_index(drop=True)
 
-        print(f"Filtered seasonal windows: {len(seasonal_wins)} periods")
-        print(f"Seasonal Windows:\n{seasonal_wins[['start', 'end', 'season']]}")
+        logger.info(f"Filtered seasonal windows: {len(seasonal_wins)} periods")
+        logger.info(f"Seasonal Windows:\n{seasonal_wins[['start', 'end', 'season']]}")
 
         if seasonal_wins.empty:
-            print("No seasonal windows overlap with trajectory timeframe.")
+            logger.error("No seasonal windows overlap with trajectory timeframe.")
             traj["season"] = None
             return traj
 
-        # Create interval index
         season_bins = pd.IntervalIndex(data=seasonal_wins.apply(lambda x: pd.Interval(x["start"], x["end"]), axis=1))
-        print(f"Created {len(season_bins)} seasonal bins")
+        logger.info(f"Created {len(season_bins)} seasonal bins")
 
         labels = seasonal_wins["season"].values
-
-        # Use pd.cut to assign segments to seasonal bins
         traj["season"] = pd.cut(traj["segment_start"], bins=season_bins, include_lowest=True).map(
             dict(zip(season_bins, labels))
         )
-
-        # Handle segments that fall outside seasonal windows
         null_count = traj["season"].isnull().sum()
         if null_count > 0:
-            print(f"Warning: {null_count} trajectory segments couldn't be assigned to any season")
+            logger.warning(f"Warning: {null_count} trajectory segments couldn't be assigned to any season")
 
-        print("Seasonal labeling complete. Season distribution:")
-        print(traj["season"].value_counts(dropna=False))
-
+        logger.info("Seasonal labeling complete. Season distribution:")
+        logger.info(traj["season"].value_counts(dropna=False))
         return traj
-
     except Exception as e:
-        print(f"Failed to apply seasonal label to trajectory: {e}")
-        import traceback
-
-        traceback.print_exc()
+        logger.error(f"Failed to apply seasonal label to trajectory: {e}")
         return None
-
 
 def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
     """
@@ -451,7 +457,7 @@ def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
         season_type = row.get("season", "").strip().lower()
 
         # Season-based fill color
-        fillcolor = {"wet": "rgba(0,0,255,0.25)", "dry": "rgba(0,0,255,0.05)"}.get(season_type, "rgba(0,0,0,0.05)")
+        fillcolor = {"wet": "rgba(0,0,255,0.15)", "dry": "rgba(0,0,255,0.05)"}.get(season_type, "rgba(0,0,0,0.05)")
 
         fig.add_shape(
             type="rect",
@@ -479,11 +485,17 @@ def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
     return fig
 
 def _load_seasons_df(seasons_df: Union[str, Path, AnyDataFrame]) -> AnyDataFrame:
-    if seasons_df is None:
-        raise ValueError("Seasonal windows input is None.")
-    p = Path(seasons_df)
-    if not p.exists():
-        raise FileNotFoundError(f"Seasonal windows file not found: {p}")
+    # Check if it's already a DataFrame
+    if isinstance(seasons_df, pd.DataFrame):
+        return seasons_df
+    
+    # Normalize the path and convert to Path object
+    normalized_path = normalize_file_url(str(seasons_df))
+    p = Path(normalized_path)
+    
+    # testing 
+    print(f"`_load_seasons_df`:path:{p}")
+    
     if p.suffix.lower() in {".csv"}:
         return pd.read_csv(p)
     elif p.suffix.lower() in {".parquet"}:
@@ -491,13 +503,9 @@ def _load_seasons_df(seasons_df: Union[str, Path, AnyDataFrame]) -> AnyDataFrame
     else:
         return pd.read_csv(p)
 
-def _validate_seasons_df(df: AnyDataFrame) -> None:
-    if df.empty:
-        raise ValueError("Seasonal windows DataFrame is empty.")
-
 @task
 def generate_seasonal_nsd_plot(
-    gdf: AnyGeoDataFrame,
+    relocations_gdf: AnyGeoDataFrame,
     seasons_df: Union[str, Path, AnyDataFrame],
     widget_id: Annotated[
         str | None,
@@ -510,21 +518,19 @@ def generate_seasonal_nsd_plot(
         ),
     ] = None,
 ) -> Annotated[str, Field()]:
-    if gdf is None or getattr(gdf, "empty", True):
-        raise ValueError("Input GeoDataFrame is empty.")
+
+    if relocations_gdf is None or relocations_gdf.empty:
+        raise ValueError("`generate_seasonal_nsd_plot`:Relocations gdf is empty.")
 
     seasons_df = _load_seasons_df(seasons_df)
-    _validate_seasons_df(seasons_df)
-
-    gdf = Relocations.from_gdf(gdf)
-    figure = nsd(gdf)
+    relocations_gdf = Relocations.from_gdf(relocations_gdf)
+    figure = nsd(relocations_gdf)
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
-
 
 @task
 def generate_seasonal_speed_plot(
-    gdf: AnyGeoDataFrame,
+    relocations_gdf: AnyGeoDataFrame,
     seasons_df: Union[str, Path, AnyDataFrame],
     widget_id: Annotated[
         str | None,
@@ -537,22 +543,20 @@ def generate_seasonal_speed_plot(
         ),
     ] = None,
 ) -> Annotated[str, Field()]:
-    if gdf is None or getattr(gdf, "empty", True):
-        raise ValueError("Input GeoDataFrame is empty.")
+
+    if relocations_gdf is None or relocations_gdf.empty:
+        raise ValueError("`generate_seasonal_speed_plot`:Relocations gdf is empty.")
 
     seasons_df = _load_seasons_df(seasons_df)
-    _validate_seasons_df(seasons_df)
-
-    gdf = Relocations.from_gdf(gdf)
-    trajs = Trajectory.from_relocations(gdf)
-    figure = ecoscope.plotting.speed(trajs)
+    relocations_gdf = Relocations.from_gdf(relocations_gdf)
+    trajs_gdf = Trajectory.from_relocations(relocations_gdf)
+    figure = ecoscope.plotting.speed(trajs_gdf)
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
-
 @task
 def generate_seasonal_mcp_asymptote_plot(
-    gdf: AnyGeoDataFrame,
+    relocations_gdf: AnyGeoDataFrame,
     seasons_df: Union[str, Path, AnyDataFrame],
     widget_id: Annotated[
         str | None,
@@ -565,14 +569,12 @@ def generate_seasonal_mcp_asymptote_plot(
         ),
     ] = None,
 ) -> Annotated[str, Field()]:
-    if gdf is None or getattr(gdf, "empty", True):
-        raise ValueError("Input GeoDataFrame is empty.")
+    if relocations_gdf is None or relocations_gdf.empty:
+        raise ValueError("`generate_seasonal_mcp_asymptote_plot`:Relocations gdf is empty.")
 
     seasons_df = _load_seasons_df(seasons_df)
-    _validate_seasons_df(seasons_df)
-
-    gdf = Relocations.from_gdf(gdf)
-    figure = ecoscope.plotting.mcp(gdf)
+    relocations_gdf = Relocations.from_gdf(relocations_gdf)
+    figure = ecoscope.plotting.mcp(relocations_gdf)
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
@@ -582,16 +584,18 @@ def collar_event_timeline_plot(
 ) -> go.FigureWidget:
 
     fig = go.FigureWidget()
-    
-    # Validate and clean relocations
+    if  geodataframe is None or geodataframe.empty:
+        raise ValueError("`collar_event_timeline_plot`:Relocations gdf is empty.")
+
+    required_cols = ["fixtime"]
+    missing_cols = [col for col in required_cols if col not in geodataframe.columns]
+    if missing_cols:
+        raise ValueError(f"`collar_event_timeline_plot`:Missing required columns: {missing_cols}")
+
     geodataframe = geodataframe.dropna(subset=["fixtime"]).copy()
-    if geodataframe.empty:
-        raise ValueError("No valid relocations after removing NaT values.")
     
-    # Determine time range
     time_min = geodataframe["fixtime"].min()
     time_max = geodataframe["fixtime"].max()
-    
     max_event_y = 0
     
     # Plot events if available
@@ -662,7 +666,6 @@ def collar_event_timeline_plot(
         hovermode="closest",
         plot_bgcolor="white",
     )
-    
     return fig
 
 @task 
@@ -683,28 +686,26 @@ def generate_collared_seasonal_plot(
     ] = None,
 ) -> Annotated[str, Field()]:
     seasons_df = _load_seasons_df(seasons_df)
-    _validate_seasons_df(seasons_df)
 
     if relocations_gdf is None or relocations_gdf.empty:
-        raise ValueError("Relocations GeoDataFrame is empty.")
+        raise ValueError("`generate_collared_seasonal_plot`:Relocations gdf is empty.")
 
     subject_name = relocations_gdf['subject_name'].unique()[0]
 
     if events_gdf is None or events_gdf.empty:
-        print(f"No events data for subject '{subject_name}'. Generating plot with relocations only.")
+        logger.warning(f"`generate_collared_seasonal_plot`:No events data for subject '{subject_name}'.")
         events_gdf = None
     elif filter_col not in events_gdf.columns:
-        raise ValueError(f"Column '{filter_col}' not found. Available: {', '.join(events_gdf.columns)}")
+        raise ValueError(f"`generate_collared_seasonal_plot`:Column '{filter_col}' not found. Available: {', '.join(events_gdf.columns)}")
     else:
         events_gdf = events_gdf[events_gdf[filter_col] == subject_name]
         if events_gdf.empty:
-            print(f"No events found for subject '{subject_name}'. Generating plot with relocations only.")
+            logger.warning(f"`generate_collared_seasonal_plot`:No events found for subject '{subject_name}'.")
             events_gdf = None
     
     # Generate visualization with or without events
     fig = collar_event_timeline_plot(relocations_gdf, events_gdf)
     figure = add_seasons_square(fig, seasons_df)
-    
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
 @task
@@ -720,17 +721,16 @@ def compute_maturity(
     ] = "fixtime",
 ):
 
-    if relocations_gdf is None or getattr(relocations_gdf, "empty", True):
-        raise ValueError("Input GeoDataFrame is empty.")
+    if relocations_gdf is None or relocations_gdf.empty:
+        raise ValueError("`compute_maturity`:Relocations gdf is empty.")
     if "groupby_col" not in relocations_gdf.columns:
-        raise ValueError("Input GeoDataFrame must contain 'groupby_col' column.")
+        raise ValueError("`compute_maturity`:Relocations gdf must contain 'groupby_col' column.")
     if time_column not in relocations_gdf.columns:
-        raise ValueError(f"Input GeoDataFrame must contain '{time_column}' column.")
+        raise ValueError(f"`compute_maturity`:Relocations gdf must contain '{time_column}' column.")
 
     df = relocations_gdf[["groupby_col", time_column]].copy()
     df[time_column] = pd.to_datetime(df[time_column], errors="coerce")
     df = df.dropna(subset=[time_column])
-
     span = (
         df.groupby("groupby_col", dropna=False)[time_column]
           .agg(first="min", last="max")
@@ -741,71 +741,32 @@ def compute_maturity(
     subject_df["mature"] = subject_df["mature"].fillna(False)
     return subject_df
 
-# def safe_json_serialize(obj: Any) -> Any:
-#     """Convert objects to JSON-serializable types"""
-#     if isinstance(obj, (np.integer, np.int64, np.int32)):
-#         return int(obj)
-#     elif isinstance(obj, (np.floating, np.float64, np.float32)):
-#         return float(obj)
-#     elif isinstance(obj, np.bool_):
-#         return bool(obj)
-#     elif isinstance(obj, np.ndarray):
-#         return obj.tolist()
-#     elif pd.isna(obj):
-#         return None
-#     elif isinstance(obj, dict):
-#         return {k: safe_json_serialize(v) for k, v in obj.items()}
-#     elif isinstance(obj, (list, tuple)):
-#         return [safe_json_serialize(item) for item in obj]
-#     else:
-#         return obj
-
 @task
 def get_subject_stats(
     traj_gdf: AnyGeoDataFrame,
     subject_df: AnyDataFrame,
     etd_df: AnyGeoDataFrame,
-    output_path: Union[str, Path],
     groupby_col: str,
-    return_dataframe: bool = True,
+    output_path: Union[str, Path]=None,
 ) ->AnyDataFrame:
-    """
-    Calculate comprehensive statistics for a single subject's trajectory.
-    
-    Args:
-        traj_gdf: GeoDataFrame containing trajectory data
-        subject_df: DataFrame with subject metadata (including 'mature' column)
-        etd_df: GeoDataFrame with ETD area data
-        output_path: Directory path to save the JSON file
-        groupby_col: Column name identifying the subject
-        return_dataframe: If True, return results as DataFrame (default: True)
-        
-    Returns:
-        Dictionary or DataFrame with computed statistics
-        
-    Raises:
-        ValueError: If input data is invalid or multiple subjects detected
-    """
-    # Handle file:// URLs
-    if isinstance(output_path, str) and output_path.startswith("file://"):
-        parsed = urlparse(output_path)
-        output_path = url2pathname(parsed.path)
+    if output_path is None or str(output_path).strip() == "":
+        output_path = os.getcwd()
+    else:
+        output_path = str(output_path).strip()
 
-    output_dir = Path(output_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = normalize_file_url(output_path)
 
-    # Input validation
-    if traj_gdf is None or getattr(traj_gdf, "empty", True):
-        raise ValueError("`traj_gdf` is empty.")
+    if traj_gdf is None or traj_gdf.empty:
+        raise ValueError("`get_subject_stats`:`traj_gdf` is empty.")
 
     if "geometry" not in traj_gdf.columns:
-        raise ValueError("`traj_gdf` must have a geometry column.")
+        raise ValueError("`get_subject_stats`:`traj_gdf` must have a geometry column.")
 
     if groupby_col not in traj_gdf.columns:
-        raise ValueError(f"`traj_gdf` must contain '{groupby_col}'.")
+        raise ValueError(f"`get_subject_stats`:`traj_gdf` must contain '{groupby_col}'.")
         
     if "segment_start" not in traj_gdf.columns:
-        raise ValueError("`traj_gdf` must contain a 'segment_start' datetime column.")
+        raise ValueError("`get_subject_stats`:`traj_gdf` must contain a 'segment_start' datetime column.")
 
     # Parse datetime column
     traj_gdf = traj_gdf.copy()
@@ -872,9 +833,12 @@ def get_subject_stats(
     summarized = analysis.summarize_df(traj_ll, summary_params, groupby_cols=None)
     night_day_ratio = round(float(summarized["night_day_ratio"].iloc[0]), 2)
 
+    # get subject name
+    name = traj_gdf["subject_name"].unique()[0]
     # Compile statistics
     stats = {
         "subject_id": str(subject_id), 
+        "name": str(name),
         "mature": bool(mature),   
         "MCP": float(mcp_km2), 
         "ETD": float(etd_km2), 
@@ -886,7 +850,6 @@ def get_subject_stats(
     }
     return cast(AnyDataFrame, pd.DataFrame([stats]))
     
-
 @task
 def calculate_seasonal_home_range(
     gdf: AnyGeoDataFrame,
@@ -917,10 +880,10 @@ def calculate_seasonal_home_range(
         groupby_cols = ["groupby_col", "season"]
     
     if gdf is None or gdf.empty:
-        raise ValueError("Input GeoDataFrame is empty.")
+        raise ValueError("`calculate_seasonal_home_range`:gdf is empty.")
     
     if 'season' not in gdf.columns:
-        raise ValueError("Input GeoDataFrame must have a 'season' column.")
+        raise ValueError("`calculate_seasonal_home_range`:gdf must have a 'season' column.")
     
     if auto_scale_or_custom_cell_size is None:
         auto_scale_or_custom_cell_size = AutoScaleGridCellSize()
@@ -944,12 +907,12 @@ def calculate_seasonal_home_range(
             ),
             include_groups=False,
         )
-    # Reset index properly
+
     if isinstance(season_etd.index, pd.MultiIndex):
         season_etd = season_etd.reset_index()
-
     return season_etd
-    
+
+
 # very specific to LandDx db 
 @task
 def build_template_region_lookup(
@@ -961,7 +924,7 @@ def build_template_region_lookup(
     Build a lookup dictionary grouping region IDs by category type.
     """
     if gdf is None or gdf.empty:
-        raise ValueError("gdf cannot be empty.")
+        raise ValueError("`build_template_region_lookup`:gdf cannot be empty.")
 
     gdf = gdf.reset_index()
 
@@ -985,9 +948,7 @@ def build_template_region_lookup(
         mask = gdf["type"].isin(types) & gdf["type"].notna() & ~gdf.is_empty
         result[name] = gdf.loc[mask, "globalid"].dropna().tolist()
 
-    # Merge static IDs
     result.update(static_ids)
-
     return result
 
 @task
@@ -1009,38 +970,18 @@ def compute_subject_occupancy(
     regions_gdf: Dict[str, Union[Polygon, MultiPolygon]],
     output_path: Union[str, Path],
 ) -> AnyDataFrame:
-    """
-    Compute subject occupancy percentages across different regions.
-    
-    Args:
-        subjects_df: DataFrame containing subject information
-        crs: Target coordinate reference system
-        etd_gdf: GeoDataFrame with ETD (ecological temporal distribution) data
-        regions_gdf: Dictionary mapping region names to their geometries
-        output_path: Directory path to save the JSON file
-        return_dataframe: If True, return results as DataFrame (default: True)
-        
-    Returns:
-        Dictionary or DataFrame with occupancy percentages by region
-        
-    Raises:
-        ValueError: If input data is empty or invalid
-    """
-    # Input validation
-    if subjects_df is None or subjects_df.empty:
-        raise ValueError("Subjects dataframe is empty.")
-    if etd_gdf is None or etd_gdf.empty:
-        raise ValueError("ETD GeoDataFrame is empty.")
-    if regions_gdf is None or not regions_gdf:
-        raise ValueError("Regions dictionary is empty.")
+    if output_path is None or str(output_path).strip() == "":
+        output_path = os.getcwd()
+    else:
+        output_path = str(output_path).strip()
 
-    # Handle file:// URLs
-    if isinstance(output_path, str) and output_path.startswith("file://"):
-        parsed = urlparse(output_path)
-        output_path = url2pathname(parsed.path)
-    
-    output_path = Path(output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
+    output_path = normalize_file_url(output_path)
+    if subjects_df is None or subjects_df.empty:
+        raise ValueError("`compute_subject_occupancy`:Subjects dataframe is empty.")
+    if etd_gdf is None or etd_gdf.empty:
+        raise ValueError("`compute_subject_occupancy`:ETD GeoDataFrame is empty.")
+    if regions_gdf is None or not regions_gdf:
+        raise ValueError("`compute_subject_occupancy`:Regions dictionary is empty.")
     
     subject_id = subjects_df['subject_name'].iloc[0]
     
@@ -1049,7 +990,7 @@ def compute_subject_occupancy(
         percentile_mask = etd_gdf['percentile'] == 99.9
         if not percentile_mask.any():
             raise ValueError(
-                f"No 99.9th percentile found for subject '{subject_id}'. "
+                f"`compute_subject_occupancy`:No 99.9th percentile found for subject '{subject_id}'. "
                 f"Available percentiles: {sorted(etd_gdf['percentile'].unique().tolist())}"
             )
         
@@ -1057,22 +998,22 @@ def compute_subject_occupancy(
         
     except (IndexError, KeyError) as e:
         raise ValueError(
-            f"Could not extract 99.9th percentile ETD for subject '{subject_id}'. "
+            f"`compute_subject_occupancy`:Could not extract 99.9th percentile ETD for subject '{subject_id}'. "
             f"Available percentiles: {etd_gdf['percentile'].unique().tolist()}"
         ) from e
     
     if subject_range.is_empty:
-        raise ValueError(f"Home range geometry is empty for subject '{subject_id}'.")
+        raise ValueError(f"`compute_subject_occupancy`:Home range geometry is empty for subject '{subject_id}'.")
     total_area = subject_range.area
     if total_area == 0:
-        raise ValueError(f"Home range has zero area for subject '{subject_id}'.")
+        raise ValueError(f"`compute_subject_occupancy`:Home range has zero area for subject '{subject_id}'.")
     occupancy = {}
     for region_name, region_geom in regions_gdf.items():
         try:
             intersection_area = region_geom.intersection(subject_range).area
             occupancy[region_name] = 100 * (intersection_area / total_area)
         except Exception as e:
-            print(f"Warning: Failed to compute intersection for region '{region_name}': {e}")
+            logger.error(f"Warning: Failed to compute intersection for region '{region_name}': {e}")
             occupancy[region_name] = 0.0
 
     # Calculate unprotected area
@@ -1082,127 +1023,125 @@ def compute_subject_occupancy(
     occupancy = {k: round(v, 1) for k, v in occupancy.items()}
     return cast(AnyDataFrame, pd.DataFrame([occupancy]))
 
-
 @task
 def download_file_and_persist(
     url: Annotated[str, Field(description="URL to download the file from")],
-    output_path: Annotated[str, Field(description="Path to save the downloaded file or directory")],
+    output_path: Annotated[
+        Optional[str], 
+        Field(
+            description="Path to save the downloaded file or directory. Defaults to current working directory")
+            ] = None,
     retries: Annotated[int, Field(description="Number of retries on failure", ge=0)] = 3,
     overwrite_existing: Annotated[bool, Field(description="Whether to overwrite existing files")] = False,
     unzip: Annotated[bool, Field(description="Whether to unzip the file if it's a zip archive")] = False,
 ) -> str:
     """
     Downloads a file from the provided URL and persists it locally.
-    Returns the full path to the downloaded (and optionally unzipped) file.
+    If output_path is not specified, saves to the current working directory.
+    Returns the full path to the downloaded file, or if unzipped, the path to the extracted directory.
     """
-    if output_path.startswith("file://"):
-        parsed = urlparse(output_path)
-        output_path = url2pathname(parsed.path)
+    if output_path is None or str(output_path).strip() == "":
+        output_path = os.getcwd()
+    else:
+        output_path = str(output_path).strip()
 
-    output_dir = os.path.isdir(output_path)
+    output_path = normalize_file_url(output_path)
+    looks_like_dir = (
+        output_path.endswith(os.sep)
+        or output_path.endswith("/")
+        or output_path.endswith("\\")
+        or os.path.isdir(output_path)
+    )
 
-    # Determine expected filename BEFORE download
-    if output_dir:
+    if looks_like_dir:
+        # ensure directory exists
+        os.makedirs(output_path, exist_ok=True)
+
+        # determine filename from Content-Disposition or URL
         import requests, email
         try:
             s = requests.Session()
             r = s.head(url, allow_redirects=True, timeout=10)
-            m = email.message.Message()
-            m["content-type"] = r.headers.get("content-disposition", "")
-            filename = m.get_param("filename")
-            if filename is None:
-                filename = os.path.basename(urlparse(url).path.split("?")[0])
-            if not filename:  # Fallback if still empty
-                filename = "downloaded_file"
+            cd = r.headers.get("content-disposition", "")
+            filename = None
+            if cd:
+                # parse content-disposition safely
+                m = email.message.Message()
+                m["content-disposition"] = cd
+                filename = m.get_param("filename")
+            if not filename:
+                filename = os.path.basename(urlparse(url).path.split("?")[0]) or "downloaded_file"
         except Exception:
-            # If HEAD request fails, extract from URL
             filename = os.path.basename(urlparse(url).path.split("?")[0]) or "downloaded_file"
-        
-        # Pass the full path to download_file, not just the directory
+
         target_path = os.path.join(output_path, filename)
     else:
         target_path = output_path
 
-    # Perform download with the specific file path
-    download_file(
-        url=url,
-        path=target_path,
-        retries=retries,
-        overwrite_existing=overwrite_existing,
-        unzip=unzip
-    )
+    if not target_path or str(target_path).strip() == "":
+        raise ValueError("Computed download target path is empty. Check 'output_path' argument.")
 
-    # If unzipped, find the extracted files
-    if unzip and os.path.isdir(target_path.replace('.zip', '')):
-        persisted_path = str(Path(target_path.replace('.zip', '')).resolve())
+    # Store the parent directory to check for extracted content
+    parent_dir = os.path.dirname(target_path)
+    before_extraction = set()
+    if unzip:
+        if os.path.exists(parent_dir):
+            before_extraction = set(os.listdir(parent_dir))
+
+    # Do the download and bubble up useful context on failure
+    try:
+        download_file(
+            url=url,
+            path=target_path,
+            retries=retries,
+            overwrite_existing=overwrite_existing,
+            unzip=unzip,
+        )
+    except Exception as e:
+        # include debug info so callers can see what was attempted
+        raise RuntimeError(
+            f"download_file failed for url={url!r} path={target_path!r} retries={retries}. "
+            f"Original error: {e}"
+        ) from e
+
+    # Determine the final persisted path
+    if unzip and zipfile.is_zipfile(target_path):
+        after_extraction = set(os.listdir(parent_dir))
+        new_items = after_extraction - before_extraction
+        zip_filename = os.path.basename(target_path)
+        new_items.discard(zip_filename)
+        
+        if len(new_items) == 1:
+            new_item = new_items.pop()
+            new_item_path = os.path.join(parent_dir, new_item)
+            if os.path.isdir(new_item_path):
+                persisted_path = str(Path(new_item_path).resolve())
+            else:
+                persisted_path = str(Path(parent_dir).resolve())
+        elif len(new_items) > 1:
+            persisted_path = str(Path(parent_dir).resolve())
+        else:
+            extracted_dir = target_path.rsplit('.zip', 1)[0]
+            if os.path.isdir(extracted_dir):
+                persisted_path = str(Path(extracted_dir).resolve())
+            else:
+                persisted_path = str(Path(parent_dir).resolve())
     else:
         persisted_path = str(Path(target_path).resolve())
 
     if not os.path.exists(persisted_path):
-        # List what's actually in the directory for debugging
-        parent_dir = os.path.dirname(persisted_path)
-        if os.path.exists(parent_dir):
-            actual_files = os.listdir(parent_dir)
+        parent = os.path.dirname(persisted_path)
+        if os.path.exists(parent):
+            actual_files = os.listdir(parent)
             raise FileNotFoundError(
                 f"Download failed — {persisted_path} not found after execution. "
-                f"Files in {parent_dir}: {actual_files}"
+                f"Files in {parent}: {actual_files}"
             )
         else:
-            raise FileNotFoundError(f"Download failed — {persisted_path} not found after execution.")
-
+            raise FileNotFoundError(
+                f"Download failed — {persisted_path}. Parent dir missing: {parent}"
+            )
     return persisted_path
-
-@task
-def initialize_jinja_env(input_path: str) -> jinja2.Environment:
-    """
-    Initialize and return a Jinja2 environment for template rendering.
-    
-    Args:
-        input_path: Path to search for templates
-        
-    Returns:
-        jinja2.Environment: Configured Jinja2 environment instance
-    """
-    template_loader = jinja2.FileSystemLoader(searchpath=input_path)
-    template_env = jinja2.Environment(loader=template_loader)
-    return template_env
-
-
-
-def encode_image_to_base64(image_path: str) -> str:
-    """Convert an image file to base64 data URI.
-    
-    Args:
-        image_path: Path to the image file
-        
-    Returns:
-        Base64-encoded data URI string, or empty string if encoding fails
-    """
-    try:
-        path = Path(image_path).resolve()
-        if not path.exists():
-            print(f"Image file not found: {image_path}")
-            return ""
-        
-        with open(path, "rb") as img_file:
-            encoded = base64.b64encode(img_file.read()).decode('utf-8')
-        
-        # Detect image type from extension
-        ext = path.suffix.lower()
-        mime_type = {
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.gif': 'image/gif',
-            '.svg': 'image/svg+xml',
-            '.webp': 'image/webp',
-        }.get(ext, 'image/png')
-        
-        return f'data:{mime_type};base64,{encoded}'
-    except Exception as e:
-        print(f"Error encoding image {image_path}: {e}")
-        return ""
-
 
 @task
 def report_context(
@@ -1222,46 +1161,37 @@ def report_context(
     occupancy_info: str,
     templates: list[str],
 ) -> list[str]:
-    """Generate report context and render HTML templates with embedded images.
-    
-    Args:
-        input_path: Directory path for output files
-        subjects_df: DataFrame containing subject information
-        movement_ecomap: Path to movement ecomap image
-        range_ecomap: Path to range ecomap image
-        overview_map: Path to overview map image
-        nsd_plot: Path to NSD plot image
-        speed_plot: Path to speed plot image
-        mcp_plot: Path to MCP plot image
-        collar_event_timeline_plot: Path to collar event timeline plot image
-        logo: Path to logo image
-        subject_photo: Path to subject photo image
-        subject_info: Path to subject info CSV file
-        subject_stats: Path to subject stats CSV file
-        occupancy_info: Path to occupancy info CSV file
-        templates: List of template file paths
-        
-    Returns:
-        List of rendered HTML file paths
-    """
-    
-    # Input validation
+    if input_path is None or str(input_path).strip() == "":
+        input_path = os.getcwd()
+    else:
+        input_path = str(input_path).strip()
+
+    input_path = normalize_file_url(input_path)
+
+    # ensure all paths are normalized
+    movement_ecomap =normalize_file_url(movement_ecomap)
+    range_ecomap =normalize_file_url(range_ecomap)
+    overview_ecomap =normalize_file_url(overview_ecomap)
+    nsd_plot =normalize_file_url(nsd_plot)
+    speed_plot =normalize_file_url(speed_plot)
+    collar_event_timeline_plot =normalize_file_url(collar_event_timeline_plot)
+    logo =normalize_file_url(logo)
+    subject_photo =normalize_file_url(subject_photo)
+    subject_info =normalize_file_url(subject_info)
+    subject_stats =normalize_file_url(subject_stats)
+    occupancy_info = normalize_file_url(occupancy_info)
+
+    for template in templates:
+        template = normalize_file_url(template)
+
     if subjects_df is None or subjects_df.empty:
-        raise ValueError("Subjects DataFrame is empty.")
+        raise ValueError("`report_context`:Subjects df is empty.")
     
     required_cols = ["mature", "subject_name"]
     missing_cols = [col for col in required_cols if col not in subjects_df.columns]
     if missing_cols:
-        raise ValueError(f"Missing required columns: {missing_cols}")
-    
-    # Handle file:// URLs
-    if isinstance(input_path, str) and input_path.startswith("file://"):
-        parsed = urlparse(input_path)
-        input_path = url2pathname(parsed.path)
-    
-    output_dir = Path(input_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
+        raise ValueError(f"`report_context`:Missing required columns: {missing_cols}")
+        
     # Set template environment
     template_loader = jinja2.FileSystemLoader(searchpath=input_path)
     template_env = jinja2.Environment(loader=template_loader)
@@ -1273,41 +1203,41 @@ def report_context(
     try:
         subject_info_df = pd.read_csv(subject_info)
     except Exception as e:
-        raise ValueError(f"Failed to load subject_info CSV from '{subject_info}': {e}")
+        raise ValueError(f"`report_context`:Failed to load subject_info CSV from '{subject_info}': {e}")
     
     try:
         subject_stats_df = pd.read_csv(subject_stats)
     except Exception as e:
-        raise ValueError(f"Failed to load subject_stats CSV from '{subject_stats}': {e}")
+        raise ValueError(f"`report_context`:Failed to load subject_stats CSV from '{subject_stats}': {e}")
     
     try:
         occupancy_info_df = pd.read_csv(occupancy_info)
     except Exception as e:
-        raise ValueError(f"Failed to load occupancy_info CSV from '{occupancy_info}': {e}")
+        raise ValueError(f"`report_context`:Failed to load occupancy_info CSV from '{occupancy_info}': {e}")
     
     # Convert individual data DataFrames to dictionaries
     if not subject_info_df.empty:
         subject_info_dict = subject_info_df.iloc[0].to_dict()
         context.update(subject_info_dict)
     else:
-        raise ValueError("subject_info DataFrame is empty")
+        raise ValueError("`report_context`:subject_info df is empty")
     
     if not subject_stats_df.empty:
         subject_stats_dict = subject_stats_df.iloc[0].to_dict()
         context.update(subject_stats_dict)
     else:
-        print("Warning: subject_stats DataFrame is empty")
+        logger.warning("`report_context`: subject_stats df is empty")
     
     if not occupancy_info_df.empty:
         occupancy_dict = occupancy_info_df.iloc[0].to_dict()
         context["occupancy"] = occupancy_dict
     else:
-        print("Warning: occupancy_info DataFrame is empty")
+        logger.warning("`report_context`: occupancy_info df is empty")
     
     # Get subject-specific data
     subject_name = context.get("subject_name")
     if not subject_name:
-        raise ValueError("subject_name not found in subject_info")
+        raise ValueError("`report_context`:subject_name not found in subject_info")
     
     subject_row = subjects_df[subjects_df['subject_name'] == subject_name]
     if subject_row.empty:
@@ -1316,7 +1246,7 @@ def report_context(
     mature = bool(subject_row['mature'].iloc[0])
     context["mature"] = mature
     
-    print(f"\n=== Processing images for {subject_name} ===")
+    logger.info(f"\n=== Processing images for {subject_name} ===")
     
     # Add logo with base64 encoding
     logo_path = Path(logo).resolve()
@@ -1324,12 +1254,12 @@ def report_context(
         logo_base64 = encode_image_to_base64(str(logo_path))
         if logo_base64:
             context["logo_path"] = f'<img src="{logo_base64}" alt="Logo" style="max-height: 100px;"/>'
-            print(f"Logo encoded successfully")
+            logger.info(f"Logo encoded successfully")
         else:
             context["logo_path"] = ""
-            print(f"Logo encoding failed")
+            logger.error(f"Logo encoding failed")
     else:
-        print(f"Logo not found at {logo}")
+        logger.error(f"Logo not found at {logo}")
         context["logo_path"] = ""
     
     # Add subject photo with base64 encoding
@@ -1338,12 +1268,12 @@ def report_context(
         photo_base64 = encode_image_to_base64(str(subject_photo_path))
         if photo_base64:
             context["id_photo"] = f'<img src="{photo_base64}" alt="Subject Photo" style="max-width: 100%;"/>'
-            print(f"Subject photo encoded successfully")
+            logger.info(f"Subject photo encoded successfully")
         else:
             context["id_photo"] = "<div>Photo not available</div>"
-            print(f"Subject photo encoding failed")
+            logger.error(f"Subject photo encoding failed")
     else:
-        print(f"Subject photo not found at {subject_photo}")
+        logger.error(f"Subject photo not found at {subject_photo}")
         context["id_photo"] = "<div>Photo not available</div>"
     
     # Add plot images to context with base64 encoding
@@ -1352,7 +1282,7 @@ def report_context(
         "nsd_plot": nsd_plot,
         "speed_plot": speed_plot,
         "mcp_plot": mcp_plot,
-        "collar_event_timelinee": collar_event_timeline_plot,
+        "collar_event_timeline": collar_event_timeline_plot,
     }
     
     for key, path in plot_mapping.items():
@@ -1361,12 +1291,12 @@ def report_context(
             img_base64 = encode_image_to_base64(str(path_obj))
             if img_base64:
                 context[key] = f'<img style="width:100%;height:100%;object-fit:cover;" src="{img_base64}"/>'
-                print(f"{key} encoded successfully")
+                logger.info(f"{key} encoded successfully")
             else:
                 context[key] = "<div>Image not found</div>"
-                print(f"{key} encoding failed")
+                logger.error(f"{key} encoding failed")
         else:
-            print(f"{key} not found at {path}")
+            logger.error(f"{key} not found at {path}")
             context[key] = "<div>Image not found</div>"
     
     # Add range ecomap with base64 encoding
@@ -1375,12 +1305,12 @@ def report_context(
         range_base64 = encode_image_to_base64(str(range_path))
         if range_base64:
             context["range_map"] = f'<img style="max-width:100%;max-height:100%;" src="{range_base64}"/>'
-            print(f"Range map encoded successfully")
+            logger.info(f"Range map encoded successfully")
         else:
             context["range_map"] = "<div>Range map not found</div>"
-            print(f"Range map encoding failed")
+            logger.error(f"Range map encoding failed")
     else:
-        print(f"Range map not found at {range_ecomap}")
+        logger.error(f"Range map not found at {range_ecomap}")
         context["range_map"] = "<div>Range map not found</div>"
     
     # Add overview map with base64 encoding
@@ -1389,16 +1319,13 @@ def report_context(
         overview_base64 = encode_image_to_base64(str(overview_path))
         if overview_base64:
             context["overview_map"] = f'<img style="max-width:100%;max-height:100%;" src="{overview_base64}"/>'
-            print(f"Overview map encoded successfully")
+            logger.info(f"Overview map encoded successfully")
         else:
             context["overview_map"] = "<div>Overview map not found</div>"
-            print(f"Overview map encoding failed")
+            logger.error(f"Overview map encoding failed")
     else:
-        print(f"Overview map not found at {overview_map}")
+        logger.error(f"Overview map not found at {overview_map}")
         context["overview_map"] = "<div>Overview map not found</div>"
-    
-    # Print context summary (not full context due to base64 length)
-    print(f"\nContext prepared with keys: {list(context.keys())}")
     
     # Determine which templates to use based on maturity
     if mature:
@@ -1407,8 +1334,11 @@ def report_context(
         # Exclude template_3.html for immature subjects
         template_files = [t for t in templates if "template_3.html" not in t]
     
-    print(f"\n=== Rendering templates for {subject_name} ===")
-    print(f"Templates to render: {len(template_files)}")
+    logger.info(f"\n=== Rendering templates for {subject_name} ===")
+    logger.info(f"Templates to render: {len(template_files)}")
+    
+    #testing 
+    print(f"context info: {context}")
     
     # Render templates
     rendered_files = []
@@ -1426,15 +1356,15 @@ def report_context(
             with open(output_file_path, "w", encoding="utf-8") as f:
                 f.write(template.render(**context))
             
-            print(f"Rendered: {output_filename}")
+            logger.info(f"Rendered: {output_filename}")
             rendered_files.append(str(output_file_path))
             
         except jinja2.TemplateNotFound:
-            print(f"Template not found: {template_file}")
+            logger.error(f"Template not found: {template_file}")
         except Exception as e:
-            print(f"Failed to render {template_file}: {e}")
+            logger.error(f"Failed to render {template_file}: {e}")
     
-    print(f"\nTotal files rendered: {len(rendered_files)}")
+    logger.info(f"\nTotal files rendered: {len(rendered_files)}")
     return rendered_files
 
 @task
@@ -1443,7 +1373,17 @@ def render_html_to_pdf(html_path: Union[str, list[str]], pdf_path: str) -> List[
     # Normalize input
     html_paths = [html_path] if isinstance(html_path, str) else list(html_path or [])
     if not html_paths:
-        raise ValueError("No HTML paths provided")
+        raise ValueError("`render_html_to_pdf`:No HTML paths provided")
+    for html_path in html_paths:
+        html_path = normalize_file_url(html_path)
+
+    if pdf_path is None or str(pdf_path).strip() == "":
+        pdf_path = os.getcwd()
+    else:
+        pdf_path = str(pdf_path).strip()
+
+    pdf_path = normalize_file_url(pdf_path)
+    os.makedirs(pdf_path, exist_ok=True)
 
     # Chrome options (allow local file access)
     chrome_options = Options()
@@ -1464,27 +1404,28 @@ def render_html_to_pdf(html_path: Union[str, list[str]], pdf_path: str) -> List[
         "preferCSSPageSize": True,
     }
 
-    # Normalize pdf_path (could be file:// URI)
-    if pdf_path.startswith("file://"):
-        parsed = urlparse(pdf_path)
-        pdf_path = url2pathname(parsed.path)
+    # # Normalize pdf_path (could be file:// URI)
+    # if pdf_path.startswith("file://"):
+    #     parsed = urlparse(pdf_path)
+    #     pdf_path = url2pathname(parsed.path)
     
-    os.makedirs(pdf_path, exist_ok=True)
+    # os.makedirs(pdf_path, exist_ok=True)
     pdf_paths = []
 
     try:
         for html_file in html_paths:
-            html_file = str(html_file)
+            # html_file = str(html_file)
             
-            # Normalize html_file if it's a file:// URI
-            if html_file.startswith("file://"):
-                parsed = urlparse(html_file)
-                html_file = url2pathname(parsed.path)
+            # # Normalize html_file if it's a file:// URI
+            # if html_file.startswith("file://"):
+            #     parsed = urlparse(html_file)
+            #     html_file = url2pathname(parsed.path)
             
             if not os.path.exists(html_file):
-                raise FileNotFoundError(f"HTML file not found: {html_file}")
+                raise FileNotFoundError(f"`render_html_to_pdf`:HTML file not found: {html_file}")
+
             if not html_file.lower().endswith(".html"):
-                raise ValueError(f"Input file must be an HTML file: {html_file}")
+                raise ValueError(f"`render_html_to_pdf`:Input file must be an HTML file: {html_file}")
 
             # Generate output path - use basename only, no directory info from html_file
             pdf_filename = Path(html_file).stem + ".pdf"
@@ -1492,7 +1433,7 @@ def render_html_to_pdf(html_path: Union[str, list[str]], pdf_path: str) -> List[
             
             # Use file URI for loading in browser
             html_uri = Path(html_file).resolve().as_uri()
-            print(f"[debug] Loading HTML URI: {html_uri}")
+            logger.info(f"[debug] Loading HTML URI: {html_uri}")
 
             driver.get(html_uri)
 
@@ -1506,7 +1447,7 @@ def render_html_to_pdf(html_path: Union[str, list[str]], pdf_path: str) -> List[
                 time.sleep(0.5)
                 waited += 0.5
             else:
-                print("[warning] document.readyState did not reach 'complete' within timeout")
+                logger.error("[warning] document.readyState did not reach 'complete' within timeout")
 
             time.sleep(0.5)
 
@@ -1521,18 +1462,18 @@ def render_html_to_pdf(html_path: Union[str, list[str]], pdf_path: str) -> List[
 
             if os.path.exists(output_pdf_path):
                 size = os.path.getsize(output_pdf_path)
-                print(f"PDF saved: {output_pdf_path} (size={size} bytes)")
+                logger.info(f"PDF saved: {output_pdf_path} (size={size} bytes)")
             else:
-                print(f"WARNING: failed to write PDF: {output_pdf_path}")
+                logger.error(f"WARNING: failed to write PDF: {output_pdf_path}")
 
             # Return absolute path
             pdf_paths.append(os.path.abspath(output_pdf_path))
 
-        print(f"PDF generation complete. Files: {pdf_paths}")
+        logger.info(f"PDF generation complete. Files: {pdf_paths}")
         return pdf_paths
 
     except Exception as e:
-        print(f"Failed to render HTML to PDF: {e}")
+        logger.error(f"Failed to render HTML to PDF: {e}")
         raise
     finally:
         try:
@@ -1595,14 +1536,17 @@ def merge_pdfs(
     if subject_df is None or subject_df.empty:
         raise ValueError("`merge_pdfs`: subject_df is empty.")
     
-    # Normalize output_path
-    if output_path.startswith("file://"):
-        parsed = urlparse(output_path)
-        output_path = url2pathname(parsed.path)
+    if output_path is None or str(output_path).strip() == "":
+        output_path = os.getcwd()
+    else:
+        output_path = str(output_path).strip()
+
+    output_path = normalize_file_url(output_path)
+    os.makedirs(output_path,exist_ok=True)
     
     # Normalize input to tuples format
     normalized_items = []
-    print(f"pdf path items:{pdf_path_items}")
+    logger.info(f"pdf path items:{pdf_path_items}")
     for item in pdf_path_items:
         if item is None:
             continue
@@ -1615,7 +1559,7 @@ def merge_pdfs(
     
     # Filter out None items
     valid_items = normalized_items
-    print(f"Valid items: {valid_items}")
+    logger.info(f"Valid items: {valid_items}")
 
     # Flatten any nested lists in the paths and create GroupedDoc instances
     flattened_items = []
@@ -1638,7 +1582,8 @@ def merge_pdfs(
         for path in path_list:
             flattened_items.append((view_key, path))
     
-    print(f"Flattened items:{flattened_items}")
+    logger.info(f"Flattened items:{flattened_items}")
+
     # Create GroupedDoc instances
     grouped_docs = [GroupedDoc.from_single_view(it) for it in flattened_items]
     
@@ -1660,49 +1605,45 @@ def merge_pdfs(
     
     # Clean up file:// URIs and malformed paths
     cleaned_pdf_paths = []
+    # for path in all_pdf_paths:
+    #     path = str(path)
+        
+    #     # Handle file:// URIs
+    #     if path.startswith("file://"):
+    #         parsed = urlparse(path)
+    #         path = url2pathname(parsed.path)
+        
+    #     # Fix malformed paths with 'file:' as directory component
+    #     if "/file:/" in path or "\\file:\\" in path:
+    #         parts = path.split("file:")
+    #         if len(parts) > 1:
+    #             path = parts[-1].lstrip("/\\")
+    #             if not path.startswith("/"):
+    #                 path = "/" + path
+        
+    #     cleaned_pdf_paths.append(path)
+    
     for path in all_pdf_paths:
-        path = str(path)
-        
-        # Handle file:// URIs
-        if path.startswith("file://"):
-            parsed = urlparse(path)
-            path = url2pathname(parsed.path)
-        
-        # Fix malformed paths with 'file:' as directory component
-        if "/file:/" in path or "\\file:\\" in path:
-            parts = path.split("file:")
-            if len(parts) > 1:
-                path = parts[-1].lstrip("/\\")
-                if not path.startswith("/"):
-                    path = "/" + path
-        
+        path = normalize_file_url(path)
         cleaned_pdf_paths.append(path)
     
-    print(f"[debug] Cleaned PDF paths: {cleaned_pdf_paths}")
+    logger.info(f"[debug] Cleaned PDF paths: {cleaned_pdf_paths}")
     
     # Verify all PDFs exist
     for pdf_file in cleaned_pdf_paths:
         if not os.path.exists(pdf_file):
-            print(f"[warning] PDF file not found: {pdf_file}")
+            logger.warning(f"[warning] PDF file not found: {pdf_file}")
     
-    # Create output directory
-    os.makedirs(output_path, exist_ok=True)
-    
-    # Initialize merger
     merger = PdfMerger()
-    
-    # Sort subjects by name
     subject_names = sorted(subject_df["subject_name"].unique())
     
     # Merge PDFs in order by subject
     for subject_name in subject_names:
         subject_pdfs = []
         
-        # Find all PDFs for this subject
         for pdf_file in cleaned_pdf_paths:
             if pdf_file.endswith(".pdf"):
                 pdf_basename = os.path.basename(pdf_file)
-                # Match by subject name prefix
                 if pdf_basename.startswith(subject_name):
                     if os.path.exists(pdf_file):
                         subject_pdfs.append(pdf_file)
@@ -1711,14 +1652,13 @@ def merge_pdfs(
         if subject_pdfs:
             for pdf_file in sorted(subject_pdfs):
                 try:
-                    print(f"[debug] Adding to merger: {pdf_file}")
+                    logger.info(f"[debug] Adding to merger: {pdf_file}")
                     merger.append(pdf_file)
                 except Exception as e:
-                    print(f"[warning] Failed to add {pdf_file} to merger: {e}")
+                    logger.error(f"[warning] Failed to add {pdf_file} to merger: {e}")
         else:
-            print(f"[warning] No PDFs found for subject: {subject_name}")
+            logger.error(f"[warning] No PDFs found for subject: {subject_name}")
     
-    # Write final merged PDF
     output_filename = f"{filename}.pdf" if not filename.endswith(".pdf") else filename
     final_path = os.path.join(output_path, output_filename)
     
@@ -1729,7 +1669,7 @@ def merge_pdfs(
     
     if os.path.exists(final_path):
         size = os.path.getsize(final_path)
-        print(f"[success] Final merged PDF saved: {final_path} (size={size} bytes)")
+        logger.info(f"[success] Final merged PDF saved: {final_path} (size={size} bytes)")
     else:
         raise RuntimeError(f"Failed to create merged PDF: {final_path}")
     

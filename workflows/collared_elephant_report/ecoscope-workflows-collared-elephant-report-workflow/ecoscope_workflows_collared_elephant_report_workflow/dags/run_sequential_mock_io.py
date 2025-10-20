@@ -168,18 +168,6 @@ def main(params: Params):
         .call()
     )
 
-    download_cover_page = (
-        download_file_and_persist.validate()
-        .handle_errors(task_instance_id="download_cover_page")
-        .partial(
-            url="https://www.dropbox.com/scl/fi/my6cd3fhs8wtkv34sqb0l/cover_page.pdf?rlkey=45ejxhslkmpa05nhdv6ehxnod&dl=1",
-            output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            overwrite_existing=False,
-            **(params_dict.get("download_cover_page") or {}),
-        )
-        .call()
-    )
-
     download_template_one = (
         download_file_and_persist.validate()
         .handle_errors(task_instance_id="download_template_one")
@@ -428,7 +416,7 @@ def main(params: Params):
             output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             **(params_dict.get("download_profile_pic") or {}),
         )
-        .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
+        .mapvalues(argnames=["subject_df"], argvalues=split_subject_by_group)
     )
 
     download_subject_info = (
@@ -439,7 +427,7 @@ def main(params: Params):
             output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             **(params_dict.get("download_subject_info") or {}),
         )
-        .mapvalues(argnames=["df"], argvalues=split_subject_by_group)
+        .mapvalues(argnames=["subject_df"], argvalues=split_subject_by_group)
     )
 
     persist_subject_info = (
@@ -1118,7 +1106,7 @@ def main(params: Params):
         generate_seasonal_nsd_plot.validate()
         .handle_errors(task_instance_id="generate_nsd_plot")
         .partial(**(params_dict.get("generate_nsd_plot") or {}))
-        .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_nsd_values)
+        .mapvalues(argnames=["relocations_gdf", "seasons_df"], argvalues=zip_nsd_values)
     )
 
     persist_nsd_html_urls = (
@@ -1172,7 +1160,9 @@ def main(params: Params):
         generate_seasonal_speed_plot.validate()
         .handle_errors(task_instance_id="generate_speed_plot")
         .partial(**(params_dict.get("generate_speed_plot") or {}))
-        .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_speed_values)
+        .mapvalues(
+            argnames=["relocations_gdf", "seasons_df"], argvalues=zip_speed_values
+        )
     )
 
     persist_speed_html_urls = (
@@ -1286,7 +1276,9 @@ def main(params: Params):
         generate_seasonal_mcp_asymptote_plot.validate()
         .handle_errors(task_instance_id="generate_mcp_asymp_plot")
         .partial(**(params_dict.get("generate_mcp_asymp_plot") or {}))
-        .mapvalues(argnames=["gdf", "seasons_df"], argvalues=zip_mcp_asymp_values)
+        .mapvalues(
+            argnames=["relocations_gdf", "seasons_df"], argvalues=zip_mcp_asymp_values
+        )
     )
 
     persist_mcp_html_urls = (
@@ -1426,7 +1418,7 @@ def main(params: Params):
         .handle_errors(task_instance_id="convt_range_html_png")
         .partial(
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            config={"wait_for_timeout": 20, "width": 765, "height": 525},
+            config={"wait_for_timeout": 200, "width": 765, "height": 525},
             **(params_dict.get("convt_range_html_png") or {}),
         )
         .mapvalues(argnames=["html_path"], argvalues=persist_hr_ecomap_urls)
@@ -1437,7 +1429,7 @@ def main(params: Params):
         .handle_errors(task_instance_id="convt_speedmap_html_png")
         .partial(
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            config={"wait_for_timeout": 20, "width": 765, "height": 525},
+            config={"wait_for_timeout": 200, "width": 765, "height": 525},
             **(params_dict.get("convt_speedmap_html_png") or {}),
         )
         .mapvalues(argnames=["html_path"], argvalues=persist_speed_ecomap_urls)
@@ -1448,7 +1440,7 @@ def main(params: Params):
         .handle_errors(task_instance_id="convt_seasons_html_png")
         .partial(
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            config={"wait_for_timeout": 20, "width": 602, "height": 855},
+            config={"wait_for_timeout": 200, "width": 602, "height": 855},
             **(params_dict.get("convt_seasons_html_png") or {}),
         )
         .mapvalues(argnames=["html_path"], argvalues=season_etd_ecomap_html_url)

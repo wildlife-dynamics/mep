@@ -348,27 +348,6 @@
       "type": "object",
       "title": "Download Logo"
     },
-    "download_cover_page": {
-      "additionalProperties": false,
-      "properties": {
-        "retries": {
-          "default": 3,
-          "minimum": 0,
-          "title": "Retries",
-          "type": "integer",
-          "description": "Number of retries on failure"
-        },
-        "unzip": {
-          "default": false,
-          "title": "Unzip",
-          "type": "boolean",
-          "description": "Whether to unzip the file if it's a zip archive"
-        }
-      },
-      "required": [],
-      "type": "object",
-      "title": "Download report cover page"
-    },
     "download_template_one": {
       "additionalProperties": false,
       "properties": {
@@ -883,19 +862,6 @@
       "type": "object",
       "title": "Persist seasonal windows as csv"
     },
-    "generate_subject_stats": {
-      "additionalProperties": false,
-      "properties": {
-        "return_dataframe": {
-          "default": true,
-          "title": "Return Dataframe",
-          "type": "boolean"
-        }
-      },
-      "required": [],
-      "type": "object",
-      "title": "Generate subject stats"
-    },
     "persist_subject_stats": {
       "additionalProperties": false,
       "properties": {
@@ -1214,12 +1180,6 @@
         "unzip"
       ]
     },
-    "download_cover_page": {
-      "ui:order": [
-        "retries",
-        "unzip"
-      ]
-    },
     "download_template_one": {
       "ui:order": [
         "retries",
@@ -1288,7 +1248,6 @@
       "define_time_range",
       "retrieve_ldx_db",
       "download_logo",
-      "download_cover_page",
       "download_template_one",
       "download_template_two",
       "download_template_three",
@@ -1308,7 +1267,6 @@
       "seasonal_home_range",
       "zoom_season_view",
       "persist_subject_season_wins",
-      "generate_subject_stats",
       "persist_subject_stats",
       "load_unfiltered_ldx",
       "build_region_lookup",

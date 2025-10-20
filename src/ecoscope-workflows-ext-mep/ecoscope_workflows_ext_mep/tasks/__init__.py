@@ -34,7 +34,6 @@ from ._mep_utils import (
     compute_template_regions,
     compute_subject_occupancy,
     download_file_and_persist,
-    initialize_jinja_env,
     report_context,
     render_html_to_pdf,
     merge_pdfs
@@ -47,7 +46,6 @@ __all__ = [
     "merge_pdfs",
     "render_html_to_pdf",
     "report_context",
-    "initialize_jinja_env",
     "download_file_and_persist",
     "build_template_region_lookup",
     "compute_template_regions",

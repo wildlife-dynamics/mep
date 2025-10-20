@@ -341,12 +341,22 @@ def load_landdx_aoi(
     aoi: Optional[List[str]] = None,
 ) -> Optional[AnyGeoDataFrame]:
 
-    if map_path is None: 
-        print(f"Provided map path is empty")
+    # testing purposes
+    print(f"Map path -->{map_path}")
 
+    if map_path is None: 
+        logger.error(f"Provided map path is empty")
+
+    for root,_, files in os.walk(map_path):
+        if "landDx.gpkg" in files:
+            ldx_path = os.path.join(root, "landDx.gpkg")
+            break
+    
+    print(f"landDx Path --> {ldx_path}")
+    
     # Load and filter
     try:
-        geodataframe = gpd.read_file(map_path, layer="landDx_polygons").set_index("globalid")
+        geodataframe = gpd.read_file(ldx_path, layer="landDx_polygons").set_index("globalid")
         
         if aoi is None or not aoi:
            print(f"Loaded landDx.gpkg — total features: {len(geodataframe)} (no filtering applied)")
@@ -354,7 +364,7 @@ def load_landdx_aoi(
         
         # Filter by AOI
         filtered = geodataframe[geodataframe["type"].isin(aoi)]
-        logger.info(
+        print(
             f"Loaded landDx.gpkg — total: {len(geodataframe)}, "
             f"filtered by {aoi}: {len(filtered)}"
         )
@@ -364,7 +374,7 @@ def load_landdx_aoi(
         return filtered
 
     except FileNotFoundError as e:
-        print(f"File not found: {landDx_path}")
+        print(f"File not found: {ldx_path}")
         return None
     except KeyError as e:
         print(f"Required column missing: {e}")

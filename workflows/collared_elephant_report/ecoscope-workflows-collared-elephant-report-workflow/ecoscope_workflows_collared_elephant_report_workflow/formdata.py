@@ -229,20 +229,6 @@ class DownloadLogo(BaseModel):
     )
 
 
-class DownloadCoverPage(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    retries: Optional[conint(ge=0)] = Field(
-        3, description="Number of retries on failure", title="Retries"
-    )
-    unzip: Optional[bool] = Field(
-        False,
-        description="Whether to unzip the file if it's a zip archive",
-        title="Unzip",
-    )
-
-
 class DownloadTemplateOne(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -447,13 +433,6 @@ class PersistSubjectSeasonWins(BaseModel):
     filetype: Optional[Filetype] = Field(
         "csv", description="The output format", title="Filetype"
     )
-
-
-class GenerateSubjectStats(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    return_dataframe: Optional[bool] = Field(True, title="Return Dataframe")
 
 
 class PersistSubjectStats(BaseModel):
@@ -678,9 +657,6 @@ class FormData(BaseModel):
         None, title="Retrieve and unpack landDX db"
     )
     download_logo: Optional[DownloadLogo] = Field(None, title="Download Logo")
-    download_cover_page: Optional[DownloadCoverPage] = Field(
-        None, title="Download report cover page"
-    )
     download_template_one: Optional[DownloadTemplateOne] = Field(
         None, title="Download template one"
     )
@@ -733,9 +709,6 @@ class FormData(BaseModel):
     )
     persist_subject_season_wins: Optional[PersistSubjectSeasonWins] = Field(
         None, title="Persist seasonal windows as csv"
-    )
-    generate_subject_stats: Optional[GenerateSubjectStats] = Field(
-        None, title="Generate subject stats"
     )
     persist_subject_stats: Optional[PersistSubjectStats] = Field(
         None, title="Persist subject stats as csv"

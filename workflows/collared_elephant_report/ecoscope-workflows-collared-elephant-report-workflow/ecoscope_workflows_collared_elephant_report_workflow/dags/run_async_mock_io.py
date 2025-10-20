@@ -111,7 +111,6 @@ def main(params: Params):
         "define_time_range": [],
         "retrieve_ldx_db": [],
         "download_logo": [],
-        "download_cover_page": [],
         "download_template_one": [],
         "download_template_two": [],
         "download_template_three": [],
@@ -350,18 +349,6 @@ def main(params: Params):
                 "overwrite_existing": False,
             }
             | (params_dict.get("download_logo") or {}),
-            method="call",
-        ),
-        "download_cover_page": Node(
-            async_task=download_file_and_persist.validate()
-            .handle_errors(task_instance_id="download_cover_page")
-            .set_executor("lithops"),
-            partial={
-                "url": "https://www.dropbox.com/scl/fi/my6cd3fhs8wtkv34sqb0l/cover_page.pdf?rlkey=45ejxhslkmpa05nhdv6ehxnod&dl=1",
-                "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "overwrite_existing": False,
-            }
-            | (params_dict.get("download_cover_page") or {}),
             method="call",
         ),
         "download_template_one": Node(
@@ -618,7 +605,7 @@ def main(params: Params):
             | (params_dict.get("download_profile_pic") or {}),
             method="mapvalues",
             kwargs={
-                "argnames": ["df"],
+                "argnames": ["subject_df"],
                 "argvalues": DependsOn("split_subject_by_group"),
             },
         ),
@@ -633,7 +620,7 @@ def main(params: Params):
             | (params_dict.get("download_subject_info") or {}),
             method="mapvalues",
             kwargs={
-                "argnames": ["df"],
+                "argnames": ["subject_df"],
                 "argvalues": DependsOn("split_subject_by_group"),
             },
         ),
@@ -1475,7 +1462,7 @@ def main(params: Params):
             partial=(params_dict.get("generate_nsd_plot") or {}),
             method="mapvalues",
             kwargs={
-                "argnames": ["gdf", "seasons_df"],
+                "argnames": ["relocations_gdf", "seasons_df"],
                 "argvalues": DependsOn("zip_nsd_values"),
             },
         ),
@@ -1541,7 +1528,7 @@ def main(params: Params):
             partial=(params_dict.get("generate_speed_plot") or {}),
             method="mapvalues",
             kwargs={
-                "argnames": ["gdf", "seasons_df"],
+                "argnames": ["relocations_gdf", "seasons_df"],
                 "argvalues": DependsOn("zip_speed_values"),
             },
         ),
@@ -1677,7 +1664,7 @@ def main(params: Params):
             partial=(params_dict.get("generate_mcp_asymp_plot") or {}),
             method="mapvalues",
             kwargs={
-                "argnames": ["gdf", "seasons_df"],
+                "argnames": ["relocations_gdf", "seasons_df"],
                 "argvalues": DependsOn("zip_mcp_asymp_values"),
             },
         ),
@@ -1845,7 +1832,7 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {"wait_for_timeout": 20, "width": 765, "height": 525},
+                "config": {"wait_for_timeout": 200, "width": 765, "height": 525},
             }
             | (params_dict.get("convt_range_html_png") or {}),
             method="mapvalues",
@@ -1860,7 +1847,7 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {"wait_for_timeout": 20, "width": 765, "height": 525},
+                "config": {"wait_for_timeout": 200, "width": 765, "height": 525},
             }
             | (params_dict.get("convt_speedmap_html_png") or {}),
             method="mapvalues",
@@ -1875,7 +1862,7 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {"wait_for_timeout": 20, "width": 602, "height": 855},
+                "config": {"wait_for_timeout": 200, "width": 602, "height": 855},
             }
             | (params_dict.get("convt_seasons_html_png") or {}),
             method="mapvalues",
