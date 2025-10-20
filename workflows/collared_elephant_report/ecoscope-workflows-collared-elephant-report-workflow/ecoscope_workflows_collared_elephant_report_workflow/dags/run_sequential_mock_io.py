@@ -1418,7 +1418,7 @@ def main(params: Params):
         .handle_errors(task_instance_id="convt_range_html_png")
         .partial(
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            config={"wait_for_timeout": 100, "width": 765, "height": 525},
+            config={"wait_for_timeout": 20000, "width": 765, "height": 525},
             **(params_dict.get("convt_range_html_png") or {}),
         )
         .mapvalues(argnames=["html_path"], argvalues=persist_hr_ecomap_urls)
@@ -1429,7 +1429,7 @@ def main(params: Params):
         .handle_errors(task_instance_id="convt_speedmap_html_png")
         .partial(
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            config={"wait_for_timeout": 100, "width": 765, "height": 525},
+            config={"wait_for_timeout": 20000, "width": 765, "height": 525},
             **(params_dict.get("convt_speedmap_html_png") or {}),
         )
         .mapvalues(argnames=["html_path"], argvalues=persist_speed_ecomap_urls)
@@ -1440,7 +1440,7 @@ def main(params: Params):
         .handle_errors(task_instance_id="convt_seasons_html_png")
         .partial(
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            config={"wait_for_timeout": 100, "width": 602, "height": 855},
+            config={"wait_for_timeout": 20000, "width": 602, "height": 855},
             **(params_dict.get("convt_seasons_html_png") or {}),
         )
         .mapvalues(argnames=["html_path"], argvalues=season_etd_ecomap_html_url)

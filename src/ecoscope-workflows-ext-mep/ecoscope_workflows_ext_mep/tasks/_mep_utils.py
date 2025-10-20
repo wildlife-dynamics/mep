@@ -41,7 +41,6 @@ from ecoscope_workflows_ext_ecoscope.tasks.analysis import calculate_elliptical_
 
 logger = logging.getLogger(__name__)
 
-
 class AutoScaleGridCellSize(BaseModel):
     model_config = ConfigDict(json_schema_extra={"title": "Auto-scale"})
     auto_scale_or_custom: Annotated[
@@ -82,7 +81,6 @@ def normalize_file_url(path: str) -> str:
     path = path[7:]
     
     if os.name == 'nt':
-        # Remove leading slash before drive letter: /C:/path -> C:/path
         if path.startswith('/') and len(path) > 2 and path[2] in (':', '|'):
             path = path[1:]
 
@@ -492,10 +490,6 @@ def _load_seasons_df(seasons_df: Union[str, Path, AnyDataFrame]) -> AnyDataFrame
     # Normalize the path and convert to Path object
     normalized_path = normalize_file_url(str(seasons_df))
     p = Path(normalized_path)
-    
-    # testing 
-    print(f"`_load_seasons_df`:path:{p}")
-    
     if p.suffix.lower() in {".csv"}:
         return pd.read_csv(p)
     elif p.suffix.lower() in {".parquet"}:
@@ -822,7 +816,7 @@ def get_subject_stats(
 
     # Calculate max displacement from first point
     traj_gdf = traj_gdf.sort_values("segment_start")
-    first_geom = traj_gdf.geometry.iloc[0]
+    first_geom = traj_gdf.geometry.iat[0]
     max_displacement_km = round(
         float(traj_gdf.geometry.distance(first_geom).max()) / 1000.0, 1
     )
@@ -1266,7 +1260,8 @@ def report_context(
     if subject_photo_path.exists():
         photo_base64 = encode_image_to_base64(str(subject_photo_path))
         if photo_base64:
-            context["id_photo"] = f'<img src="{photo_base64}" alt="Subject Photo" style="max-width: 100%;"/>'
+            #context["id_photo"] = f'<img src="{photo_base64}" alt="Subject Photo" style="max-width: 100%;"/>'
+            context["id_photo"] = photo_base64
             logger.info(f"Subject photo encoded successfully")
         else:
             context["id_photo"] = "<div>Photo not available</div>"
@@ -1335,10 +1330,7 @@ def report_context(
     
     logger.info(f"\n=== Rendering templates for {subject_name} ===")
     logger.info(f"Templates to render: {len(template_files)}")
-    
-    #testing 
-    print(f"context info: {context}")
-    
+
     # Render templates
     rendered_files = []
     for template_file in template_files:
@@ -1403,22 +1395,10 @@ def render_html_to_pdf(html_path: Union[str, list[str]], pdf_path: str) -> List[
         "preferCSSPageSize": True,
     }
 
-    # # Normalize pdf_path (could be file:// URI)
-    # if pdf_path.startswith("file://"):
-    #     parsed = urlparse(pdf_path)
-    #     pdf_path = url2pathname(parsed.path)
-    
-    # os.makedirs(pdf_path, exist_ok=True)
     pdf_paths = []
 
     try:
         for html_file in html_paths:
-            # html_file = str(html_file)
-            
-            # # Normalize html_file if it's a file:// URI
-            # if html_file.startswith("file://"):
-            #     parsed = urlparse(html_file)
-            #     html_file = url2pathname(parsed.path)
             
             if not os.path.exists(html_file):
                 raise FileNotFoundError(f"`render_html_to_pdf`:HTML file not found: {html_file}")
@@ -1426,11 +1406,8 @@ def render_html_to_pdf(html_path: Union[str, list[str]], pdf_path: str) -> List[
             if not html_file.lower().endswith(".html"):
                 raise ValueError(f"`render_html_to_pdf`:Input file must be an HTML file: {html_file}")
 
-            # Generate output path - use basename only, no directory info from html_file
             pdf_filename = Path(html_file).stem + ".pdf"
             output_pdf_path = os.path.join(pdf_path, pdf_filename)
-            
-            # Use file URI for loading in browser
             html_uri = Path(html_file).resolve().as_uri()
             logger.info(f"[debug] Loading HTML URI: {html_uri}")
 
@@ -1602,26 +1579,7 @@ def merge_pdfs(
             if p is not None:
                 all_pdf_paths.append(p)
     
-    # Clean up file:// URIs and malformed paths
     cleaned_pdf_paths = []
-    # for path in all_pdf_paths:
-    #     path = str(path)
-        
-    #     # Handle file:// URIs
-    #     if path.startswith("file://"):
-    #         parsed = urlparse(path)
-    #         path = url2pathname(parsed.path)
-        
-    #     # Fix malformed paths with 'file:' as directory component
-    #     if "/file:/" in path or "\\file:\\" in path:
-    #         parts = path.split("file:")
-    #         if len(parts) > 1:
-    #             path = parts[-1].lstrip("/\\")
-    #             if not path.startswith("/"):
-    #                 path = "/" + path
-        
-    #     cleaned_pdf_paths.append(path)
-    
     for path in all_pdf_paths:
         path = normalize_file_url(path)
         cleaned_pdf_paths.append(path)

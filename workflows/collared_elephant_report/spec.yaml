@@ -230,12 +230,6 @@ workflow:
         sex: subject_sex
         subject_subtype: subject_subtype
         created_at: created_at
-        # extra__subject__name: subject_name
-        # extra__subject__hex: hex_color
-        # extra__subject__sex: subject_sex
-        # extra__subject__subject_subtype: subject_subtype
-        # extra__created_at: created_at
-        
       df: ${{ workflow.subject_relocations.return }}
 
 # Compute maturity (default: 6 months)
@@ -1194,7 +1188,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 100
+        wait_for_timeout: 20000
         width: 765
         height: 525
     mapvalues:
@@ -1207,7 +1201,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 100
+        wait_for_timeout: 20000
         width: 765
         height: 525
     mapvalues:
@@ -1220,7 +1214,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 100
+        wait_for_timeout: 20000
         width: 602
         height: 855
     mapvalues:
@@ -1394,7 +1388,6 @@ workflow:
     id: render_html_pdf
     task: render_html_to_pdf
     partial:
-      #html_path: ${{ workflow.generate_report_context.return }}
       pdf_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
     mapvalues:
       argnames: html_path
@@ -1408,9 +1401,6 @@ workflow:
       output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: Collared Elephants Report
       pdf_path_items: ${{ workflow.render_html_pdf.return }}
-    # mapvalues:
-    #   argnames: pdf_path_items
-    #   argvalues: ${{ workflow.render_html_pdf.return }}
       
   # combine all these outputs and have them on the dashboard 
   - name: Collared Elephant Report Dashboard 
