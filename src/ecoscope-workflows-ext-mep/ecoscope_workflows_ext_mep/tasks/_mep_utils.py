@@ -1149,7 +1149,7 @@ def report_context(
     subjects_df: AnyDataFrame,
     movement_ecomap: str,
     range_ecomap: str,
-    overview_map: str,
+    overview_ecomap: str,
     nsd_plot: str,
     speed_plot: str,
     mcp_plot: str,
@@ -1314,7 +1314,7 @@ def report_context(
         context["range_map"] = "<div>Range map not found</div>"
     
     # Add overview map with base64 encoding
-    overview_path = Path(overview_map).resolve()
+    overview_path = Path(overview_ecomap).resolve()
     if overview_path.exists():
         overview_base64 = encode_image_to_base64(str(overview_path))
         if overview_base64:
@@ -1324,7 +1324,7 @@ def report_context(
             context["overview_map"] = "<div>Overview map not found</div>"
             logger.error(f"Overview map encoding failed")
     else:
-        logger.error(f"Overview map not found at {overview_map}")
+        logger.error(f"Overview map not found at {overview_ecomap}")
         context["overview_map"] = "<div>Overview map not found</div>"
     
     # Determine which templates to use based on maturity

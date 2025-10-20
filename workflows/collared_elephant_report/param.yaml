@@ -8,7 +8,8 @@ gee_client:
 
 er_client:
   data_source:
-    name: "mara_ep"
+    name: "mep"
+    #name: "mara_ep"
 
 configure_grouping_strategy:
   groupers:
@@ -17,10 +18,7 @@ configure_grouping_strategy:
 # Desired time range
 define_time_range:
   since: "2025-01-01T00:00:00Z"
-  until: "2025-01-14T23:59:59Z"
-
-# create_output_dir:
-#   path_name: "/home/ttemu/ecoscope-workflows/OUTPUTS"
+  until: "2025-01-30T23:59:59Z"
 
 # Desired basemap layers
 configure_base_maps:

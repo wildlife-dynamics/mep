@@ -1194,7 +1194,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 200
+        wait_for_timeout: 20000
         width: 765
         height: 525
     mapvalues:
@@ -1207,7 +1207,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 200
+        wait_for_timeout: 20000
         width: 765
         height: 525
     mapvalues:
@@ -1220,7 +1220,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 200
+        wait_for_timeout: 20000
         width: 602
         height: 855
     mapvalues:
@@ -1234,7 +1234,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 10
+        wait_for_timeout: 100
         width: 2238
         height: 450
     mapvalues:
@@ -1247,7 +1247,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 10
+        wait_for_timeout: 100
         width: 2238
         height: 450
     mapvalues:
@@ -1260,7 +1260,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 10
+        wait_for_timeout: 100
         width: 2238
         height: 450
     mapvalues:
@@ -1273,19 +1273,13 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 10
+        wait_for_timeout: 100
         width: 2238
         height: 450
     mapvalues:
       argnames: html_path
       argvalues: ${{ workflow.persist_collared_subject_plots.return }}
-
-  # - name: Initialize jinja environment
-  #   id: set_jinja_env
-  #   task: initialize_jinja_env
-  #   partial:
-  #     input_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-  
+      
   - name: Zip movement and range ecomaps
     id: zip_movement_range_maps
     task: zip_grouped_by_key
@@ -1385,7 +1379,7 @@ workflow:
       argnames:
         - movement_ecomap
         - range_ecomap 
-        - overview_map
+        - overview_ecomap
         - subject_photo
         - collar_event_timeline_plot 
         - nsd_plot
