@@ -1194,7 +1194,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 20000
+        wait_for_timeout: 100
         width: 765
         height: 525
     mapvalues:
@@ -1207,7 +1207,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 20000
+        wait_for_timeout: 100
         width: 765
         height: 525
     mapvalues:
@@ -1220,7 +1220,7 @@ workflow:
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       config:
-        wait_for_timeout: 20000
+        wait_for_timeout: 100
         width: 602
         height: 855
     mapvalues:
@@ -1279,7 +1279,7 @@ workflow:
     mapvalues:
       argnames: html_path
       argvalues: ${{ workflow.persist_collared_subject_plots.return }}
-      
+
   - name: Zip movement and range ecomaps
     id: zip_movement_range_maps
     task: zip_grouped_by_key
