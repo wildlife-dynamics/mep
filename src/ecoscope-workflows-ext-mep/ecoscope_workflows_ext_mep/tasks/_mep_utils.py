@@ -1167,7 +1167,8 @@ def report_context(
         input_path = str(input_path).strip()
 
     input_path = normalize_file_url(input_path)
-
+    output_dir = Path(input_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
     # ensure all paths are normalized
     movement_ecomap =normalize_file_url(movement_ecomap)
     range_ecomap =normalize_file_url(range_ecomap)
@@ -1180,10 +1181,8 @@ def report_context(
     subject_info =normalize_file_url(subject_info)
     subject_stats =normalize_file_url(subject_stats)
     occupancy_info = normalize_file_url(occupancy_info)
-
-    for template in templates:
-        template = normalize_file_url(template)
-
+    templates = [normalize_file_url(template) for template in templates]
+    
     if subjects_df is None or subjects_df.empty:
         raise ValueError("`report_context`:Subjects df is empty.")
     
