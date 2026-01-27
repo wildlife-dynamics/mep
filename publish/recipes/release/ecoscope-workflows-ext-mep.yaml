@@ -22,10 +22,15 @@ requirements:
     - pip
   run:
     - python
+    - ecoscope
     - ecoscope-workflows-core
-    - ecoscope-workflows-ext-mep
     - ecoscope-workflows-ext-ecoscope
-
+    - ecoscope-workflows-ext-custom
+    - geopandas
+    - shapely
+    - docxtpl
+    - playwright
+    - numpy
 about:
   license: BSD-3-Clause
 

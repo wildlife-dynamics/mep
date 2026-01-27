@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "mep"
 channels = [
     # Uncomment the following lines to use local channels for development.
@@ -15,12 +15,15 @@ curl = "*"
 rattler-build = "*"
 yq = "*"
 hatch = "*"
+pip="*"
+hatch-vcs="*"
 
 [feature.compile.dependencies]
-ecoscope-workflows-core = "0.7.2.*"
-ecoscope-workflows-ext-ecoscope = "0.7.2.*"
-ecoscope-workflows-ext-mep = "0.0.2.*"
-ecoscope-workflows-ext-custom = "0.0.3.*"
+ecoscope-workflows-ext-mep = "*"
+ecoscope-workflows-ext-mnc = "0.0.2.*"
+ecoscope-workflows-ext-ste = "0.0.6*"
+ecoscope-workflows-core = "0.20.4.*"
+ecoscope-workflows-ext-custom = "0.0.20.*"
 
 # Here we don't specify the channel on purpose, as we want to use the local channel if it exists,
 # otherwise we fall back to the default channel.
@@ -69,3 +72,9 @@ cmd = './dev/recompile.sh mep-monthly-report --install'
 
 [feature.compile.tasks.recompile-mep-monthly-report]
 cmd = './dev/recompile.sh mep-monthly-report --update'
+
+[feature.compile.tasks.compile-mep-collared_report]
+cmd = './dev/recompile.sh mep-collared_report --install'
+
+[feature.compile.tasks.recompile-mep-collared_report]
+cmd = './dev/recompile.sh mep-collared_report --update'
