@@ -1,7 +1,7 @@
 import os
 import hashlib
 import ecoscope
-import logging 
+import logging
 import pandas as pd
 from pydantic import Field
 from pathlib import Path
@@ -13,6 +13,7 @@ from ecoscope_workflows_core.annotations import AdvancedField, AnyDataFrame
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
 logger = logging.getLogger(__name__)
+
 
 @task
 def get_subject_df(
@@ -73,6 +74,7 @@ def get_subject_df(
         raise ValueError("No data returned from EarthRanger for get_subjects")
     return df
 
+
 @task
 def persist_subject_photo(
     subject_df: AnyDataFrame,
@@ -81,19 +83,18 @@ def persist_subject_photo(
     image_type: str = ".png",
     overwrite_existing: bool = True,
 ) -> Optional[str]:
-
     if output_path is None or str(output_path).strip() == "":
         output_path = os.getcwd()
     else:
         output_path = str(output_path).strip()
 
     output_path = remove_file_scheme(output_path)
-    output_path = Path(output_path) 
-    output_path.mkdir(parents=True, exist_ok=True) 
+    output_path = Path(output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
 
     if column not in subject_df.columns:
-        raise KeyError(f"Column '{column}' not found. Available: {list(subject_df.columns)}") 
-    
+        raise KeyError(f"Column '{column}' not found. Available: {list(subject_df.columns)}")
+
     last_file_path: Optional[Path] = None
     for idx, url in subject_df[column].dropna().items():
         if not isinstance(url, str) or not url.startswith(("http://", "https://")):
@@ -114,16 +115,20 @@ def persist_subject_photo(
             ecoscope.io.utils.download_file(processed_url, str(file_path), overwrite_existing)
             logger.info(f"Downloaded profile photo for index {idx} to {file_path}")
             print(f"Downloaded profile photo for index {idx} to {file_path}")
-            last_file_path = file_path 
+            last_file_path = file_path
         except Exception as e:
-            print(f"Error processing URL at index {idx} ({url}): {e}") 
+            print(f"Error processing URL at index {idx} ({url}): {e}")
             continue
-    
+
     return str(last_file_path) if last_file_path else None
-#if "file_path" in locals() else None
+
+
+# if "file_path" in locals() else None
+
 
 def safe_strip(x) -> str:
     return "" if x is None else str(x).strip()
+
 
 def truncate_at_sentence(text: str, maxlen: int) -> str:
     if len(text) <= maxlen:
@@ -131,6 +136,7 @@ def truncate_at_sentence(text: str, maxlen: int) -> str:
     cut = text[:maxlen]
     dot = cut.rfind(".")
     return (cut[: dot + 1] if dot >= 40 else cut.rstrip()) + ("..." if dot < 40 else "")
+
 
 def format_date(date_str: str) -> str:
     s = safe_strip(date_str)
@@ -143,26 +149,29 @@ def format_date(date_str: str) -> str:
             continue
     return s
 
+
 @task
 def process_subject_information(
-    subject_df: AnyDataFrame,
-    output_path: Union[str, Path],
-    maxlen: int = 1000
+    subject_df: AnyDataFrame, output_path: Union[str, Path], maxlen: int = 1000
 ) -> Optional[AnyDataFrame]:
-
     if output_path is None or str(output_path).strip() == "":
         output_path = os.getcwd()
     else:
         output_path = str(output_path).strip()
     output_path = remove_file_scheme(output_path)
-    os.makedirs(output_path,exist_ok=True)
-    
+    os.makedirs(output_path, exist_ok=True)
+
     if subject_df.empty:
         raise ValueError("DataFrame is empty")
-    
+
     required_columns = [
-        "subject_name","subject_bio","date_of_birth",
-        "subject_sex","notes","country","distribution",
+        "subject_name",
+        "subject_bio",
+        "date_of_birth",
+        "subject_sex",
+        "notes",
+        "country",
+        "distribution",
         "status",
     ]
 

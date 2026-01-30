@@ -1,4 +1,3 @@
-
 import logging
 import ecoscope
 import numpy as np
@@ -11,13 +10,14 @@ from ecoscope.plotting.plot import nsd
 from plotly.subplots import make_subplots
 from ecoscope.trajectory import Trajectory
 from ecoscope.relocations import Relocations
-from typing import Union, Annotated,Optional
+from typing import Union, Annotated, Optional
 from ecoscope_workflows_core.decorators import task
-from ecoscope_workflows_core.annotations import AnyGeoDataFrame,AnyDataFrame
+from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import ExportArgs
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
 logger = logging.getLogger(__name__)
+
 
 def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
     """
@@ -47,10 +47,7 @@ def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
         season_type = row.get("season", "").strip().lower()
 
         # Season-based fill color
-        fillcolor = {
-            "wet": "rgba(0,0,255,0.15)", 
-            "dry": "rgba(0,0,255,0.05)"
-            }.get(season_type, "rgba(0,0,0,0.05)")
+        fillcolor = {"wet": "rgba(0,0,255,0.15)", "dry": "rgba(0,0,255,0.05)"}.get(season_type, "rgba(0,0,0,0.05)")
 
         fig.add_shape(
             type="rect",
@@ -77,11 +74,12 @@ def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
 
     return fig
 
+
 def _load_seasons_df(seasons_df: Union[str, Path, AnyDataFrame]) -> AnyDataFrame:
     # Check if it's already a DataFrame
     if isinstance(seasons_df, pd.DataFrame):
         return seasons_df
-    
+
     # Normalize the path and convert to Path object
     normalized_path = remove_file_scheme(str(seasons_df))
     p = Path(normalized_path)
@@ -91,6 +89,7 @@ def _load_seasons_df(seasons_df: Union[str, Path, AnyDataFrame]) -> AnyDataFrame
         return pd.read_parquet(p)
     else:
         return pd.read_csv(p)
+
 
 @task
 def draw_season_nsd_plot(
@@ -107,7 +106,6 @@ def draw_season_nsd_plot(
         ),
     ] = None,
 ) -> Annotated[str, Field()]:
-
     if relocations_gdf is None or relocations_gdf.empty:
         raise ValueError("Relocations gdf is empty.")
 
@@ -116,6 +114,7 @@ def draw_season_nsd_plot(
     figure = nsd(relocations_gdf)
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
+
 
 @task
 def draw_season_speed_plot(
@@ -132,7 +131,6 @@ def draw_season_speed_plot(
         ),
     ] = None,
 ) -> Annotated[str, Field()]:
-
     if relocations_gdf is None or relocations_gdf.empty:
         raise ValueError("Relocations gdf is empty.")
 
@@ -142,6 +140,7 @@ def draw_season_speed_plot(
     figure = ecoscope.plotting.speed(trajs_gdf)
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
+
 
 @task
 def draw_season_mcp_plot(
@@ -167,47 +166,50 @@ def draw_season_mcp_plot(
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
+
 def collar_event_timeline_plot(
     geodataframe: AnyGeoDataFrame,
     collar_events: Optional[AnyDataFrame] = None,
 ) -> go.FigureWidget:
     fig = go.FigureWidget()
-    
+
     if geodataframe is None or geodataframe.empty:
         raise ValueError("Relocations gdf is empty.")
-    
+
     required_cols = ["fixtime"]
     missing_cols = [col for col in required_cols if col not in geodataframe.columns]
     if missing_cols:
         raise ValueError(f"Missing required columns: {missing_cols}")
-    
+
     geodataframe = geodataframe.dropna(subset=["fixtime"]).copy()
-    
+
     ys = [0]
-    
+
     # Plot events if available
     if collar_events is not None and not collar_events.empty:
         collar_events = collar_events.dropna(subset=["time"]).copy()
-        
+
         if not collar_events.empty:
             times = collar_events["time"].to_list()
             times.append(geodataframe["fixtime"].iloc[-1])
-            
+
             # Create x and y coordinates for each event line
             xs = [[times[i]] * 3 + [times[i + 1]] for i in range(len(collar_events))]
             ys = [[0, i + 1, 0, 0] for i in range(len(collar_events))]
             colors = collar_events["priority_label"]
-            
+
             # Plot each event as a line
             for x, y, color in zip(xs, ys, colors):
-                fig.add_trace(go.Scatter(
-                    x=x,
-                    y=y,
-                    line_color=color,
-                    mode="lines",
-                    showlegend=False,
-                ))
-            
+                fig.add_trace(
+                    go.Scatter(
+                        x=x,
+                        y=y,
+                        line_color=color,
+                        mode="lines",
+                        showlegend=False,
+                    )
+                )
+
             # Add annotations for events
             fig.update_layout(
                 annotations=[
@@ -220,23 +222,25 @@ def collar_event_timeline_plot(
                     for i, (_, row) in enumerate(collar_events.iterrows(), 1)
                 ]
             )
-    
+
     # Plot relocations as baseline markers
     x = geodataframe["fixtime"]
     # Calculate max_y from the nested ys list
     max_y = max([max(y_list) for y_list in ys]) if isinstance(ys[0], list) else max(ys)
     y = np.full(len(x), max_y / 10 if max_y > 0 else 0.5)
-    
-    fig.add_trace(go.Scatter(
-        x=x,
-        y=y,
-        line_color="rgb(0,0,255)",
-        mode="markers",
-        marker=dict(size=4, color="rgb(0, 100, 200)"),
-        showlegend=False,
-        hovertemplate="Relocation: %{x}",
-    ))
-    
+
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=y,
+            line_color="rgb(0,0,255)",
+            mode="markers",
+            marker=dict(size=4, color="rgb(0, 100, 200)"),
+            showlegend=False,
+            hovertemplate="Relocation: %{x}",
+        )
+    )
+
     # Update layout
     fig.update_layout(
         margin_l=50,
@@ -246,10 +250,11 @@ def collar_event_timeline_plot(
         yaxis_visible=False,
         showlegend=False,
     )
-    
+
     return fig
 
-@task 
+
+@task
 def draw_season_collared_plot(
     events_gdf: AnyDataFrame,
     relocations_gdf: AnyGeoDataFrame,
@@ -271,7 +276,7 @@ def draw_season_collared_plot(
     if relocations_gdf is None or relocations_gdf.empty:
         raise ValueError("Relocations gdf is empty.")
 
-    subject_name = relocations_gdf['subject_name'].unique()[0]
+    subject_name = relocations_gdf["subject_name"].unique()[0]
 
     if events_gdf is None or events_gdf.empty:
         logger.warning(f"No events data for subject '{subject_name}'.")
@@ -283,9 +288,8 @@ def draw_season_collared_plot(
         if events_gdf.empty:
             logger.warning(f"No events found for subject '{subject_name}'.")
             events_gdf = None
-    
+
     # Generate visualization with or without events
     fig = collar_event_timeline_plot(relocations_gdf, events_gdf)
     figure = add_seasons_square(fig, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
-

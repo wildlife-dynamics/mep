@@ -17,6 +17,7 @@ from docx.shared import Inches
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore")
 
+
 @task
 def create__mep_context_page(
     template_path: Annotated[
@@ -87,6 +88,7 @@ def create__mep_context_page(
     doc.save(output_path)
     return str(output_path)
 
+
 @task
 def create_mep_ctx_cover(
     count: int,
@@ -119,6 +121,7 @@ def create_mep_ctx_cover(
         "prepared_by": prepared_by,
     }
 
+
 def validate_image_path(field_name: str, path: str) -> None:
     """Validate that an image file exists and has valid extension."""
     normalized_path = remove_file_scheme(path)
@@ -134,22 +137,23 @@ def validate_image_path(field_name: str, path: str) -> None:
         )
 
     print(f" Validated image for '{field_name}': {normalized_path}")
-    
-    
-# subject template 
+
+
+# subject template
 # 1. profile photo  -- download_profile_pic
 # 2. subject information -- download_subject_info
-# 3. speedmap  -- convert_speedmap_png 
-# 4. homerange map  -- convert_homerange_png 
+# 3. speedmap  -- convert_speedmap_png
+# 4. homerange map  -- convert_homerange_png
 # 5. seasonal homerange map -- convert_season_png
-# 6. nsd plot  -- convert_nsd_png 
+# 6. nsd plot  -- convert_nsd_png
 # 7. speed plot -- convert_speed_png
 # 8. collared event plot -- convert_events_png
 # 9. mcp plot -- convert_mcp_png
 # 10. subject stats table -- persist_subject_stats
 # 11. subject occupancy table -- persist_subject_occupancy
 
-@task 
+
+@task
 def create_mep_subject_context(
     profile_photo_path: str | None,
     subject_info_path: str | None,
@@ -165,7 +169,7 @@ def create_mep_subject_context(
 ) -> Dict[str, Any]:
     """
     Build a dictionary with the subject report template values.
-    
+
     Handles None values gracefully for all input parameters.
 
     Args:
@@ -184,25 +188,25 @@ def create_mep_subject_context(
     Returns:
         Structured dictionary with subject report values. Missing values default to appropriate fallbacks.
     """
-    
+
     def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         """
         Safely read CSV file and return DataFrame.
-        
+
         Args:
             file_path: Path to CSV file or None
-            
+
         Returns:
             DataFrame with data, or empty DataFrame if file is invalid
         """
         if file_path is None:
             logger.warning("CSV file path is None")
             return pd.DataFrame()
-        
+
         if not file_path.strip():
             logger.warning("CSV file path is empty string")
             return pd.DataFrame()
-        
+
         try:
             df = pd.read_csv(file_path)
             if df.empty:
@@ -221,46 +225,47 @@ def create_mep_subject_context(
     def safe_get_value(df: pd.DataFrame, column: str, default: Any = None, row: int = 0) -> Any:
         """
         Safely extract value from DataFrame with fallback.
-        
+
         Args:
             df: DataFrame to extract from
             column: Column name
             default: Default value if extraction fails
             row: Row index (default: 0)
-            
+
         Returns:
             Extracted value or default
         """
         if df.empty or column not in df.columns or len(df) <= row:
             return default
-        
+
         value = df.iloc[row][column]
         return value if pd.notna(value) else default
-    
+
     def validate_path(path: str | None, path_name: str) -> str | None:
         """
         Validate and log path status.
-        
+
         Args:
             path: Path to validate or None
             path_name: Human-readable name for logging
-            
+
         Returns:
             Original path if valid, None otherwise
         """
         if path is None:
             logger.warning(f"{path_name} is None")
             return None
-        
+
         if not path.strip():
             logger.warning(f"{path_name} is empty string")
             return None
-        
+
         from pathlib import Path
+
         if not Path(path).exists():
             logger.warning(f"{path_name} does not exist: {path}")
             return None
-        
+
         return path
 
     # Validate and log all image/file paths
@@ -277,12 +282,12 @@ def create_mep_subject_context(
     subject_stats_df = safe_read_csv(subject_stats_table_path)
     subject_info_df = safe_read_csv(subject_info_path)
     subject_occupancy_df = safe_read_csv(subject_occupancy_table_path)
-    
+
     # Extract subject stats with defaults
     name = safe_get_value(subject_stats_df, "name", None)
     if not name or name == "Unknown":  # Handles None, empty string, and "Unknown"
         name = safe_get_value(subject_info_df, "subject_name", "Unknown")
-        
+
     mcp = safe_get_value(subject_stats_df, "MCP", 0.0)
     etd = safe_get_value(subject_stats_df, "ETD", 0.0)
     time_tracked_days = safe_get_value(subject_stats_df, "time_tracked_days", 0)
@@ -291,7 +296,7 @@ def create_mep_subject_context(
     max_displacement = safe_get_value(subject_stats_df, "max_displacement", 0.0)
     night_day_ratio = safe_get_value(subject_stats_df, "night_day_ratio", 0.0)
     distribution = safe_get_value(subject_stats_df, "distribution", "")
-    
+
     # Extract subject info with defaults
     dob_raw = safe_get_value(subject_info_df, "dob", None)
     dob = str(int(dob_raw)) if dob_raw is not None and pd.notna(dob_raw) else "-"
@@ -300,14 +305,14 @@ def create_mep_subject_context(
     notes = safe_get_value(subject_info_df, "notes", "None")
     status = safe_get_value(subject_info_df, "status_raw", "-")
     bio = safe_get_value(subject_info_df, "bio", "")
-    
+
     # Extract occupancy data with defaults
     national_pa_use = safe_get_value(subject_occupancy_df, "national_pa_use", 0.0)
     community_pa_use = safe_get_value(subject_occupancy_df, "community_pa_use", 0.0)
     crop_raid_percent = safe_get_value(subject_occupancy_df, "crop_raid_percent", 0.0)
     kenya_use = safe_get_value(subject_occupancy_df, "kenya_use", 0.0)
     unprotected = safe_get_value(subject_occupancy_df, "unprotected", 0.0)
-    
+
     # Build context dictionary (None values are allowed and will be handled by template)
     ctx = {
         # Media paths (can be None if files don't exist)
@@ -319,7 +324,6 @@ def create_mep_subject_context(
         "speed_plot": speed_plot_path,
         "collar_event_timeline": collared_event_plot_path,
         "mcp_plot": mcp_plot_path,
-        
         # Subject statistics
         "name": name,
         "mcp": mcp,
@@ -330,15 +334,13 @@ def create_mep_subject_context(
         "max_displacement": max_displacement,
         "night_day_ratio": night_day_ratio,
         "distribution": distribution,
-        
         # Subject information
         "dob": dob,
         "sex": sex,
         "country": country,
-        "id_notes": notes,     
+        "id_notes": notes,
         "status": status,
         "bio": bio,
-        
         # Occupancy data
         "national_pa_use": national_pa_use,
         "community_pa_use": community_pa_use,
@@ -346,18 +348,18 @@ def create_mep_subject_context(
         "kenya_use": kenya_use,
         "unprotected": unprotected,
     }
-    
+
     # Count how many paths are None
-    none_paths = sum(1 for k, v in ctx.items() if k.endswith(('_photo', '_map', '_plot', '_timeline')) and v is None)
+    none_paths = sum(1 for k, v in ctx.items() if k.endswith(("_photo", "_map", "_plot", "_timeline")) and v is None)
     total_paths = 8
-    
+
     logger.info(f"Created context for subject: {name}")
     logger.info(f"Media files available: {total_paths - none_paths}/{total_paths}")
     logger.debug(f"Full context: {ctx}")
-    
+
     print(f" Created context for subject: {name}")
     print(f" Media files available: {total_paths - none_paths}/{total_paths}")
-    
+
     return ctx
 
 
@@ -365,41 +367,30 @@ def create_mep_subject_context(
 IMAGE_DIMENSIONS = {
     # Wide timeline/plot images (2238x450)
     "timeline_plot": {"width": 15.0, "height": 3.0},  # Maintains aspect ratio ~5:1
-    
     # Tall range map (602x855)
     "range_map": {"width": 8.0, "height": 11.4},  # Maintains aspect ratio ~0.7:1
-    
     # Medium landscape maps (765x525)
     "landscape_map": {"width": 12.0, "height": 8.2},  # Maintains aspect ratio ~1.45:1
-    
     # Profile photo (square/portrait)
     "profile_photo": {"width": 3.75, "height": 3.75},  # Adjust as needed
 }
 
-def create_inline_image_inch(
-    template: DocxTemplate,
-    image_path: str,
-    width_cm: float,
-    height_cm: float
-) -> InlineImage:
+
+def create_inline_image_inch(template: DocxTemplate, image_path: str, width_cm: float, height_cm: float) -> InlineImage:
     """
     Create an InlineImage object with specified dimensions.
-    
+
     Args:
         template: DocxTemplate instance
         image_path: Path to the image file
         width_cm: Width in centimeters
         height_cm: Height in centimeters
-        
+
     Returns:
         InlineImage object ready for template rendering
     """
-    return InlineImage(
-        template,
-        image_path,
-        width=Inches(width_cm),
-        height=Inches(height_cm)
-    )
+    return InlineImage(template, image_path, width=Inches(width_cm), height=Inches(height_cm))
+
 
 def prepare_mep_context_for_template(
     context: Dict[str, Any],
@@ -407,11 +398,11 @@ def prepare_mep_context_for_template(
 ) -> Dict[str, Any]:
     """
     Prepare context by converting image paths to InlineImage objects.
-    
+
     Args:
         context: Original context dictionary
         template: DocxTemplate instance
-        
+
     Returns:
         Updated context with InlineImage objects
     """
@@ -422,50 +413,47 @@ def prepare_mep_context_for_template(
         "nsd_plot": {"height": 2.61, "width": 10.58},
         "speed_plot": {"height": 2.61, "width": 10.58},
         "mcp_plot": {"height": 2.61, "width": 10.58},
-        
-        # Range map -- seasons 
+        # Range map -- seasons
         "range_map": {"height": 7.08, "width": 5.36},
-        
         # mov_map --speedmap
         "mov_map": {"height": 4.42, "width": 7.47},
-
         # overview map -- home range
-        "overview_map":{"height": 7.06, "width": 5.4},
-        
+        "overview_map": {"height": 7.06, "width": 5.4},
         # Profile photo
         "profile_photo": {"height": 3.58, "width": 3.44},
     }
-    
+
     rendered_context = context.copy()
-    
+
     for field_name, dimensions in image_field_mapping.items():
         if field_name in rendered_context:
             image_path = rendered_context[field_name]
-            
+
             # Skip if path is None or empty
             if not image_path:
                 logger.warning(f"Empty image path for field: {field_name}")
                 continue
-            
+
             # Verify file exists
             if not Path(image_path).exists():
                 logger.error(f"Image file not found for {field_name}: {image_path}")
                 continue
-            
+
             try:
                 rendered_context[field_name] = create_inline_image_inch(
                     template=template,
                     image_path=image_path,
                     width_cm=dimensions["width"],
-                    height_cm=dimensions["height"]
+                    height_cm=dimensions["height"],
                 )
                 logger.debug(f"Created InlineImage for {field_name}: {dimensions['width']}x{dimensions['height']} cm")
             except Exception as e:
                 logger.error(f"Failed to create InlineImage for {field_name}: {e}")
                 # Keep original path as fallback
                 continue
-    
+
     return rendered_context
+
 
 @task
 def create_mep_grouper_page(
@@ -477,14 +465,14 @@ def create_mep_grouper_page(
 ) -> str:
     """
     Create a Word document from template and context.
-    
+
     Args:
         template_path: Path to the .docx template file
         output_dir: Directory to save the output document
         context: Dictionary containing template variables and image paths
         filename: Optional output filename (auto-generated if None)
         validate_images: Whether to validate image paths before rendering
-        
+
     Returns:
         Path to the generated document
     """
@@ -499,7 +487,7 @@ def create_mep_grouper_page(
 
     if not os.path.exists(template_path):
         raise FileNotFoundError(f"Template file not found: {template_path}")
-    
+
     # Create output directory if it doesn't exist
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -507,19 +495,25 @@ def create_mep_grouper_page(
     if not filename:
         subject_name = context.get("name", "unknown")
         # Sanitize subject name for filename
-        safe_name = "".join(c for c in subject_name if c.isalnum() or c in (' ', '-', '_')).strip()
-        safe_name = safe_name.replace(' ', '_')
+        safe_name = "".join(c for c in subject_name if c.isalnum() or c in (" ", "-", "_")).strip()
+        safe_name = safe_name.replace(" ", "_")
         filename = f"{safe_name}_report_{uuid.uuid4().hex[:8]}.docx"
-    
+
     output_path = Path(output_dir) / filename
 
     # Validate image paths if requested
     if validate_images:
         image_fields = [
-            "profile_photo", "mov_map", "overview_map", "range_map",
-            "nsd_plot", "speed_plot", "collared_event_timeline", "mcp_plot"
+            "profile_photo",
+            "mov_map",
+            "overview_map",
+            "range_map",
+            "nsd_plot",
+            "speed_plot",
+            "collared_event_timeline",
+            "mcp_plot",
         ]
-        
+
         for field_name in image_fields:
             value = context.get(field_name)
             if value and isinstance(value, str):
@@ -553,5 +547,3 @@ def create_mep_grouper_page(
         return str(output_path)
     except Exception as e:
         raise ValueError(f"Failed to render or save document: {e}")
-    
-    

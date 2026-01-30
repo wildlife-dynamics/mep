@@ -11,6 +11,7 @@ from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_schem
 
 logger = logging.getLogger(__name__)
 
+
 @task
 def build_template_region_lookup(
     gdf: AnyGeoDataFrame,
@@ -28,9 +29,11 @@ def build_template_region_lookup(
     # Default categories (you can add more later)
     categories = categories or {
         "national_pa_use": [
-            "National Park", "National Reserve",
+            "National Park",
+            "National Reserve",
             "National Reserve_Privately Managed",
-            "National Reserve_Beacon_Adjusted", "Forest Reserve"
+            "National Reserve_Beacon_Adjusted",
+            "Forest Reserve",
         ],
         "community_pa_use": ["Community Conservancy", "Group Ranch"],
     }
@@ -48,16 +51,16 @@ def build_template_region_lookup(
     result.update(static_ids)
     return result
 
+
 @task
 def compute_template_regions(
-    geodataframe: AnyGeoDataFrame, 
-    template_lookup: Dict[str, list[str]], 
-    crs: str
+    geodataframe: AnyGeoDataFrame, template_lookup: Dict[str, list[str]], crs: str
 ) -> Dict[str, Polygon | MultiPolygon]:
     return {
         template: geodataframe.query("globalid in @gids").to_crs(crs).unary_union
         for template, gids in template_lookup.items()
     }
+
 
 @task
 def compute_subject_occupancy(
@@ -79,26 +82,26 @@ def compute_subject_occupancy(
         raise ValueError("`compute_subject_occupancy`:ETD GeoDataFrame is empty.")
     if regions_gdf is None or not regions_gdf:
         raise ValueError("`compute_subject_occupancy`:Regions dictionary is empty.")
-    
-    subject_id = subjects_df['subject_name'].iloc[0]
-    
+
+    subject_id = subjects_df["subject_name"].iloc[0]
+
     # Get home range at 99.9th percentile and convert to target CRS
     try:
-        percentile_mask = etd_gdf['percentile'] == 99.9
+        percentile_mask = etd_gdf["percentile"] == 99.9
         if not percentile_mask.any():
             raise ValueError(
                 f"`compute_subject_occupancy`:No 99.9th percentile found for subject '{subject_id}'. "
                 f"Available percentiles: {sorted(etd_gdf['percentile'].unique().tolist())}"
             )
-        
+
         subject_range = etd_gdf[percentile_mask].to_crs(crs).geometry.iloc[0]
-        
+
     except (IndexError, KeyError) as e:
         raise ValueError(
             f"`compute_subject_occupancy`:Could not extract 99.9th percentile ETD for subject '{subject_id}'. "
             f"Available percentiles: {etd_gdf['percentile'].unique().tolist()}"
         ) from e
-    
+
     if subject_range.is_empty:
         raise ValueError(f"`compute_subject_occupancy`:Home range geometry is empty for subject '{subject_id}'.")
     total_area = subject_range.area
