@@ -44,24 +44,6 @@
       "description": "Choose the period of time to analyze.",
       "title": "Define analysis time range"
     },
-    "groupers": {
-      "additionalProperties": false,
-      "properties": {
-        "groupers": {
-          "default": null,
-          "items": {
-            "$ref": "#/$defs/ValueGrouper",
-            "title": "Group by"
-          },
-          "title": " ",
-          "type": "array",
-          "description": "            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            "
-        }
-      },
-      "type": "object",
-      "required": [],
-      "title": "Configure grouping strategy"
-    },
     "configure_base_maps": {
       "additionalProperties": false,
       "properties": {
@@ -369,11 +351,6 @@
     }
   },
   "$defs": {
-    "ValueGrouper": {
-      "oneOf": [],
-      "title": "Category",
-      "type": "string"
-    },
     "EarthRangerConnection": {
       "properties": {
         "name": {
@@ -455,7 +432,6 @@
     "ui:order": [
       "workflow_details",
       "time_range",
-      "groupers",
       "configure_base_maps",
       "er_client_name",
       "gee_project_name",

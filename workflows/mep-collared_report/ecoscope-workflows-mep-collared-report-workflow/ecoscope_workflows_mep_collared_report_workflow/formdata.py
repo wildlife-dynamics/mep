@@ -216,10 +216,6 @@ class CustomTrajsFilter(BaseModel):
     max_speed_kmhr: float | None = Field(9.0, title="Max Speed Kmhr")
 
 
-class ValueGrouper(str, Enum):
-    subject_name = "subject_name"
-
-
 class EarthRangerConnection(BaseModel):
     name: str = Field(..., title="Data Source")
 
@@ -244,15 +240,8 @@ class LocalFile(BaseModel):
     )
 
 
-class Groupers(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    groupers: list[ValueGrouper] | None = Field(
-        None,
-        description="            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            ",
-        title=" ",
-    )
+class ValueGrouper(str, Enum):
+    subject_name = "subject_name"
 
 
 class ErClientName(BaseModel):
@@ -294,7 +283,6 @@ class FormData(BaseModel):
         description="Choose the period of time to analyze.",
         title="Define analysis time range",
     )
-    groupers: Groupers | None = Field(None, title="Configure grouping strategy")
     configure_base_maps: ConfigureBaseMaps | None = Field(
         None, title="Configure base map layers"
     )

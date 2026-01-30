@@ -1,18 +1,11 @@
 workflow_details:
-  description: MEP Collared elephant report
-  name: mep_sample
-groupers:
-  groupers:
-    - subject_name
+  description: 'Workflow for MEP Elephants in Tsavo using Ecoscope data.'
+  name: mep_elephants_ecoscope_tsavo
 configure_base_maps:
   base_maps:
     - url: >-
         https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}
       opacity: 1
-      max_zoom: 20
-    - url: >-
-        https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}
-      opacity: 0.1
       max_zoom: 20
 er_client_name:
   data_source:
@@ -31,7 +24,7 @@ custom_trajs_filter:
   min_speed_kmhr: 0.01
   max_speed_kmhr: 9
 time_range:
-  since: '2025-11-30T21:00:00.000Z'
-  until: '2026-01-25T21:00:00.000Z'
+  since: '2025-01-01T12:00:00.000Z'
+  until: '2026-01-29T12:00:00.000Z'
 subject_group_var:
   var: MEP_Elephants_Ecoscope_Tsavo

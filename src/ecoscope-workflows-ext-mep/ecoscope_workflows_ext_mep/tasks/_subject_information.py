@@ -93,16 +93,18 @@ def persist_subject_photo(
 
     if column not in subject_df.columns:
         raise KeyError(f"Column '{column}' not found. Available: {list(subject_df.columns)}") 
-
+    
+    last_file_path: Optional[Path] = None
     for idx, url in subject_df[column].dropna().items():
         if not isinstance(url, str) or not url.startswith(("http://", "https://")):
             logger.warning(f"Skipping invalid URL at index {idx}: {url}")
+            print(f"Skipping invalid URL at index {idx}: {url}")
             continue
 
         try:
             df_subset = subject_df.loc[[idx]]
             row_hash = hashlib.sha256(pd.util.hash_pandas_object(df_subset, index=True).values).hexdigest()
-            filename = f"{row_hash[:8]}_{idx}"
+            filename = f"profile_photo_{row_hash[:3]}"
 
             if not image_type.startswith("."):
                 image_type = f".{image_type}"
@@ -111,11 +113,14 @@ def persist_subject_photo(
             processed_url = url.replace("dl=0", "dl=1") if "dropbox.com" in url else url
             ecoscope.io.utils.download_file(processed_url, str(file_path), overwrite_existing)
             logger.info(f"Downloaded profile photo for index {idx} to {file_path}")
+            print(f"Downloaded profile photo for index {idx} to {file_path}")
+            last_file_path = file_path 
         except Exception as e:
-            logger.error(f"Error processing URL at index {idx} ({url}): {e}") 
+            print(f"Error processing URL at index {idx} ({url}): {e}") 
             continue
     
-    return str(file_path) if "file_path" in locals() else None
+    return str(last_file_path) if last_file_path else None
+#if "file_path" in locals() else None
 
 def safe_strip(x) -> str:
     return "" if x is None else str(x).strip()

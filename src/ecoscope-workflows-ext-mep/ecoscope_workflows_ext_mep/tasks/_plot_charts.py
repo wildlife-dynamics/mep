@@ -64,16 +64,16 @@ def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
             layer="below",
         )
 
-        midpoint = start_dt + (end_dt - start_dt) / 2
-        fig.add_annotation(
-            x=midpoint,
-            y=1.02,
-            text=row.get("season", "Season").capitalize(),
-            showarrow=False,
-            xanchor="center",
-            yanchor="bottom",
-            font=dict(size=12),
-        )
+        # midpoint = start_dt + (end_dt - start_dt) / 2
+        # fig.add_annotation(
+        #     x=midpoint,
+        #     y=1.02,
+        #     text=row.get("season", "Season").capitalize(),
+        #     showarrow=False,
+        #     xanchor="center",
+        #     yanchor="bottom",
+        #     font=dict(size=12),
+        # )
 
     return fig
 
@@ -171,90 +171,82 @@ def collar_event_timeline_plot(
     geodataframe: AnyGeoDataFrame,
     collar_events: Optional[AnyDataFrame] = None,
 ) -> go.FigureWidget:
-
     fig = go.FigureWidget()
-    if  geodataframe is None or geodataframe.empty:
+    
+    if geodataframe is None or geodataframe.empty:
         raise ValueError("Relocations gdf is empty.")
-
+    
     required_cols = ["fixtime"]
     missing_cols = [col for col in required_cols if col not in geodataframe.columns]
     if missing_cols:
         raise ValueError(f"Missing required columns: {missing_cols}")
-
+    
     geodataframe = geodataframe.dropna(subset=["fixtime"]).copy()
     
-    time_min = geodataframe["fixtime"].min()
-    time_max = geodataframe["fixtime"].max()
-    max_event_y = 0
+    ys = [0]
     
     # Plot events if available
     if collar_events is not None and not collar_events.empty:
         collar_events = collar_events.dropna(subset=["time"]).copy()
         
         if not collar_events.empty:
-            # Plot event lines and markers
-            for i, (_, row) in enumerate(collar_events.iterrows(), 1):
+            times = collar_events["time"].to_list()
+            times.append(geodataframe["fixtime"].iloc[-1])
+            
+            # Create x and y coordinates for each event line
+            xs = [[times[i]] * 3 + [times[i + 1]] for i in range(len(collar_events))]
+            ys = [[0, i + 1, 0, 0] for i in range(len(collar_events))]
+            colors = collar_events["priority_label"]
+            
+            # Plot each event as a line
+            for x, y, color in zip(xs, ys, colors):
                 fig.add_trace(go.Scatter(
-                    x=[row["time"], row["time"], row["time"]],
-                    y=[0, i, 0],
+                    x=x,
+                    y=y,
+                    line_color=color,
                     mode="lines",
-                    line=dict(color=row["priority_label"], width=2),
-                    hovertemplate=(
-                        f"<b>{row['event_type']}</b><br>"
-                        f"{row['time'].strftime('%Y-%m-%d %H:%M:%S')}"
-                        "<extra></extra>"
-                    ),
                     showlegend=False,
-                    name=row["event_type"],
                 ))
             
-            # Plot event markers for better visibility
-            fig.add_trace(go.Scatter(
-                x=collar_events["time"],
-                y=range(1, len(collar_events) + 1),
-                mode="markers",
-                marker=dict(
-                    size=8,
-                    color=collar_events["priority_label"],
-                    symbol="circle",
-                ),
-                hovertemplate=(
-                    "<b>%{customdata[0]}</b><br>"
-                    "%{customdata[1]}<extra></extra>"
-                ),
-                customdata=collar_events[["event_type", "time"]].values,
-                showlegend=False,
-            ))
-            
-            max_event_y = len(collar_events)
-            time_min = min(time_min, collar_events["time"].min())
-            time_max = max(time_max, collar_events["time"].max())
+            # Add annotations for events
+            fig.update_layout(
+                annotations=[
+                    go.layout.Annotation(
+                        x=row.time,
+                        y=i,
+                        text=f"{row.event_type}<br>{row.time.date()}",
+                        showarrow=False,
+                    )
+                    for i, (_, row) in enumerate(collar_events.iterrows(), 1)
+                ]
+            )
     
     # Plot relocations as baseline markers
-    relocation_y = max_event_y + 0.5
+    x = geodataframe["fixtime"]
+    # Calculate max_y from the nested ys list
+    max_y = max([max(y_list) for y_list in ys]) if isinstance(ys[0], list) else max(ys)
+    y = np.full(len(x), max_y / 10 if max_y > 0 else 0.5)
+    
     fig.add_trace(go.Scatter(
-        x=geodataframe["fixtime"],
-        y=np.full(len(geodataframe), relocation_y),
+        x=x,
+        y=y,
+        line_color="rgb(0,0,255)",
         mode="markers",
         marker=dict(size=4, color="rgb(0, 100, 200)"),
-        hovertemplate="Relocation: %{x}<extra></extra>",
         showlegend=False,
+        hovertemplate="Relocation: %{x}",
     ))
     
     # Update layout
     fig.update_layout(
-        margin=dict(l=0, r=0, t=20, b=15),
-        xaxis=dict(
-            range=[time_min, time_max],
-            showgrid=True,
-            gridwidth=1,
-            gridcolor="LightGray",
-        ),
-        yaxis=dict(visible=False),
+        margin_l=50,
+        margin_r=10,
+        margin_t=25,
+        margin_b=15,
+        yaxis_visible=False,
         showlegend=False,
-        hovermode="closest",
-        plot_bgcolor="white",
     )
+    
     return fig
 
 @task 

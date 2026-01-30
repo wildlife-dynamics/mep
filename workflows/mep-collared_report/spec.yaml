@@ -1,19 +1,19 @@
 id: mep_collared_report
 requirements:
   - name: ecoscope-workflows-core
-    version: "0.20.4.*"
+    version: "0.21.2.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-ecoscope
-    version: "0.20.4.*"
+    version: "0.21.2.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.20.*"
+    version: "0.0.22.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.6.*"
+    version: "0.0.7.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mnc
@@ -63,6 +63,9 @@ workflow:
   - name: Configure grouping strategy 
     id: groupers 
     task: set_custom_groupers
+    partial:
+      groupers:
+        - subject_name
   
   # set basemaps
   - name: Configure base map layers 
@@ -401,6 +404,8 @@ workflow:
         - serial_number
         - geometry
         - event_details
+        - priority
+        - priority_label
 
   - name: Normalize event details 
     id: normalize_event_details
@@ -569,6 +574,20 @@ workflow:
       argnames: df
       argvalues: ${{ workflow.format_speed_bin_labels.return }}
   
+  - name: Filter df for map rendering 
+    id: filter_speedmap_gdf 
+    task: filter_df_cols
+    partial:
+      columns: 
+        - geometry
+        - speed_kmhr
+        - speed_bins
+        - speed_bins_colormap
+        - speed_bins_formatted
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.format_speed_values.return }}
+
   - name: Generate speedmap layers 
     id: generate_speedmap_layers 
     task: create_path_layer 
@@ -593,14 +612,17 @@ workflow:
         label_suffix: null
     mapvalues:
       argnames: geodataframe
-      argvalues: ${{ workflow.format_speed_values.return }}
+      argvalues: ${{ workflow.filter_speedmap_gdf.return }}
   
   - name: Zoom to gdf extent 
     id: zoom_speed_gdf_extent
-    task: view_state_deck_gdf
+    task: custom_view_state_deck_gdf
     partial: 
       pitch: 0
       bearing: 0
+      buffer: 0.375
+      map_width_px: 900
+      map_height_px: 700
     mapvalues:
       argnames: gdf
       argvalues: ${{ workflow.format_speed_values.return }}
@@ -690,15 +712,6 @@ workflow:
     mapvalues:
       argnames: trajectory_gdf 
       argvalues: ${{ workflow.split_traj_by_group.return }}
-
-  - name: Preview etd
-    id: preview_etd_df 
-    task: view_df
-    partial: 
-      name: etd_preview
-    mapvalues:
-      argnames: gdf
-      argvalues: ${{ workflow.generate_etd.return }}
 
   - name: Determine seasonal windows 
     id: determine_seasonal_windows 
@@ -801,10 +814,13 @@ workflow:
   
   - name: Zoom to  home range gdf extent 
     id: zoom_hr_gdf_extent
-    task: view_state_deck_gdf
+    task: custom_view_state_deck_gdf
     partial: 
       pitch: 0
       bearing: 0
+      buffer: 0.375
+      map_width_px: 602
+      map_height_px: 855
     mapvalues:
       argnames: gdf
       argvalues: ${{ workflow.format_speed_values.return }}
@@ -880,23 +896,28 @@ workflow:
       argnames: gdf
       argvalues: ${{ workflow.add_season_labels.return }}
 
-  - name: Preview 
-    id: preview_season_df 
-    task: view_df
+  - name: Convert season column to string 
+    id: convert_season_to_string 
+    task: convert_to_str
     partial: 
-      name: seasonal_home_range_preview
+      columns: 
+        - season 
     mapvalues:
-      argnames: gdf
+      argnames: df
       argvalues: ${{ workflow.seasonal_home_range.return }}
 
-  - name: Assign season colors to dataframe 
-    id: assign_season_df
-    task: assign_season_colors
-    partial:
-      seasons_column: season
+  - name: Apply colormap to seasonal home range
+    id: apply_seasonal_colormap 
+    task: apply_color_map
+    partial: 
+      input_column_name: season
+      output_column_name: season_colors
+      colormap: 
+        - "#00bfff"
+        - "#ff7f50"
     mapvalues:
-      argnames: gdf
-      argvalues: ${{ workflow.seasonal_home_range.return }}
+      argnames: df
+      argvalues: ${{ workflow.convert_season_to_string.return }}
 
   - name: Create seasonal home range layers
     id: generate_season_layers 
@@ -926,7 +947,7 @@ workflow:
           label_suffix: null
     mapvalues: 
       argnames: geodataframe
-      argvalues: ${{ workflow.assign_season_df.return }}
+      argvalues: ${{ workflow.apply_seasonal_colormap.return }}
 
   - name: Create mcp polygon layer 
     id: create_mcp_polygon_layer 
@@ -939,7 +960,7 @@ workflow:
         wireframe: false
         get_fill_color: [255, 20, 147, 50]
         get_line_color: [255, 20, 147, 200]
-        opacity: 0.45
+        opacity: 0.35
         get_line_width: 1.75
         get_elevation: 0
         get_point_radius: 1
@@ -978,13 +999,16 @@ workflow:
 
   - name: Zoom to seasons gdf extent 
     id: zoom_seasons_gdf_extent
-    task: view_state_deck_gdf
+    task: custom_view_state_deck_gdf
     partial: 
       pitch: 0
       bearing: 0
+      buffer: 0.375
+      map_width_px: 602
+      map_height_px: 855
     mapvalues:
       argnames: gdf
-      argvalues: ${{ workflow.assign_season_df.return }}
+      argvalues: ${{ workflow.apply_seasonal_colormap.return }}
 
   - name: Combine seasonal home range layers with view state
     id: zip_seasonal_hr_with_viewstate
@@ -1293,18 +1317,8 @@ workflow:
     mapvalues:
       argnames: df
       argvalues: ${{ workflow.process_subject_occupancy.return }}
-
-  # stats widgets 
-  # national_pa_use , community_pa_use , crop_raid_percent, kenya_use, unprotected 
-  # mature, 
-  # MCP , ETD , 
-  #time_tracked_days, time_tracked_years , 
-  # distance_travelled , max_displacement, night_day_ratio
-
-  # mcp ,etd , max_displacement are off 
-
-  # create widgets for use 
-# National Protected Area (already provided)
+      
+# National Protected Area
   - name: Calculate total national protected area use 
     id: total_national_pa_use 
     task: dataframe_column_sum 
@@ -1316,7 +1330,7 @@ workflow:
 
   - name: Convert total national protected area to quantity
     id: national_pa_quantity
-    task: to_quantity
+    task: ecoscope_workflows_ext_custom.tasks.transformation.to_quantity
     partial:
       unit: "%"
     mapvalues:
@@ -1356,7 +1370,7 @@ workflow:
 
   - name: Convert total community protected area to quantity
     id: community_pa_quantity
-    task: to_quantity
+    task: ecoscope_workflows_ext_custom.tasks.transformation.to_quantity
     partial:
       unit: "%"
     mapvalues:
@@ -1396,7 +1410,7 @@ workflow:
 
   - name: Convert total crop raid percent to quantity
     id: crop_raid_percent_quantity
-    task: to_quantity
+    task: ecoscope_workflows_ext_custom.tasks.transformation.to_quantity
     partial:
       unit: "%"
     mapvalues:
@@ -1410,7 +1424,7 @@ workflow:
       conditions:
         - never
     partial:
-      title: Crop raid percent 
+      title: Agricultural land use
       decimal_places: 2
     map:
       argnames:
@@ -1436,7 +1450,7 @@ workflow:
 
   - name: Convert total kenya use to quantity
     id: kenya_use_quantity
-    task: to_quantity
+    task: ecoscope_workflows_ext_custom.tasks.transformation.to_quantity
     partial:
       unit: "%"
     mapvalues:
@@ -1476,7 +1490,7 @@ workflow:
 
   - name: Convert total unprotected to quantity
     id: unprotected_quantity
-    task: to_quantity
+    task: ecoscope_workflows_ext_custom.tasks.transformation.to_quantity
     partial:
       unit: "%"
     mapvalues:
@@ -1504,7 +1518,6 @@ workflow:
     partial:
       widgets: ${{ workflow.total_unprotected_sv_widgets.return }}
 
-
 # MCP
   - name: Calculate subject MCP 
     id: compute_subject_mcp
@@ -1517,7 +1530,7 @@ workflow:
     
   - name: Convert subject mcp to quantity
     id: subject_mcp_quantity
-    task: to_quantity
+    task: ecoscope_workflows_ext_custom.tasks.transformation.to_quantity
     partial:
       unit: "km²"
     mapvalues:
@@ -1557,7 +1570,7 @@ workflow:
     
   - name: Convert subject ETD to quantity
     id: subject_etd_quantity
-    task: to_quantity
+    task: ecoscope_workflows_ext_custom.tasks.transformation.to_quantity
     partial:
       unit: "km²"
     mapvalues:
@@ -1585,68 +1598,6 @@ workflow:
     partial:
       widgets: ${{ workflow.total_etd_sv_widgets.return }}
 
-  # Time Tracked Days
-  - name: Calculate subject time tracked days 
-    id: compute_tt_days
-    task: dataframe_column_sum
-    partial: 
-      column_name: time_tracked_days
-    mapvalues:
-      argnames: df
-      argvalues: ${{ workflow.generate_subject_stats.return }}
-    
-  - name: Create single value widgets for subject time tracked days per group
-    id: tttd_sv_widgets
-    task: create_single_value_widget_single_view
-    skipif:
-      conditions:
-        - never
-    partial:
-      title: Time Tracked (Days)
-      decimal_places: 2
-    map:
-      argnames:
-        - view
-        - data
-      argvalues: ${{ workflow.compute_tt_days.return }}
-
-  - name: Merge per group total subject time tracked days SV widgets
-    id: sttdg_sv_widget
-    task: merge_widget_views
-    partial:
-      widgets: ${{ workflow.tttd_sv_widgets.return }}
-
-  # Time Tracked Years
-  - name: Calculate subject time tracked years 
-    id: cst_tracked_years
-    task: dataframe_column_sum
-    partial: 
-      column_name: time_tracked_years
-    mapvalues:
-      argnames: df
-      argvalues: ${{ workflow.generate_subject_stats.return }}
-    
-  - name: Create single value widgets for subject time tracked years per group
-    id: tt_years_sv_widgets
-    task: create_single_value_widget_single_view
-    skipif:
-      conditions:
-        - never
-    partial:
-      title: Time Tracked (Years)
-      decimal_places: 2
-    map:
-      argnames:
-        - view
-        - data
-      argvalues: ${{ workflow.cst_tracked_years.return }}
-
-  - name: Merge per group total subject time tracked years SV widgets
-    id: stty_grouped_sv_widget
-    task: merge_widget_views
-    partial:
-      widgets: ${{ workflow.tt_years_sv_widgets.return }}
-
   # Distance Travelled
   - name: Calculate subject distance travelled 
     id: compute_sdt
@@ -1659,7 +1610,7 @@ workflow:
     
   - name: Convert subject distance travelled to quantity
     id: subject_dtq
-    task: to_quantity
+    task: ecoscope_workflows_ext_custom.tasks.transformation.to_quantity
     partial:
       unit: "km²"
     mapvalues:
@@ -1699,7 +1650,7 @@ workflow:
     
   - name: Convert subject max displacement to quantity
     id: smd_quantity
-    task: to_quantity
+    task: ecoscope_workflows_ext_custom.tasks.transformation.to_quantity
     partial:
       unit: "km²"
     mapvalues:
@@ -1758,6 +1709,221 @@ workflow:
     partial:
       widgets: ${{ workflow.total_night_day_ratio_sv_widgets.return }}
 
+  # Convert all html to png 
+  - name: Convert homerange map html to png 
+    id: convert_homerange_png 
+    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    partial: 
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0 
+        wait_for_timeout: 20000
+        max_concurrent_pages: 1
+        width: 602
+        height: 855
+    mapvalues: 
+      argnames: html_path
+      argvalues: ${{ workflow.persist_homerange_html.return }}
+
+  - name: Convert speedmap html to png 
+    id: convert_speedmap_png 
+    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    partial: 
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0 
+        wait_for_timeout: 20000
+        max_concurrent_pages: 1
+        width: 800
+        height: 600
+    mapvalues: 
+      argnames: html_path
+      argvalues: ${{ workflow.persist_speedmap_html.return }}
+
+  - name: Convert seasonal homerange html to png 
+    id: convert_season_png 
+    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    partial: 
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0 
+        wait_for_timeout: 20000
+        max_concurrent_pages: 1
+        width: 602
+        height: 855
+    mapvalues: 
+      argnames: html_path
+      argvalues: ${{ workflow.persist_seasonal_home_range_html.return }}
+
+  - name: Convert nsd plot html to png 
+    id: convert_nsd_png 
+    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    partial: 
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0 
+        wait_for_timeout: 5
+        max_concurrent_pages: 3
+        width: 2238
+        height: 450
+    mapvalues: 
+      argnames: html_path
+      argvalues: ${{ workflow.persist_nsd_html_urls.return }}
+
+  - name: Convert mcp plot html to png 
+    id: convert_mcp_png 
+    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    partial: 
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0 
+        wait_for_timeout: 5
+        max_concurrent_pages: 3
+        width: 2238
+        height: 450
+    mapvalues: 
+      argnames: html_path
+      argvalues: ${{ workflow.persist_mcp_html_urls.return }}
+
+  - name: Convert speed plot html to png 
+    id: convert_speed_png 
+    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    partial: 
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0 
+        wait_for_timeout: 5
+        max_concurrent_pages: 3
+        width: 2238
+        height: 450
+    mapvalues: 
+      argnames: html_path
+      argvalues: ${{ workflow.persist_speed_html_urls.return }}
+
+  - name: Convert collared events html to png 
+    id: convert_events_png 
+    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    partial: 
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0 
+        wait_for_timeout: 5
+        max_concurrent_pages: 3
+        width: 2238
+        height: 450
+    mapvalues: 
+      argnames: html_path
+      argvalues: ${{ workflow.persist_collared_subject_plots.return }}
+
+  # Get unique subject count on relocs
+  - name: Unique subjects on trajectories
+    id: unique_subjects
+    task: dataframe_column_nunique
+    partial:
+      df: ${{ workflow.rename_traj_cols.return }}
+      column_name: subject_name
+
+  # Download cover template
+  - name: Download mapbook cover page templates
+    id: download_cover_page
+    task: fetch_and_persist_file
+    partial:
+      url: https://www.dropbox.com/scl/fi/nfv96xs38r3wunp6y866f/cer_cover_page.docx?rlkey=sbl545v87g94tolfafwyfd8b8&st=jnvtvo2i&dl=0
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      overwrite_existing: false
+      unzip: false
+      retries: 2
+
+  # Download section templates
+  - name: Download mep subject templates
+    id: download_sect_templates
+    task: fetch_and_persist_file
+    partial:
+      url: https://www.dropbox.com/scl/fi/9nm7zp2r4smqsaspq12o9/mep_subject_template.docx?rlkey=cjwx2p5bopw22l0ex7i9s8cb4&st=qaqbo3ea&dl=0
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      overwrite_existing: false
+      unzip: false
+      retries: 2
+
+  - name: Create cover template context 
+    id: create_cover_tpl_context
+    task: create_mep_ctx_cover
+    partial:
+      count: ${{ workflow.unique_subjects.return }}
+      report_period: ${{ workflow.time_range.return }}
+      prepared_by: "Ecoscope"
+
+  - name: Persist cover page context
+    id: persist_cover_context 
+    task: create__mep_context_page
+    partial:
+      template_path: ${{ workflow.download_cover_page.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      context: ${{ workflow.create_cover_tpl_context.return }}
+      filename: mep_context.docx
+
+  - name: Create subject report context 
+    id: group_subject_report_context
+    task: zip_groupbykey
+    partial:
+      sequences:
+        - ${{ workflow.download_profile_pic.return }}
+        - ${{ workflow.persist_subject_info.return }}
+        - ${{ workflow.convert_speedmap_png.return }}
+        - ${{ workflow.convert_homerange_png.return }}
+        - ${{ workflow.convert_season_png.return }}
+        - ${{ workflow.convert_nsd_png.return }}
+        - ${{ workflow.convert_speed_png.return }}
+        - ${{ workflow.convert_events_png.return }}
+        - ${{ workflow.convert_mcp_png.return }}
+        - ${{ workflow.persist_subject_stats.return }}
+        - ${{ workflow.persist_subject_occupancy.return }}
+
+  - name: Create mep subject report context 
+    id: create_subject_context 
+    task: create_mep_subject_context
+    mapvalues: 
+      argnames:
+        - profile_photo_path
+        - subject_info_path
+        - speedmap_path
+        - homerange_map_path
+        - seasonal_homerange_map_path
+        - nsd_plot_path
+        - speed_plot_path
+        - collared_event_plot_path
+        - mcp_plot_path
+        - subject_stats_table_path
+        - subject_occupancy_table_path
+      argvalues: ${{ workflow.group_subject_report_context.return }}
+  
+  - name: Persist subject report context
+    id: persist_subject_report_context
+    task: create_mep_grouper_page 
+    partial: 
+      template_path: ${{ workflow.download_sect_templates.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: null
+      validate_images: true 
+    mapvalues: 
+      argnames: context 
+      argvalues: ${{ workflow.create_subject_context.return }}
+
+  - name: Merge mep word docs
+    id: merge_mep_docx
+    task: merge_mapbook_files 
+    partial: 
+      cover_page_path: ${{ workflow.persist_cover_context.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      context_page_items: ${{ workflow.persist_subject_report_context.return }}
+      filename: null 
 
   # Final Dashboard
   - name: Collared Elephant Report Dashboard 
@@ -1774,8 +1940,6 @@ workflow:
 
         - ${{ workflow.subject_mcp_grouped_sv_widget.return }}
         - ${{ workflow.subject_etd_grouped_sv_widget.return }}
-        - ${{ workflow.sttdg_sv_widget.return }}
-        - ${{ workflow.stty_grouped_sv_widget.return }}
         - ${{ workflow.sdtg_sv_widget.return }}
         - ${{ workflow.smdg_sv_widget.return }}
         - ${{ workflow.sndrs_sv_widget.return }}

@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, confloat, constr
+from pydantic import BaseModel, ConfigDict, Field, confloat, constr
 
 
 class WorkflowDetails(BaseModel):
@@ -212,10 +212,6 @@ class CustomTrajsFilter(BaseModel):
     max_speed_kmhr: float | None = Field(9.0, title="Max Speed Kmhr")
 
 
-class ValueGrouper(RootModel[str]):
-    root: str = Field(..., title="Category")
-
-
 class EarthRangerConnection(BaseModel):
     name: str = Field(..., title="Data Source")
 
@@ -237,17 +233,6 @@ class LocalFile(BaseModel):
         ...,
         description="Path to the local shapefile or archive on the filesystem",
         title="Local file path",
-    )
-
-
-class Groupers(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    groupers: list[ValueGrouper] | None = Field(
-        None,
-        description="            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            ",
-        title=" ",
     )
 
 
@@ -290,7 +275,6 @@ class Params(BaseModel):
         description="Choose the period of time to analyze.",
         title="Define analysis time range",
     )
-    groupers: Groupers | None = Field(None, title="Configure grouping strategy")
     configure_base_maps: ConfigureBaseMaps | None = Field(
         None, title="Configure base map layers"
     )
