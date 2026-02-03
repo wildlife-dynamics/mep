@@ -1,0 +1,30 @@
+workflow_details:
+  description: 'Workflow for MEP Elephants in Tsavo using Ecoscope data.'
+  name: mep_elephants_ecoscope_tsavo
+configure_base_maps:
+  base_maps:
+    - url: >-
+        https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}
+      opacity: 1
+      max_zoom: 20
+er_client_name:
+  data_source:
+    name: ymep
+gee_project_name:
+  data_source:
+    name: ecoscope_poc
+retrieve_ldx_db:
+  input_method:
+    file_path: /Users/tevintemu/Desktop/Ecoscope/shapefiles/landDx.gpkg
+custom_trajs_filter:
+  min_length_meters: 0.001
+  max_length_meters: 5000
+  min_time_secs: 1
+  max_time_secs: 21600
+  min_speed_kmhr: 0.01
+  max_speed_kmhr: 9
+time_range:
+  since: '2025-01-01T12:00:00.000Z'
+  until: '2026-01-29T12:00:00.000Z'
+subject_group_var:
+  var: MEP_Elephants_Ecoscope_Shimba_Hills

@@ -1,0 +1,66 @@
+name: Test Workflows with Local Build
+
+on:
+  pull_request:
+    types: [labeled, unlabeled, opened, synchronize, reopened]
+
+jobs:
+  build-release:
+    if: contains(github.event.pull_request.labels.*.name, 'test:local')
+    uses: ./.github/workflows/_build.yml
+
+  discover:
+    if: contains(github.event.pull_request.labels.*.name, 'test:local')
+    uses: ./.github/workflows/_discover.yml
+
+  recompile-workflows:
+    if: contains(github.event.pull_request.labels.*.name, 'test:local')
+    needs: [build-release, discover]
+    uses: ./.github/workflows/_recompile.yml
+    with:
+      workflows: ${{ needs.discover.outputs.workflows }}
+      download-artifacts: true
+
+  test-workflows-local:
+    needs: [build-release, discover]
+    if: |
+      contains(github.event.pull_request.labels.*.name, 'test:local') &&
+      needs.discover.outputs.pairs != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.discover.outputs.pairs) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download conda channel
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: /tmp/ecoscope-workflows-custom/release/artifacts
+
+      - name: Log conda channel contents
+        run: ls -lR /tmp/ecoscope-workflows-custom/release/artifacts
+
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.60.0
+
+      - name: Write GEE key to file
+        env:
+          EE_KEY_JSON: ${{ secrets.EE_KEY_JSON }}
+        if: env.EE_KEY_JSON != ''
+        run: |
+          echo "${{ secrets.EE_KEY_JSON }}" > gee-key.json
+
+      - name: Run a workflow test case
+        shell: bash
+        env:
+          ECOSCOPE_WORKFLOWS__CONNECTIONS__EARTHRANGER__MNC__SERVER: ${{ secrets.MNC_SERVER }}
+          ECOSCOPE_WORKFLOWS__CONNECTIONS__EARTHRANGER__MNC__PASSWORD: ${{ secrets.MNC_PASSWORD }}
+          ECOSCOPE_WORKFLOWS__CONNECTIONS__EARTHRANGER__MNC__USERNAME: ${{ secrets.MNC_USERNAME }}
+
+        run: |
+          chmod +x dev/pytest-cli.sh || true
+          pixi run --manifest-path pixi.toml -e default bash dev/pytest-cli.sh ${{ matrix.workflow }} ${{ matrix.case }}
