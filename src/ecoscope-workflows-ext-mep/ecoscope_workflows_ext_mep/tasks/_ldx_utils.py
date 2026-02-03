@@ -1,5 +1,4 @@
 import os
-
 import logging
 import pandas as pd
 from pathlib import Path
@@ -10,7 +9,6 @@ from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AnyDataFrame
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
 logger = logging.getLogger(__name__)
-
 
 @task
 def build_template_region_lookup(

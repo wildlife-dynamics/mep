@@ -3991,8 +3991,8 @@ def main(params: Params):
                     "device_scale_factor": 2.0,
                     "wait_for_timeout": 20000,
                     "max_concurrent_pages": 1,
-                    "width": 800,
-                    "height": 600,
+                    "width": 1280,
+                    "height": 720,
                 },
             }
             | (params_dict.get("convert_speedmap_png") or {}),
@@ -4214,7 +4214,7 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
-                "url": "https://www.dropbox.com/scl/fi/9nm7zp2r4smqsaspq12o9/mep_subject_template.docx?rlkey=cjwx2p5bopw22l0ex7i9s8cb4&st=qaqbo3ea&dl=0",
+                "url": "https://www.dropbox.com/scl/fi/4symf1385ksnh8mu8sx9v/mep_subject_template_two.docx?rlkey=v5f26c3aiadaasnilhc76owgr&st=otul6hus&dl=0",
                 "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
                 "overwrite_existing": False,
                 "unzip": False,
