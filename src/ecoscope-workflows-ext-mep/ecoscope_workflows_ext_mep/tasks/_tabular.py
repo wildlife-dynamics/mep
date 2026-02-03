@@ -12,6 +12,7 @@ from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_schem
 
 logger = logging.getLogger(__name__)
 
+
 @task
 def compute_maturity(
     subject_df: AnyDataFrame,
@@ -39,6 +40,7 @@ def compute_maturity(
     subject_df = subject_df.merge(span[["groupby_col", "mature"]], on="groupby_col", how="left")
     subject_df["mature"] = subject_df["mature"].fillna(False)
     return subject_df
+
 
 @task
 def compute_subject_stats(
@@ -116,7 +118,7 @@ def compute_subject_stats(
         logger.info(f" - Shape: {etd_df.shape}")
         logger.info(f" - Columns: {etd_df.columns.tolist()}")
         logger.info(f" - CRS: {etd_df.crs}")
-        
+
         etd_km2 = round(float(etd_df[etd_df["percentile"] >= 99.9]["area_sqkm"].sum()), 1)
 
     logger.info(f"Final ETD value: {etd_km2} km²")

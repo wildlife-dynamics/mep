@@ -14,6 +14,7 @@ from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_schem
 
 logger = logging.getLogger(__name__)
 
+
 @task
 def get_subject_df(
     client: EarthRangerClient,
@@ -121,8 +122,10 @@ def persist_subject_photo(
 
     return str(last_file_path) if last_file_path else None
 
+
 def safe_strip(x) -> str:
     return "" if x is None else str(x).strip()
+
 
 def truncate_at_sentence(text: str, maxlen: int) -> str:
     if len(text) <= maxlen:
@@ -130,6 +133,7 @@ def truncate_at_sentence(text: str, maxlen: int) -> str:
     cut = text[:maxlen]
     dot = cut.rfind(".")
     return (cut[: dot + 1] if dot >= 40 else cut.rstrip()) + ("..." if dot < 40 else "")
+
 
 def format_date(date_str: str) -> str:
     s = safe_strip(date_str)

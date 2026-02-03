@@ -295,7 +295,6 @@ def create_mep_subject_context(
     distance_travelled = safe_get_value(subject_stats_df, "distance_travelled", 0.0)
     max_displacement = safe_get_value(subject_stats_df, "max_displacement", 0.0)
     night_day_ratio = safe_get_value(subject_stats_df, "night_day_ratio", 0.0)
-    
 
     # Extract subject info with defaults
     dob_raw = safe_get_value(subject_info_df, "dob", None)
@@ -306,7 +305,7 @@ def create_mep_subject_context(
     status = safe_get_value(subject_info_df, "status_raw", "-")
     bio = safe_get_value(subject_info_df, "bio", "")
     distribution = safe_get_value(subject_info_df, "distribution", "")
-    
+
     # Extract occupancy data with defaults
     national_pa_use = safe_get_value(subject_occupancy_df, "national_pa_use", 0.0)
     community_pa_use = safe_get_value(subject_occupancy_df, "community_pa_use", 0.0)
