@@ -4236,8 +4236,7 @@ def main(params: Params):
             .with_tracing()
             .skipif(
                 conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
+                    never,
                 ],
                 unpack_depth=1,
             )

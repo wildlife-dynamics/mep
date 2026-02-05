@@ -21,8 +21,8 @@ requirements:
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mep
-    version: "*"
-    channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
+    version: "0.0.4.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
 rjsf-overrides:
   properties: 
@@ -1858,6 +1858,9 @@ workflow:
   - name: Create mep subject report context 
     id: create_subject_context 
     task: create_mep_subject_context
+    skipif:
+      conditions:
+        - never
     mapvalues: 
       argnames:
         - profile_photo_path
