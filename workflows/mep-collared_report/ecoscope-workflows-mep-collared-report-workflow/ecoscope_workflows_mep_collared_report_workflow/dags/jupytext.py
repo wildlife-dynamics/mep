@@ -46,9 +46,6 @@ from ecoscope_workflows_core.tasks.transformation import (
     add_temporal_index as add_temporal_index,
 )
 from ecoscope_workflows_core.tasks.transformation import map_columns as map_columns
-from ecoscope_workflows_core.tasks.transformation import (
-    map_values_with_unit as map_values_with_unit,
-)
 from ecoscope_workflows_core.tasks.transformation import sort_values as sort_values
 from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
 from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
@@ -216,6 +213,8 @@ workflow_details = (
 time_range_params = dict(
     since=...,
     until=...,
+    timezone=...,
+    time_format=...,
 )
 
 # %%
@@ -233,16 +232,7 @@ time_range = (
         ],
         unpack_depth=1,
     )
-    .partial(
-        time_format="%d %b %Y %H:%M:%S %Z",
-        timezone={
-            "label": "UTC",
-            "tzCode": "UTC",
-            "name": "UTC",
-            "utc_offset": "+03:00",
-        },
-        **time_range_params,
-    )
+    .partial(**time_range_params)
     .call()
 )
 
@@ -558,8 +548,8 @@ create_ldx_text_layer = (
             "size_min_pixels": 70,
             "size_max_pixels": 100,
             "size_scale": 2.25,
-            "font_family": "Calibri",
-            "font_weight": "700",
+            "font_family": "Arial",
+            "font_weight": "normal",
             "get_text_anchor": "middle",
             "get_alignment_baseline": "center",
             "billboard": True,
@@ -658,33 +648,33 @@ create_ldx_styled_layers = (
         gdf_dict=annotate_gdf_dict,
         styles={
             "Community Conservancy": {
-                "get_fill_color": [85, 107, 47],
-                "get_line_color": [85, 107, 47],
-                "opacity": 0.45,
+                "get_fill_color": [166, 182, 151],
+                "get_line_color": [166, 182, 151],
+                "opacity": 0.15,
                 "stroked": True,
                 "get_line_width": 2.0,
             },
             "National Reserve": {
-                "get_fill_color": [143, 188, 139],
-                "get_line_color": [143, 188, 139],
-                "opacity": 0.45,
+                "get_fill_color": [136, 167, 142],
+                "get_line_color": [136, 167, 142],
+                "opacity": 0.15,
                 "stroked": True,
                 "get_line_width": 2.0,
             },
             "National Park": {
-                "get_fill_color": [255, 250, 205],
-                "get_line_color": [255, 250, 205],
-                "opacity": 0.45,
+                "get_fill_color": [17, 86, 49],
+                "get_line_color": [17, 86, 49],
+                "opacity": 0.15,
                 "stroked": True,
                 "get_line_width": 2.0,
             },
         },
         legends={
-            "title": "Protected Areas",
+            "title": "",
             "values": [
-                {"label": "Community Conservancy", "color": "#556b2f"},
-                {"label": "National Reserve", "color": "#8fbc8f"},
-                {"label": "National Park", "color": "#fffacd"},
+                {"label": "Community Conservancy", "color": "#a6b697"},
+                {"label": "National Reserve", "color": "#88a78e"},
+                {"label": "National Park", "color": "#115631"},
             ],
         },
         **create_ldx_styled_layers_params,
@@ -1443,7 +1433,11 @@ classify_trajectories_speed_bins = (
         input_column_name="speed_kmhr",
         output_column_name="speed_bins",
         classification_options={"scheme": "equal_interval", "k": 6},
-        label_options={"label_range": False, "label_decimals": 1},
+        label_options={
+            "label_ranges": True,
+            "label_decimals": 1,
+            "label_suffix": " km/h",
+        },
         **classify_trajectories_speed_bins_params,
     )
     .call()
@@ -1585,76 +1579,6 @@ apply_speed_colormap = (
 
 
 # %% [markdown]
-# ## Format speed bins for legend
-
-# %%
-# parameters
-
-format_speed_bin_labels_params = dict()
-
-# %%
-# call the task
-
-
-format_speed_bin_labels = (
-    map_values_with_unit.set_task_instance_id("format_speed_bin_labels")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(
-        input_column_name="speed_bins",
-        output_column_name="speed_bins_formatted",
-        original_unit="km/h",
-        new_unit="km/h",
-        decimal_places=1,
-        **format_speed_bin_labels_params,
-    )
-    .mapvalues(argnames=["df"], argvalues=apply_speed_colormap)
-)
-
-
-# %% [markdown]
-# ## Format speed values for display
-
-# %%
-# parameters
-
-format_speed_values_params = dict()
-
-# %%
-# call the task
-
-
-format_speed_values = (
-    map_values_with_unit.set_task_instance_id("format_speed_values")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(
-        input_column_name="speed_kmhr",
-        output_column_name="speed_kmhr",
-        original_unit="km/h",
-        new_unit="km/h",
-        decimal_places=1,
-        **format_speed_values_params,
-    )
-    .mapvalues(argnames=["df"], argvalues=format_speed_bin_labels)
-)
-
-
-# %% [markdown]
 # ## Filter df for map rendering
 
 # %%
@@ -1678,16 +1602,10 @@ filter_speedmap_gdf = (
         unpack_depth=1,
     )
     .partial(
-        columns=[
-            "geometry",
-            "speed_kmhr",
-            "speed_bins",
-            "speed_bins_colormap",
-            "speed_bins_formatted",
-        ],
+        columns=["geometry", "speed_kmhr", "speed_bins", "speed_bins_colormap"],
         **filter_speedmap_gdf_params,
     )
-    .mapvalues(argnames=["df"], argvalues=format_speed_values)
+    .mapvalues(argnames=["df"], argvalues=apply_speed_colormap)
 )
 
 
@@ -1730,7 +1648,7 @@ generate_speedmap_layers = (
         },
         legend={
             "title": "Speed (km/h)",
-            "label_column": "speed_bins_formatted",
+            "label_column": "speed_bins",
             "color_column": "speed_bins_colormap",
             "sort": "ascending",
             "label_suffix": None,
@@ -1772,7 +1690,7 @@ zoom_speed_gdf_extent = (
         map_height_px=700,
         **zoom_speed_gdf_extent_params,
     )
-    .mapvalues(argnames=["gdf"], argvalues=format_speed_values)
+    .mapvalues(argnames=["gdf"], argvalues=filter_speedmap_gdf)
 )
 
 
@@ -2304,7 +2222,7 @@ zoom_hr_gdf_extent = (
         map_height_px=855,
         **zoom_hr_gdf_extent_params,
     )
-    .mapvalues(argnames=["gdf"], argvalues=format_speed_values)
+    .mapvalues(argnames=["gdf"], argvalues=apply_etd_colormap)
 )
 
 
@@ -4833,7 +4751,7 @@ convert_homerange_png = (
         config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 20000,
+            "wait_for_timeout": 30000,
             "max_concurrent_pages": 1,
             "width": 602,
             "height": 855,
@@ -4872,7 +4790,7 @@ convert_speedmap_png = (
         config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 20000,
+            "wait_for_timeout": 30000,
             "max_concurrent_pages": 1,
             "width": 1280,
             "height": 720,
@@ -4911,7 +4829,7 @@ convert_season_png = (
         config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 20000,
+            "wait_for_timeout": 30000,
             "max_concurrent_pages": 1,
             "width": 602,
             "height": 855,
@@ -4990,7 +4908,7 @@ convert_mcp_png = (
             "full_page": False,
             "device_scale_factor": 2.0,
             "wait_for_timeout": 5,
-            "max_concurrent_pages": 3,
+            "max_concurrent_pages": 1,
             "width": 2238,
             "height": 450,
         },
@@ -5029,7 +4947,7 @@ convert_speed_png = (
             "full_page": False,
             "device_scale_factor": 2.0,
             "wait_for_timeout": 5,
-            "max_concurrent_pages": 3,
+            "max_concurrent_pages": 1,
             "width": 2238,
             "height": 450,
         },
@@ -5068,7 +4986,7 @@ convert_events_png = (
             "full_page": False,
             "device_scale_factor": 2.0,
             "wait_for_timeout": 5,
-            "max_concurrent_pages": 3,
+            "max_concurrent_pages": 1,
             "width": 2238,
             "height": 450,
         },

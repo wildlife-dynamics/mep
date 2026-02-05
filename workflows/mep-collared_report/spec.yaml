@@ -1,19 +1,19 @@
 id: mep_collared_report
 requirements:
   - name: ecoscope-workflows-core
-    version: "0.21.2.*"
+    version: "0.20.6.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-ecoscope
-    version: "0.21.2.*"
+    version: "0.20.6.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.22.*"
+    version: "0.0.23.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.7.*"
+    version: "0.0.8.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mnc
@@ -51,14 +51,7 @@ workflow:
   - name: Define analysis time range 
     id: time_range 
     task: set_time_range 
-    partial: 
-      time_format: "%d %b %Y %H:%M:%S %Z"
-      timezone: 
-        label: UTC 
-        tzCode: UTC 
-        name: UTC 
-        utc_offset: "+03:00"
-
+    
   # set groupers -- limiting this to subject_name
   - name: Configure grouping strategy 
     id: groupers 
@@ -142,8 +135,8 @@ workflow:
         size_max_pixels: 100
         size_scale: 2.25 
 
-        font_family: Calibri 
-        font_weight: "700" 
+        font_family: Arial
+        font_weight: normal
         get_text_anchor: middle 
         get_alignment_baseline: center
         billboard: true 
@@ -174,35 +167,36 @@ workflow:
       gdf_dict: ${{ workflow.annotate_gdf_dict.return }}
       styles: 
         Community Conservancy:
-          get_fill_color: [85, 107, 47]
-          get_line_color: [85, 107, 47]
-          opacity: 0.45
+          get_fill_color: [166,182,151]
+          get_line_color: [166,182,151]
+          opacity: 0.15
           stroked: true
           get_line_width: 2.00 #1.85
           
         National Reserve:
-          get_fill_color: [143, 188, 139]
-          get_line_color: [143, 188, 139]
-          opacity: 0.45
+          get_fill_color: [136,167,142]
+          get_line_color: [136,167,142]
+          opacity: 0.15
           stroked: true
           get_line_width: 2.00
 
         National Park: 
-          get_fill_color: [255, 250, 205]
-          get_line_color: [255, 250, 205]
-          opacity: 0.45
+          get_fill_color: [17, 86, 49]
+          get_line_color: [17, 86, 49]
+          opacity: 0.15
           stroked: true
           get_line_width: 2.00
     
       legends: 
-        title: Protected Areas 
+        title: "" 
         values: 
           - label: Community Conservancy 
-            color: "#556b2f"
+            color: "#a6b697"
           - label: National Reserve 
-            color: "#8fbc8f"
+            color: "#88a78e"
           - label: National Park 
-            color: "#fffacd"
+            color: "#115631"
+
 
   # 1. Retrieve subjects df from ER 
   - name: Retrieve subjects df from ER 
@@ -493,9 +487,10 @@ workflow:
       classification_options: 
         scheme: equal_interval 
         k: 6 
-      label_options: 
-        label_range: false 
-        label_decimals: 1 
+      label_options:
+        label_ranges: true
+        label_decimals: 1
+        label_suffix: ' km/h'
   
   - name: Rename trajectory columns 
     id: rename_traj_cols 
@@ -548,31 +543,6 @@ workflow:
       argnames: df
       argvalues: ${{ workflow.sort_trajs_by_speed.return }}
     
-  - name: Format speed bins for legend 
-    id: format_speed_bin_labels 
-    task: map_values_with_unit 
-    partial: 
-      input_column_name: speed_bins 
-      output_column_name: speed_bins_formatted 
-      original_unit: km/h
-      new_unit: km/h
-      decimal_places: 1 
-    mapvalues:
-      argnames: df
-      argvalues: ${{ workflow.apply_speed_colormap.return }}  
-
-  - name: Format speed values for display 
-    id: format_speed_values 
-    task: map_values_with_unit
-    partial: 
-      input_column_name: speed_kmhr 
-      output_column_name: speed_kmhr 
-      original_unit: km/h
-      new_unit: km/h
-      decimal_places: 1
-    mapvalues:
-      argnames: df
-      argvalues: ${{ workflow.format_speed_bin_labels.return }}
   
   - name: Filter df for map rendering 
     id: filter_speedmap_gdf 
@@ -583,10 +553,9 @@ workflow:
         - speed_kmhr
         - speed_bins
         - speed_bins_colormap
-        - speed_bins_formatted
     mapvalues:
       argnames: df
-      argvalues: ${{ workflow.format_speed_values.return }}
+      argvalues: ${{ workflow.apply_speed_colormap.return }}  
 
   - name: Generate speedmap layers 
     id: generate_speedmap_layers 
@@ -606,7 +575,7 @@ workflow:
         stroked: true 
       legend:
         title: Speed (km/h)
-        label_column: speed_bins_formatted
+        label_column: speed_bins
         color_column: speed_bins_colormap
         sort: ascending 
         label_suffix: null
@@ -625,7 +594,7 @@ workflow:
       map_height_px: 700
     mapvalues:
       argnames: gdf
-      argvalues: ${{ workflow.format_speed_values.return }}
+      argvalues: ${{ workflow.filter_speedmap_gdf.return }}
     
   - name: Combine ldx layers and speedmap layers 
     id: combined_ldx_speed_layers 
@@ -823,7 +792,7 @@ workflow:
       map_height_px: 855
     mapvalues:
       argnames: gdf
-      argvalues: ${{ workflow.format_speed_values.return }}
+      argvalues: ${{ workflow.apply_etd_colormap.return }}
 
   - name: Combine home range layers with view state
     id: zip_hr_with_viewstate
@@ -1718,7 +1687,7 @@ workflow:
       config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 20000
+        wait_for_timeout: 30000
         max_concurrent_pages: 1
         width: 602
         height: 855
@@ -1734,7 +1703,7 @@ workflow:
       config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 20000
+        wait_for_timeout: 30000
         max_concurrent_pages: 1
         width: 1280
         height: 720
@@ -1750,7 +1719,7 @@ workflow:
       config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 20000
+        wait_for_timeout: 30000
         max_concurrent_pages: 1
         width: 602
         height: 855
@@ -1783,7 +1752,7 @@ workflow:
         full_page: false
         device_scale_factor: 2.0 
         wait_for_timeout: 5
-        max_concurrent_pages: 3
+        max_concurrent_pages: 1
         width: 2238
         height: 450
     mapvalues: 
@@ -1799,7 +1768,7 @@ workflow:
         full_page: false
         device_scale_factor: 2.0 
         wait_for_timeout: 5
-        max_concurrent_pages: 3
+        max_concurrent_pages: 1
         width: 2238
         height: 450
     mapvalues: 
@@ -1815,7 +1784,7 @@ workflow:
         full_page: false
         device_scale_factor: 2.0 
         wait_for_timeout: 5
-        max_concurrent_pages: 3
+        max_concurrent_pages: 1
         width: 2238
         height: 450
     mapvalues: 

@@ -21,9 +21,9 @@ hatch-vcs="*"
 [feature.compile.dependencies]
 ecoscope-workflows-ext-mep = "*"
 ecoscope-workflows-ext-mnc = "0.0.2.*"
-ecoscope-workflows-ext-ste = "0.0.7*"
-ecoscope-workflows-core = "0.21.2.*"
-ecoscope-workflows-ext-custom = "0.0.22.*"
+ecoscope-workflows-ext-ste = "0.0.8*"
+ecoscope-workflows-core = "0.20.6.*"
+ecoscope-workflows-ext-custom = "0.0.23.*"
 
 # Here we don't specify the channel on purpose, as we want to use the local channel if it exists,
 # otherwise we fall back to the default channel.
