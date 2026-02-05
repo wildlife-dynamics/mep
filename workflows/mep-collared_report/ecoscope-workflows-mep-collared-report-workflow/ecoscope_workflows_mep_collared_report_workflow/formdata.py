@@ -17,14 +17,6 @@ class WorkflowDetails(BaseModel):
     description: str | None = Field("", title="Workflow Description")
 
 
-class TimeRange(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    since: datetime = Field(..., description="The start time", title="Since")
-    until: datetime = Field(..., description="The end time", title="Until")
-
-
 class Url(str, Enum):
     https___tile_openstreetmap_org__z___x___y__png = (
         "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -216,6 +208,13 @@ class CustomTrajsFilter(BaseModel):
     max_speed_kmhr: float | None = Field(9.0, title="Max Speed Kmhr")
 
 
+class TimezoneInfo(BaseModel):
+    label: str = Field(..., title="Label")
+    tzCode: str = Field(..., title="Tzcode")
+    name: str = Field(..., title="Name")
+    utc: str = Field(..., title="Utc")
+
+
 class EarthRangerConnection(BaseModel):
     name: str = Field(..., title="Data Source")
 
@@ -242,6 +241,18 @@ class LocalFile(BaseModel):
 
 class ValueGrouper(str, Enum):
     subject_name = "subject_name"
+
+
+class TimeRange(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    since: datetime = Field(..., description="The start time", title="Since")
+    until: datetime = Field(..., description="The end time", title="Until")
+    timezone: TimezoneInfo | None = Field(None, title="Timezone")
+    time_format: str | None = Field(
+        "%d %b %Y %H:%M:%S", description="The time format", title="Time Format"
+    )
 
 
 class ErClientName(BaseModel):

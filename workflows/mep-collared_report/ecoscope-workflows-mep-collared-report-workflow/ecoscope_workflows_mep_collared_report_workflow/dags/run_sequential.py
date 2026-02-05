@@ -36,9 +36,6 @@ from ecoscope_workflows_core.tasks.transformation import (
     add_temporal_index as add_temporal_index,
 )
 from ecoscope_workflows_core.tasks.transformation import map_columns as map_columns
-from ecoscope_workflows_core.tasks.transformation import (
-    map_values_with_unit as map_values_with_unit,
-)
 from ecoscope_workflows_core.tasks.transformation import sort_values as sort_values
 from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
 from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
@@ -199,16 +196,7 @@ def main(params: Params):
             ],
             unpack_depth=1,
         )
-        .partial(
-            time_format="%d %b %Y %H:%M:%S %Z",
-            timezone={
-                "label": "UTC",
-                "tzCode": "UTC",
-                "name": "UTC",
-                "utc_offset": "+03:00",
-            },
-            **(params_dict.get("time_range") or {}),
-        )
+        .partial(**(params_dict.get("time_range") or {}))
         .call()
     )
 
@@ -395,8 +383,8 @@ def main(params: Params):
                 "size_min_pixels": 70,
                 "size_max_pixels": 100,
                 "size_scale": 2.25,
-                "font_family": "Calibri",
-                "font_weight": "700",
+                "font_family": "Arial",
+                "font_weight": "normal",
                 "get_text_anchor": "middle",
                 "get_alignment_baseline": "center",
                 "billboard": True,
@@ -465,33 +453,33 @@ def main(params: Params):
             gdf_dict=annotate_gdf_dict,
             styles={
                 "Community Conservancy": {
-                    "get_fill_color": [85, 107, 47],
-                    "get_line_color": [85, 107, 47],
-                    "opacity": 0.45,
+                    "get_fill_color": [166, 182, 151],
+                    "get_line_color": [166, 182, 151],
+                    "opacity": 0.15,
                     "stroked": True,
                     "get_line_width": 2.0,
                 },
                 "National Reserve": {
-                    "get_fill_color": [143, 188, 139],
-                    "get_line_color": [143, 188, 139],
-                    "opacity": 0.45,
+                    "get_fill_color": [136, 167, 142],
+                    "get_line_color": [136, 167, 142],
+                    "opacity": 0.15,
                     "stroked": True,
                     "get_line_width": 2.0,
                 },
                 "National Park": {
-                    "get_fill_color": [255, 250, 205],
-                    "get_line_color": [255, 250, 205],
-                    "opacity": 0.45,
+                    "get_fill_color": [17, 86, 49],
+                    "get_line_color": [17, 86, 49],
+                    "opacity": 0.15,
                     "stroked": True,
                     "get_line_width": 2.0,
                 },
             },
             legends={
-                "title": "Protected Areas",
+                "title": "",
                 "values": [
-                    {"label": "Community Conservancy", "color": "#556b2f"},
-                    {"label": "National Reserve", "color": "#8fbc8f"},
-                    {"label": "National Park", "color": "#fffacd"},
+                    {"label": "Community Conservancy", "color": "#a6b697"},
+                    {"label": "National Reserve", "color": "#88a78e"},
+                    {"label": "National Park", "color": "#115631"},
                 ],
             },
             **(params_dict.get("create_ldx_styled_layers") or {}),
@@ -1013,7 +1001,11 @@ def main(params: Params):
             input_column_name="speed_kmhr",
             output_column_name="speed_bins",
             classification_options={"scheme": "equal_interval", "k": 6},
-            label_options={"label_range": False, "label_decimals": 1},
+            label_options={
+                "label_ranges": True,
+                "label_decimals": 1,
+                "label_suffix": " km/h",
+            },
             **(params_dict.get("classify_trajectories_speed_bins") or {}),
         )
         .call()
@@ -1109,52 +1101,6 @@ def main(params: Params):
         .mapvalues(argnames=["df"], argvalues=sort_trajs_by_speed)
     )
 
-    format_speed_bin_labels = (
-        map_values_with_unit.validate()
-        .set_task_instance_id("format_speed_bin_labels")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            input_column_name="speed_bins",
-            output_column_name="speed_bins_formatted",
-            original_unit="km/h",
-            new_unit="km/h",
-            decimal_places=1,
-            **(params_dict.get("format_speed_bin_labels") or {}),
-        )
-        .mapvalues(argnames=["df"], argvalues=apply_speed_colormap)
-    )
-
-    format_speed_values = (
-        map_values_with_unit.validate()
-        .set_task_instance_id("format_speed_values")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            input_column_name="speed_kmhr",
-            output_column_name="speed_kmhr",
-            original_unit="km/h",
-            new_unit="km/h",
-            decimal_places=1,
-            **(params_dict.get("format_speed_values") or {}),
-        )
-        .mapvalues(argnames=["df"], argvalues=format_speed_bin_labels)
-    )
-
     filter_speedmap_gdf = (
         filter_df_cols.validate()
         .set_task_instance_id("filter_speedmap_gdf")
@@ -1168,16 +1114,10 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            columns=[
-                "geometry",
-                "speed_kmhr",
-                "speed_bins",
-                "speed_bins_colormap",
-                "speed_bins_formatted",
-            ],
+            columns=["geometry", "speed_kmhr", "speed_bins", "speed_bins_colormap"],
             **(params_dict.get("filter_speedmap_gdf") or {}),
         )
-        .mapvalues(argnames=["df"], argvalues=format_speed_values)
+        .mapvalues(argnames=["df"], argvalues=apply_speed_colormap)
     )
 
     generate_speedmap_layers = (
@@ -1208,7 +1148,7 @@ def main(params: Params):
             },
             legend={
                 "title": "Speed (km/h)",
-                "label_column": "speed_bins_formatted",
+                "label_column": "speed_bins",
                 "color_column": "speed_bins_colormap",
                 "sort": "ascending",
                 "label_suffix": None,
@@ -1238,7 +1178,7 @@ def main(params: Params):
             map_height_px=700,
             **(params_dict.get("zoom_speed_gdf_extent") or {}),
         )
-        .mapvalues(argnames=["gdf"], argvalues=format_speed_values)
+        .mapvalues(argnames=["gdf"], argvalues=filter_speedmap_gdf)
     )
 
     combined_ldx_speed_layers = (
@@ -1579,7 +1519,7 @@ def main(params: Params):
             map_height_px=855,
             **(params_dict.get("zoom_hr_gdf_extent") or {}),
         )
-        .mapvalues(argnames=["gdf"], argvalues=format_speed_values)
+        .mapvalues(argnames=["gdf"], argvalues=apply_etd_colormap)
     )
 
     zip_hr_with_viewstate = (
@@ -3188,7 +3128,7 @@ def main(params: Params):
             config={
                 "full_page": False,
                 "device_scale_factor": 2.0,
-                "wait_for_timeout": 20000,
+                "wait_for_timeout": 30000,
                 "max_concurrent_pages": 1,
                 "width": 602,
                 "height": 855,
@@ -3215,7 +3155,7 @@ def main(params: Params):
             config={
                 "full_page": False,
                 "device_scale_factor": 2.0,
-                "wait_for_timeout": 20000,
+                "wait_for_timeout": 30000,
                 "max_concurrent_pages": 1,
                 "width": 1280,
                 "height": 720,
@@ -3242,7 +3182,7 @@ def main(params: Params):
             config={
                 "full_page": False,
                 "device_scale_factor": 2.0,
-                "wait_for_timeout": 20000,
+                "wait_for_timeout": 30000,
                 "max_concurrent_pages": 1,
                 "width": 602,
                 "height": 855,
@@ -3297,7 +3237,7 @@ def main(params: Params):
                 "full_page": False,
                 "device_scale_factor": 2.0,
                 "wait_for_timeout": 5,
-                "max_concurrent_pages": 3,
+                "max_concurrent_pages": 1,
                 "width": 2238,
                 "height": 450,
             },
@@ -3324,7 +3264,7 @@ def main(params: Params):
                 "full_page": False,
                 "device_scale_factor": 2.0,
                 "wait_for_timeout": 5,
-                "max_concurrent_pages": 3,
+                "max_concurrent_pages": 1,
                 "width": 2238,
                 "height": 450,
             },
@@ -3351,7 +3291,7 @@ def main(params: Params):
                 "full_page": False,
                 "device_scale_factor": 2.0,
                 "wait_for_timeout": 5,
-                "max_concurrent_pages": 3,
+                "max_concurrent_pages": 1,
                 "width": 2238,
                 "height": 450,
             },
