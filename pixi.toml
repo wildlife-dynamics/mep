@@ -3,7 +3,7 @@ name = "mep"
 channels = [
     # Uncomment the following lines to use local channels for development.
     # "file:///tmp/ecoscope-workflows/release/artifacts/",
-    "file:///tmp/ecoscope-workflows-custom/release/artifacts/",
+    #"file:///tmp/ecoscope-workflows-custom/release/artifacts/",
     'https://repo.prefix.dev/ecoscope-workflows/',
     'https://repo.prefix.dev/ecoscope-workflows-custom/',
     'conda-forge',
@@ -19,7 +19,7 @@ pip="*"
 hatch-vcs="*"
 
 [feature.compile.dependencies]
-ecoscope-workflows-ext-mep = "*"
+ecoscope-workflows-ext-mep = "0.0.5.*"
 ecoscope-workflows-ext-mnc = "0.0.2.*"
 ecoscope-workflows-ext-ste = "0.0.9*"
 ecoscope-workflows-core = "0.20.6.*"
