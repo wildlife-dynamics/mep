@@ -153,6 +153,7 @@ def validate_image_path(field_name: str, path: str) -> None:
 # 10. subject stats table -- persist_subject_stats
 # 11. subject occupancy table -- persist_subject_occupancy
 
+
 @task
 def create_mep_subject_context(
     profile_photo_path: str | SkipSentinel | None,
@@ -382,6 +383,7 @@ def create_mep_subject_context(
     print(f" Media files available: {total_paths - none_paths}/{total_paths}")
 
     return ctx
+
 
 # Define image dimension configurations (in cm)
 IMAGE_DIMENSIONS = {
