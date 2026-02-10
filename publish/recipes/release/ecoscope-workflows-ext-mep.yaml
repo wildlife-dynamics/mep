@@ -31,6 +31,8 @@ requirements:
     - docxtpl
     - playwright
     - numpy
+    - setuptools <=81.0.0
+    - docxcompose
 about:
   license: BSD-3-Clause
 
