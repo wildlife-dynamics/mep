@@ -670,7 +670,7 @@ create_ldx_styled_layers = (
             },
         },
         legends={
-            "title": "",
+            "title": "Land Use",
             "values": [
                 {"label": "Community Conservancy", "color": "#a6b697"},
                 {"label": "National Reserve", "color": "#88a78e"},
@@ -2602,7 +2602,7 @@ zip_season_mcp_layer = (
         unpack_depth=1,
     )
     .partial(
-        sequences=[generate_season_layers, create_mcp_polygon_layer],
+        sequences=[create_mcp_polygon_layer, generate_season_layers],
         **zip_season_mcp_layer_params,
     )
     .call()

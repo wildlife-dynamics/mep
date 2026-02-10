@@ -475,7 +475,7 @@ def main(params: Params):
                 },
             },
             legends={
-                "title": "",
+                "title": "Land Use",
                 "values": [
                     {"label": "Community Conservancy", "color": "#a6b697"},
                     {"label": "National Reserve", "color": "#88a78e"},
@@ -1772,7 +1772,7 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            sequences=[generate_season_layers, create_mcp_polygon_layer],
+            sequences=[create_mcp_polygon_layer, generate_season_layers],
             **(params_dict.get("zip_season_mcp_layer") or {}),
         )
         .call()
