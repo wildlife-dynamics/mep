@@ -13,6 +13,7 @@ from ecoscope_workflows_core.tasks.filter._filter import TimeRange
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 from docxtpl import InlineImage
 from docx.shared import Inches
+from ecoscope_workflows_core.skip import SKIP_SENTINEL, SkipSentinel
 
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore")
@@ -152,42 +153,62 @@ def validate_image_path(field_name: str, path: str) -> None:
 # 10. subject stats table -- persist_subject_stats
 # 11. subject occupancy table -- persist_subject_occupancy
 
-
 @task
 def create_mep_subject_context(
-    profile_photo_path: str | None,
-    subject_info_path: str | None,
-    speedmap_path: str | None,
-    homerange_map_path: str | None,
-    seasonal_homerange_map_path: str | None,
-    nsd_plot_path: str | None,
-    speed_plot_path: str | None,
-    collared_event_plot_path: str | None,
-    mcp_plot_path: str | None,
-    subject_stats_table_path: str | None,
-    subject_occupancy_table_path: str | None,
+    profile_photo_path: str | SkipSentinel | None,
+    subject_info_path: str | SkipSentinel | None,
+    speedmap_path: str | SkipSentinel | None,
+    homerange_map_path: str | SkipSentinel | None,
+    seasonal_homerange_map_path: str | SkipSentinel | None,
+    nsd_plot_path: str | SkipSentinel | None,
+    speed_plot_path: str | SkipSentinel | None,
+    collared_event_plot_path: str | SkipSentinel | None,
+    mcp_plot_path: str | SkipSentinel | None,
+    subject_stats_table_path: str | SkipSentinel | None,
+    subject_occupancy_table_path: str | SkipSentinel | None,
 ) -> Dict[str, Any]:
     """
     Build a dictionary with the subject report template values.
 
-    Handles None values gracefully for all input parameters.
+    Handles None and SkipSentinel values gracefully for all input parameters.
 
     Args:
-        profile_photo_path: Path to the profile photo or None.
-        subject_info_path: Path to the subject information CSV or None.
-        speedmap_path: Path to the speedmap image or None.
-        homerange_map_path: Path to the homerange map image or None.
-        seasonal_homerange_map_path: Path to the seasonal homerange map image or None.
-        nsd_plot_path: Path to the NSD plot image or None.
-        speed_plot_path: Path to the speed plot image or None.
-        collared_event_plot_path: Path to the collared event plot image or None.
-        mcp_plot_path: Path to the MCP plot image or None.
-        subject_stats_table_path: Path to the subject stats CSV or None.
-        subject_occupancy_table_path: Path to the subject occupancy CSV or None.
+        profile_photo_path: Path to the profile photo, SkipSentinel, or None.
+        subject_info_path: Path to the subject information CSV, SkipSentinel, or None.
+        speedmap_path: Path to the speedmap image, SkipSentinel, or None.
+        homerange_map_path: Path to the homerange map image, SkipSentinel, or None.
+        seasonal_homerange_map_path: Path to the seasonal homerange map image, SkipSentinel, or None.
+        nsd_plot_path: Path to the NSD plot image, SkipSentinel, or None.
+        speed_plot_path: Path to the speed plot image, SkipSentinel, or None.
+        collared_event_plot_path: Path to the collared event plot image, SkipSentinel, or None.
+        mcp_plot_path: Path to the MCP plot image, SkipSentinel, or None.
+        subject_stats_table_path: Path to the subject stats CSV, SkipSentinel, or None.
+        subject_occupancy_table_path: Path to the subject occupancy CSV, SkipSentinel, or None.
 
     Returns:
         Structured dictionary with subject report values. Missing values default to appropriate fallbacks.
     """
+
+    def unwrap_skip(value):
+        """
+        Unwrap SkipSentinel values, converting them to None.
+        """
+        if value is None or value is SKIP_SENTINEL:
+            return None
+        return value
+
+    # ------------------ NORMALIZE ALL INPUTS ------------------
+    profile_photo_path = unwrap_skip(profile_photo_path)
+    subject_info_path = unwrap_skip(subject_info_path)
+    speedmap_path = unwrap_skip(speedmap_path)
+    homerange_map_path = unwrap_skip(homerange_map_path)
+    seasonal_homerange_map_path = unwrap_skip(seasonal_homerange_map_path)
+    nsd_plot_path = unwrap_skip(nsd_plot_path)
+    speed_plot_path = unwrap_skip(speed_plot_path)
+    collared_event_plot_path = unwrap_skip(collared_event_plot_path)
+    mcp_plot_path = unwrap_skip(mcp_plot_path)
+    subject_stats_table_path = unwrap_skip(subject_stats_table_path)
+    subject_occupancy_table_path = unwrap_skip(subject_occupancy_table_path)
 
     def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         """
@@ -361,7 +382,6 @@ def create_mep_subject_context(
     print(f" Media files available: {total_paths - none_paths}/{total_paths}")
 
     return ctx
-
 
 # Define image dimension configurations (in cm)
 IMAGE_DIMENSIONS = {
