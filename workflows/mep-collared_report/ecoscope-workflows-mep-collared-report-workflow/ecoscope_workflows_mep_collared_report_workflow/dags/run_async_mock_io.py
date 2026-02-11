@@ -276,7 +276,7 @@ def main(params: Params):
         "apply_seasonal_colormap": ["convert_season_to_string"],
         "generate_season_layers": ["apply_seasonal_colormap"],
         "create_mcp_polygon_layer": ["generate_mcp"],
-        "zip_season_mcp_layer": ["generate_season_layers", "create_mcp_polygon_layer"],
+        "zip_season_mcp_layer": ["create_mcp_polygon_layer", "generate_season_layers"],
         "combined_ldx_seasonal_hr_layers": [
             "create_ldx_styled_layers",
             "create_ldx_text_layer",
@@ -774,7 +774,7 @@ def main(params: Params):
                     },
                 },
                 "legends": {
-                    "title": "",
+                    "title": "Land Use",
                     "values": [
                         {
                             "label": "Community Conservancy",
@@ -2286,8 +2286,8 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "sequences": [
-                    DependsOn("generate_season_layers"),
                     DependsOn("create_mcp_polygon_layer"),
+                    DependsOn("generate_season_layers"),
                 ],
             }
             | (params_dict.get("zip_season_mcp_layer") or {}),

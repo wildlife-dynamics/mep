@@ -65,12 +65,14 @@ geopandas="*"
 shapely = "*"
 numpy="2,<2.1"
 ecoscope-workflows-ext-mnc = "0.0.2.*"
-ecoscope-workflows-ext-ste = "0.0.8.*"
+ecoscope-workflows-ext-ste = "0.0.10.*"
 ecoscope-workflows-core =">=0.20.6"
 ecoscope-workflows-ext-ecoscope=">=0.20.6"
 ecoscope-workflows-ext-custom = "0.0.23.*"
 docxtpl="*"
 playwright="*"
+setuptools="81.0.0.*"
+docxcompose="*"
 
 # additional dependencies added by this extension
 

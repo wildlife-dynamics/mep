@@ -24,7 +24,13 @@ custom_trajs_filter:
   min_speed_kmhr: 0.01
   max_speed_kmhr: 9
 time_range:
-  since: '2025-01-01T12:00:00.000Z'
-  until: '2026-01-29T12:00:00.000Z'
+  since: '2025-12-01T12:00:00.000Z'
+  until: '2026-02-08T12:00:00.000Z'
+  timezone:
+    utc: '+03:00'
+    name: UTC
+    tzCode: UTC
+    label: UTC
+  time_format: '%d %b %Y %H:%M:%S'
 subject_group_var:
   var: MEP_Elephants_Ecoscope_Shimba_Hills
