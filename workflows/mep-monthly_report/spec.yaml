@@ -13,7 +13,7 @@ requirements:
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.8.*"
+    version: "0.0.10.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mnc

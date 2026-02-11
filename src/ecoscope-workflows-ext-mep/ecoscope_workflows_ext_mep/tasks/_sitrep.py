@@ -1,5 +1,6 @@
 import logging
 import pandas as pd
+from datetime import datetime 
 import geopandas as gpd
 from typing import Dict, Any, List
 from ecoscope_workflows_core.decorators import task
@@ -252,12 +253,12 @@ def _format_timestamp(timestamp: pd.Timestamp) -> str:
     Convert pandas Timestamp to ISO format string for API calls.
     
     Args:
-        timestamp: pandas Timestamp object
+        timestamp: pandas Timestamp object or datetime object
         
     Returns:
         ISO formatted datetime string
     """
-    if isinstance(timestamp, pd.Timestamp):
+    if isinstance(timestamp, (pd.Timestamp, datetime)):
         return timestamp.isoformat()
     elif isinstance(timestamp, str):
         return timestamp
