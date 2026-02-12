@@ -1,4 +1,4 @@
-id: mep_collared_report
+id: mep_monthly_report
 requirements:
   - name: ecoscope-workflows-core
     version: "0.20.6.*"
@@ -74,93 +74,6 @@ workflow:
     id: gee_project_name
     task: set_gee_connection 
   
-  # Please note that this workflow only uses ldx db 
-  - name: Load landDx database
-    id: retrieve_ldx_db
-    task: get_file_path 
-    partial: 
-      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-  
-  - name: Load ldx gpkg 
-    id: load_ldx 
-    task: load_df 
-    partial: 
-      file_path: ${{ workflow.retrieve_ldx_db.return }}
-      layer: landDx_polygons
-      deserialize_json: false 
-    
-  - name: Filter loaded landDx by AOI 
-    id: filter_ldx_aoi 
-    task: filter_row_values
-    partial: 
-      df: ${{ workflow.load_ldx.return }}
-      column: type 
-      values: 
-        - Community Conservancy 
-        - National Reserve 
-        - National Park
-    
-  - name: Exclude unnecessary columns from ldx gdf 
-    id: filter_ldx_cols 
-    task: filter_df_cols 
-    partial: 
-      df: ${{ workflow.filter_ldx_aoi.return }}
-      columns: 
-        - type
-        - name
-        - geometry
-      
-  - name: Split ldx gdf by type column 
-    id: split_ldx_by_type 
-    task: split_gdf_by_column
-    partial: 
-      gdf: ${{ workflow.filter_ldx_cols.return }}
-      column: type 
-  
-  - name: Annotate gdf dict with geom type 
-    id: annotate_gdf_dict 
-    task: annotate_gdf_dict_with_geom_type 
-    partial: 
-      gdf_dict: ${{ workflow.split_ldx_by_type.return }}
-
-  - name: Create deckgl layers from split ldx gdf dict
-    id: create_ldx_styled_layers 
-    task: create_deckgl_layers_from_gdf_dict
-    partial: 
-      gdf_dict: ${{ workflow.annotate_gdf_dict.return }}
-      styles: 
-        Community Conservancy:
-          get_fill_color: [166,182,151]
-          get_line_color: [166,182,151]
-          opacity: 0.15
-          stroked: true
-          get_line_width: 2.00 #1.85
-          
-        National Reserve:
-          get_fill_color: [136,167,142]
-          get_line_color: [136,167,142]
-          opacity: 0.15
-          stroked: true
-          get_line_width: 2.00
-
-        National Park: 
-          get_fill_color: [17, 86, 49]
-          get_line_color: [17, 86, 49]
-          opacity: 0.15
-          stroked: true
-          get_line_width: 2.00
-    
-      legends: 
-        title: "" 
-        values: 
-          - label: Community Conservancy 
-            color: "#a6b697"
-          - label: National Reserve 
-            color: "#88a78e"
-          - label: National Park 
-            color: "#115631"
-
-
 # get events -- elephant sighting and persist file 
   - name: Retrieve all events 
     id: get_events_data
@@ -246,18 +159,6 @@ workflow:
       bearing: 0
       gdf: ${{ workflow.remove_mep_invalid_geoms.return }}
 
-  - name: Combine styled layers with elephant sightings
-    id: custom_elephant_sightings
-    task: combine_deckgl_map_layers
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
-    partial:
-      static_layers: 
-        - ${{ workflow.create_ldx_styled_layers.return }}
-      grouped_layers: ${{ workflow.generate_mb_layers.return }}
-
   - name: Draw elephant sightings map
     id: draw_sightings_map
     task: draw_map
@@ -272,7 +173,7 @@ workflow:
       max_zoom: 10
       legend_style:
         placement: "bottom-right"
-      geo_layers: ${{ workflow.custom_elephant_sightings.return }}
+      geo_layers: ${{ workflow.generate_mb_layers.return }}
       view_state: ${{ workflow.sighting_zoom_value.return }} 
 
   - name: Persist elephant sightings map
@@ -343,16 +244,18 @@ workflow:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }} # convert outputs to png 
   
 # relocs to trajectories -- speedmap and persist file 
-  - name: Trajectory Segment Filter  
-    id: custom_trajs_filter
-    task: custom_trajectory_segment_filter
-
   - name: Convert relocations to trajectories 
     id: convert_to_trajectories 
     task: relocations_to_trajectory 
     partial: 
       relocations: ${{ workflow.subject_reloc.return }}
-      trajectory_segment_filter: ${{ workflow.custom_trajs_filter.return }}
+      trajectory_segment_filter:
+        min_length_meters: 0.001
+        max_length_meters: 5000
+        min_time_secs: 1
+        max_time_secs: 21600
+        min_speed_kmhr: 0.01
+        max_speed_kmhr: 9
 
   - name: Add temporal index to trajectories 
     id: add_temporal_index_to_traj 
@@ -447,18 +350,6 @@ workflow:
       bearing: 0
       gdf: ${{ workflow.filter_speed_cols.return }}
     
-  - name: Combine ldx layers and speedmap layers 
-    id: combined_ldx_speed_layers 
-    task: combine_deckgl_map_layers
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
-    partial:
-      static_layers: 
-        - ${{ workflow.create_ldx_styled_layers.return }}
-      grouped_layers: ${{ workflow.generate_speedmap_layers.return }}
-
   - name: Draw speedmap 
     id: draw_speedmap
     task: draw_map 
@@ -469,7 +360,7 @@ workflow:
       max_zoom: 10
       legend_style: 
         placement: bottom-right
-      geo_layers: ${{ workflow.combined_ldx_speed_layers.return }}
+      geo_layers: ${{ workflow.generate_speedmap_layers.return }}
       view_state: ${{ workflow.zoom_speed_gdf_extent.return }} 
 
   - name: Persist speedmap html 
@@ -507,6 +398,329 @@ workflow:
       filetype: csv
       filename: sitrep_report
       df: ${{ workflow.generate_sitrep_df.return }}
+
+  - name: Retrieve vehicle patrols 
+    id: vehicle_patrols 
+    task: get_patrol_observations 
+    partial: 
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.time_range.return }}
+      include_patrol_details: true 
+      raise_on_empty: true
+      sub_page_size: 100 
+      patrol_types: 
+      - "MEP_routine_vehicle_patrol_bravo_team"
+      - "MEP_routine_vehicle_patrol_foxtrot_team"
+      - "MEP_Routine_Vehicle_Patrol - Mwaluganje Team"
+      - "MEP_routine_vehicle_patrol_hq_team"
+      - "MEP_routine_vehicle_patrol_delta_team"
+      - "MEP_routine_vehicle_patrol_echo_team"
+      - "MEP_routine_vehicle_patrol_kilo_team"
+      - "MEP_routine_vehicle_patrol_mobile_team"
+      - "MEP_routine_vehicle_patrol_alpha_team"
+      - "MEP_routine_vehicle_patrol_charlie_team"
+      - "MEP_routine_vehicle_patrol_golf_team"
+
+  - name: Transform observations to relocations 
+    id: vehicle_patrol_reloc
+    task: process_relocations
+    partial: 
+      observations: ${{ workflow.vehicle_patrols.return }}
+      relocs_columns: 
+        - patrol_id
+        - patrol_start_time
+        - patrol_end_time
+        - geometry
+        - patrol_type__value
+        - patrol_type__display
+        - patrol_serial_number
+        - patrol_status
+        - patrol_subject
+        - groupby_col
+        - fixtime
+        - junk_status
+        - extra__source
+
+      filter_point_coords:
+        - x: 180.000000
+          y: 90.000000
+        - x: 0.000000
+          y: 0.000000
+        - x: 1.000000
+          y: 1.000000
+
+  - name: Transform relocations to trajectories 
+    id: vehicle_patrol_traj 
+    task: relocations_to_trajectory 
+    partial: 
+      relocations: ${{ workflow.vehicle_patrol_reloc.return }}
+      trajectory_segment_filter:
+        min_length_meters: 0.35
+        max_length_meters: 5000.0
+        max_time_secs: 18000.0
+        min_time_secs: 1.0
+        max_speed_kmhr: 100.0
+        min_speed_kmhr: 10.0
+
+  - name: Persist vehicle patrol trajectories 
+    id: persist_vehicle_traj 
+    task: persist_df 
+    partial: 
+      df: ${{ workflow.vehicle_patrol_traj.return }}
+      filetype: geoparquet
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: vehicle_patrol_trajectories 
+
+  - name: Vehicle patrol trajectories colormap 
+    id: vehicle_traj_colormap 
+    task: apply_color_map
+    partial: 
+      df: ${{ workflow.vehicle_patrol_traj.return }}
+      colormap: viridis
+      input_column_name: extra__patrol_type__value
+      output_column_name: patrol_type_colormap 
+
+  - name: Vehicle patrols zoom value
+    id: vehicle_zoom_value
+    task: view_state_deck_gdf
+    skipif:
+      conditions:
+        - any_is_empty_df
+        - any_dependency_skipped
+    partial:
+      pitch: 0
+      bearing: 0
+      gdf: ${{ workflow.vehicle_traj_colormap.return }}
+
+  - name: Create vehicle patrol layers 
+    id: vehicle_patrol_path_layer 
+    task: create_path_layer
+    partial: 
+      layer_style:
+        get_color: patrol_type_colormap
+        get_width: 2.85
+        width_scale: 1 
+        width_min_pixels: 2 
+        width_max_pixels: 8 
+        width_units: pixels
+        cap_rounded: true 
+        joint_rounded: true
+        billboard: false
+        opacity: 0.55
+        stroked: true 
+      legend:
+        title: Patrol team
+        label_column: extra__patrol_type__value
+        color_column: patrol_type_colormap
+        sort: ascending 
+        label_suffix: null
+      geodataframe: ${{ workflow.vehicle_traj_colormap.return }}
+
+  - name: Draw vehicle patrols map
+    id: draw_vehicles_map
+    task: draw_map
+    skipif:
+      conditions:
+        - any_is_empty_df
+        - any_dependency_skipped
+    partial:
+      tile_layers: ${{ workflow.configure_base_maps.return }}
+      static: false
+      title: null
+      max_zoom: 10
+      legend_style:
+        placement: "bottom-right"
+      geo_layers: ${{ workflow.vehicle_patrol_path_layer.return }}
+      view_state: ${{ workflow.vehicle_zoom_value.return }} 
+
+  - name: Persist vehicle patrols as text 
+    id: vehicle_patrol_map 
+    task: persist_text
+    partial:  
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: vehicle_patrols_map.html
+      text: ${{ workflow.draw_vehicles_map.return }} # convert this to png 
+
+  # foot patrols 
+  - name: Retrieve foot patrols 
+    id: foot_patrols 
+    task: get_patrol_observations 
+    partial: 
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.time_range.return }}
+      include_patrol_details: true 
+      raise_on_empty: true
+      sub_page_size: 100 
+      patrol_types: 
+        - "MEP_routine_foot_patrol_bravo_team"
+        - "MEP_routine_foot_patrol_foxtrot_team"
+        - "MEP_routine_foot_patrol_HQ_team"
+        - "MEP_routine_foot_patrol_ Delta_Team"
+        - "MEP_routine_foot_patrol_echo_team"
+        - "MEP_routine_foot_patrol_kilo_team"
+        - "mwaluganje_routine_foot_patrol_alpha_team"
+        - "MEP_routine_foot_patrol_alpha_team"
+        - "MEP_routine_foot_patrol_charlie_team"
+        - "MEP_routine_foot_patrol_golf_team"
+        - "MEP_routine_foot_patrol_marmanet"
+
+  - name: Transform observations to relocations 
+    id: foot_patrol_reloc
+    task: process_relocations
+    partial: 
+      observations: ${{ workflow.foot_patrols.return }}
+      relocs_columns: 
+        - patrol_id
+        - patrol_start_time
+        - patrol_end_time
+        - geometry
+        - patrol_type__value
+        - patrol_type__display
+        - patrol_serial_number
+        - patrol_status
+        - patrol_subject
+        - groupby_col
+        - fixtime
+        - junk_status
+        - extra__source
+
+      filter_point_coords:
+        - x: 180.000000
+          y: 90.000000
+        - x: 0.000000
+          y: 0.000000
+        - x: 1.000000
+          y: 1.000000
+
+  - name: Transform relocations to trajectories 
+    id: foot_patrol_traj 
+    task: relocations_to_trajectory 
+    partial: 
+      relocations: ${{ workflow.foot_patrol_reloc.return }}
+      trajectory_segment_filter:
+        min_length_meters: 0.001
+        max_length_meters: 5000.0
+        max_time_secs: 14400.0
+        min_time_secs: 1.0
+        max_speed_kmhr: 9.0
+        min_speed_kmhr: 0.5
+
+  - name: Persist foot patrol trajectories 
+    id: persist_foot_traj 
+    task: persist_df 
+    partial: 
+      df: ${{ workflow.foot_patrol_traj.return }}
+      filetype: geoparquet
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: foot_patrol_trajectories 
+
+  - name: Foot patrol trajectories colormap 
+    id: foot_traj_colormap 
+    task: apply_color_map
+    partial: 
+      df: ${{ workflow.foot_patrol_traj.return }}
+      colormap: viridis
+      input_column_name: extra__patrol_type__value
+      output_column_name: patrol_type_colormap 
+
+  - name: Foot patrols zoom value
+    id: foot_zoom_value
+    task: view_state_deck_gdf
+    skipif:
+      conditions:
+        - any_is_empty_df
+        - any_dependency_skipped
+    partial:
+      pitch: 0
+      bearing: 0
+      gdf: ${{ workflow.foot_traj_colormap.return }}
+
+  - name: Create foot patrol layers 
+    id: foot_patrol_path_layer 
+    task: create_path_layer
+    partial: 
+      layer_style:
+        get_color: patrol_type_colormap
+        get_width: 2.85
+        width_scale: 1 
+        width_min_pixels: 2 
+        width_max_pixels: 8 
+        width_units: pixels
+        cap_rounded: true 
+        joint_rounded: true
+        billboard: false
+        opacity: 0.55
+        stroked: true 
+      legend:
+        title: Patrol team
+        label_column: extra__patrol_type__value
+        color_column: patrol_type_colormap
+        sort: ascending 
+        label_suffix: null
+      geodataframe: ${{ workflow.foot_traj_colormap.return }}
+
+  - name: Draw foot patrols map
+    id: draw_foot_map
+    task: draw_map
+    skipif:
+      conditions:
+        - any_is_empty_df
+        - any_dependency_skipped
+    partial:
+      tile_layers: ${{ workflow.configure_base_maps.return }}
+      static: false
+      title: null
+      max_zoom: 10
+      legend_style:
+        placement: "bottom-right"
+      geo_layers: ${{ workflow.foot_patrol_path_layer.return }}
+      view_state: ${{ workflow.foot_zoom_value.return }} 
+
+  - name: Persist foot patrols as text 
+    id: foot_patrol_map 
+    task: persist_text
+    partial:  
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: foot_patrols_map.html
+      text: ${{ workflow.draw_foot_map.return }} # convert this to png 
+
+
+  # proceed to add the ndvi charts now 
+  - name: Download ROI file and persist
+    id: download_roi_file
+    task: fetch_and_persist_file
+    partial:
+      url: https://www.dropbox.com/scl/fi/2bpktq45zns9igryl6q9l/ROIs.gpkg?rlkey=sojch2njmvsa3i5a3f3pt11xq&st=9x70z6z1&dl=0
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      overwrite_existing: false 
+      retries: 3 
+      unzip: false
+
+  - name: Load roi
+    id: load_roi 
+    task: load_df 
+    partial: 
+      file_path: ${{ workflow.download_roi_file.return }}
+      layer: null 
+      deserialize_json: false 
+  
+  - name: Transform gdf to epsg 4326
+    id: transform_roi
+    task: transform_gdf_crs 
+    partial:
+      gdf: ${{ workflow.load_roi.return }}
+      crs: "EPSG:4326"
+
+  - name: Process ndvi charts 
+    id: process_ndvi_charts 
+    task: process_aoi_ndvi_charts 
+    partial: 
+      df: ${{ workflow.transform_roi.return }}
+      er_client: ${{ workflow.gee_project_name.return }}
+      aoi_column: name 
+      time_range: ${{ workflow.time_range.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+
 
   - name: MEP monthly report  dashboard
     id: mep_monthly_dashboard

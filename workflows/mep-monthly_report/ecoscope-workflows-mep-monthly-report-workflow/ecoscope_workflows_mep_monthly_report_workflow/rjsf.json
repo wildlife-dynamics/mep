@@ -292,78 +292,91 @@
       "type": "object",
       "title": "Connect to earth engine"
     },
-    "retrieve_ldx_db": {
-      "additionalProperties": false,
+    "Subject Group": {
+      "type": "object",
+      "description": "Choose subject group to generate collar voltage charts and overall speedmap",
+      "ecoscope:task_group": true,
       "properties": {
-        "input_method": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DownloadFile"
-            },
-            {
-              "$ref": "#/$defs/LocalFile"
+        "subject_group_var": {
+          "additionalProperties": false,
+          "properties": {
+            "var": {
+              "title": "Subject Group Name",
+              "type": "string"
             }
+          },
+          "required": [
+            "var"
           ],
-          "title": "Input Method"
+          "type": "object",
+          "title": ""
         }
       },
-      "required": [
-        "input_method"
-      ],
-      "type": "object",
-      "title": "Load landDx database"
+      "": {
+        "properties": {
+          "subject_group_var": {
+            "properties": {
+              "var": {
+                "default": "subject_name"
+              }
+            }
+          }
+        }
+      }
     },
-    "subject_group_var": {
+    "vehicle_patrols": {
       "additionalProperties": false,
       "properties": {
-        "var": {
-          "title": "",
-          "type": "string"
+        "status": {
+          "default": [
+            "done"
+          ],
+          "items": {
+            "enum": [
+              "active",
+              "overdue",
+              "done",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "title": "Patrol Status",
+          "type": "array",
+          "description": "Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
+          "uniqueItems": true,
+          "ecoscope:advanced": true
         }
       },
-      "required": [
-        "var"
-      ],
-      "type": "object",
-      "title": ""
-    },
-    "custom_trajs_filter": {
-      "additionalProperties": false,
-      "properties": {
-        "min_length_meters": {
-          "default": 0.001,
-          "title": "Min Length Meters",
-          "type": "number"
-        },
-        "max_length_meters": {
-          "default": 5000,
-          "title": "Max Length Meters",
-          "type": "number"
-        },
-        "min_time_secs": {
-          "default": 1,
-          "title": "Min Time Secs",
-          "type": "number"
-        },
-        "max_time_secs": {
-          "default": 21600,
-          "title": "Max Time Secs",
-          "type": "number"
-        },
-        "min_speed_kmhr": {
-          "default": 0.01,
-          "title": "Min Speed Kmhr",
-          "type": "number"
-        },
-        "max_speed_kmhr": {
-          "default": 9.0,
-          "title": "Max Speed Kmhr",
-          "type": "number"
-        }
-      },
-      "type": "object",
       "required": [],
-      "title": "Trajectory Segment Filter"
+      "type": "object",
+      "title": "Retrieve vehicle patrols"
+    },
+    "foot_patrols": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "default": [
+            "done"
+          ],
+          "items": {
+            "enum": [
+              "active",
+              "overdue",
+              "done",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "title": "Patrol Status",
+          "type": "array",
+          "description": "Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
+          "uniqueItems": true,
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Retrieve foot patrols"
     }
   },
   "$defs": {
@@ -421,33 +434,13 @@
       "title": "GoogleEarthEngineConnection",
       "type": "object"
     },
-    "DownloadFile": {
-      "properties": {
-        "url": {
-          "description": "URL to download the shapefile from (supports .gpkg, .shp and .geoparquet)",
-          "title": "URL",
-          "type": "string"
+    "ValueGrouper": {
+      "oneOf": [
+        {
+          "const": "subject_name",
+          "title": "Subject Name"
         }
-      },
-      "required": [
-        "url"
-      ],
-      "title": "Download from URL",
-      "type": "object"
-    },
-    "LocalFile": {
-      "properties": {
-        "file_path": {
-          "description": "Path to the local shapefile or archive on the filesystem",
-          "title": "Local file path",
-          "type": "string"
-        }
-      },
-      "required": [
-        "file_path"
-      ],
-      "title": "Use local file",
-      "type": "object"
+      ]
     }
   },
   "uiSchema": {
@@ -465,25 +458,15 @@
         "time_format"
       ]
     },
-    "custom_trajs_filter": {
-      "ui:order": [
-        "min_length_meters",
-        "max_length_meters",
-        "min_time_secs",
-        "max_time_secs",
-        "min_speed_kmhr",
-        "max_speed_kmhr"
-      ]
-    },
     "ui:order": [
       "workflow_details",
       "time_range",
       "configure_base_maps",
       "er_client_name",
       "gee_project_name",
-      "retrieve_ldx_db",
-      "subject_group_var",
-      "custom_trajs_filter"
+      "Subject Group",
+      "vehicle_patrols",
+      "foot_patrols"
     ]
   },
   "additionalProperties": false

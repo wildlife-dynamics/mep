@@ -192,16 +192,33 @@ class SubjectGroupVar(BaseModel):
     var: str = Field(..., title="")
 
 
-class CustomTrajsFilter(BaseModel):
+class StatusEnum(str, Enum):
+    active = "active"
+    overdue = "overdue"
+    done = "done"
+    cancelled = "cancelled"
+
+
+class VehiclePatrols(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    min_length_meters: float | None = Field(0.001, title="Min Length Meters")
-    max_length_meters: float | None = Field(5000, title="Max Length Meters")
-    min_time_secs: float | None = Field(1, title="Min Time Secs")
-    max_time_secs: float | None = Field(21600, title="Max Time Secs")
-    min_speed_kmhr: float | None = Field(0.01, title="Min Speed Kmhr")
-    max_speed_kmhr: float | None = Field(9.0, title="Max Speed Kmhr")
+    status: list[StatusEnum] | None = Field(
+        ["done"],
+        description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
+        title="Patrol Status",
+    )
+
+
+class FootPatrols(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    status: list[StatusEnum] | None = Field(
+        ["done"],
+        description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
+        title="Patrol Status",
+    )
 
 
 class TimezoneInfo(BaseModel):
@@ -217,22 +234,6 @@ class EarthRangerConnection(BaseModel):
 
 class GoogleEarthEngineConnection(BaseModel):
     name: str = Field(..., title="Data Source")
-
-
-class DownloadFile(BaseModel):
-    url: str = Field(
-        ...,
-        description="URL to download the shapefile from (supports .gpkg, .shp and .geoparquet)",
-        title="URL",
-    )
-
-
-class LocalFile(BaseModel):
-    file_path: str = Field(
-        ...,
-        description="Path to the local shapefile or archive on the filesystem",
-        title="Local file path",
-    )
 
 
 class TimeRange(BaseModel):
@@ -265,13 +266,6 @@ class GeeProjectName(BaseModel):
     )
 
 
-class RetrieveLdxDb(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    input_method: DownloadFile | LocalFile = Field(..., title="Input Method")
-
-
 class Params(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -293,8 +287,8 @@ class Params(BaseModel):
     gee_project_name: GeeProjectName | None = Field(
         None, title="Connect to earth engine"
     )
-    retrieve_ldx_db: RetrieveLdxDb | None = Field(None, title="Load landDx database")
     subject_group_var: SubjectGroupVar | None = Field(None, title="")
-    custom_trajs_filter: CustomTrajsFilter | None = Field(
-        None, title="Trajectory Segment Filter"
+    vehicle_patrols: VehiclePatrols | None = Field(
+        None, title="Retrieve vehicle patrols"
     )
+    foot_patrols: FootPatrols | None = Field(None, title="Retrieve foot patrols")

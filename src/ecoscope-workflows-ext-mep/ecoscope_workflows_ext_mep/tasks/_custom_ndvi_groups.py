@@ -1,6 +1,7 @@
 import os
 import logging
 from pydantic import Field
+from datetime import datetime
 from typing import Annotated, Union, List
 from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_core.tasks.io import persist_text
@@ -54,7 +55,7 @@ def process_aoi_ndvi_charts(
         print(f"Converted dataframe to CRS: {df.crs}")
     else:
         print(f"Dataframe already in CRS: {df.crs}")
-
+    
     # Process each ranch
     for idx, aoi_name in enumerate(aoi_names, 1):
         logger.info(f"Processing ranch {idx}/{len(aoi_names)}: {aoi_name}")
@@ -90,7 +91,7 @@ def process_aoi_ndvi_charts(
                 scale_factor=0.0001,
                 analysis_scale=500.0,
             )
-
+    
             # Create historic timeseries chart
             ndvi_chart = draw_historic_timeseries(
                 dataframe=dfs,

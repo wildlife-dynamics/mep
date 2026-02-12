@@ -37,10 +37,12 @@ ARTIFACTS = Path(__file__).parent.parent
 SNAPSHOT_DIRNAME = ARTIFACTS.parent / "__results_snapshots__"
 SNAPSHOT_DIFF_OUTPUT_DIRNAME = ARTIFACTS.parent / "__diff_output__"
 TEST_CASES_YAML = ARTIFACTS.parent / "test-cases.yaml"
-MATCHSPEC_OVERRIDE = "ecoscope-workflows-mep-collared-report-workflow"
+MATCHSPEC_OVERRIDE = "ecoscope-workflows-mep-monthly-report-workflow"
 IO_TASKS_IMPORTABLE_REFERENCES = [
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_events",
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_subjectgroup_observations",
+    "ecoscope_workflows_ext_ecoscope.tasks.io.get_patrol_observations",
+    "ecoscope_workflows_ext_ecoscope.tasks.io.get_patrol_observations",
 ]
 
 yaml = ruamel.yaml.YAML(typ="safe")
