@@ -14,7 +14,10 @@ from ._inspect import print_output, view_df
 from ._custom_ndvi_groups import process_aoi_ndvi_charts
 from ._custom_collar_voltage import process_collar_voltage_charts
 from ._sitrep import get_sitrep_event_config,compile_sitrep
+from ._custom_map_png import zoom_map_and_screenshot
+from ._custom_period import get_previous_period
 __all__ = [
+    "zoom_map_and_screenshot",
     "calculate_collar_voltage",
     "get_subject_df",
     "persist_subject_photo",
@@ -41,5 +44,6 @@ __all__ = [
     "process_collar_voltage_charts",
     
     "get_sitrep_event_config",
-    "compile_sitrep"
+    "compile_sitrep",
+    "get_previous_period"
 ]

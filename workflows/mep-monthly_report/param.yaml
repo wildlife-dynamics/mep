@@ -17,7 +17,7 @@ configure_base_maps:
       opacity: 1
       max_zoom: 20
     - url: >-
-        https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}
+        https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}
       opacity: 0.25
       max_zoom: 20
 er_client_name:
@@ -26,15 +26,11 @@ er_client_name:
 gee_project_name:
   data_source:
     name: ecoscope_poc
-retrieve_ldx_db:
-  input_method:
-    file_path: /Users/tevintemu/Desktop/Ecoscope/shapefiles/landDx.gpkg
-custom_trajs_filter:
-  min_length_meters: 0.001
-  max_length_meters: 5000
-  min_time_secs: 1
-  max_time_secs: 21600
-  min_speed_kmhr: 0.01
-  max_speed_kmhr: 9
+vehicle_patrols:
+  status:
+    - done
+foot_patrols:
+  status:
+    - done
 subject_group_var:
   var: MEP_Elephants_Everywhere

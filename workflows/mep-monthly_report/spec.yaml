@@ -115,7 +115,7 @@ workflow:
       df: ${{ workflow.get_events_data.return }}
       z_threshold: 3
 
-  - name: Remove elephant sightinginvalid points 
+  - name: Remove elephant sighting invalid points 
     id: remove_mep_invalid_geoms 
     task: ecoscope_workflows_ext_custom.tasks.transformation.drop_null_geometry
     skipif:
@@ -136,13 +136,15 @@ workflow:
     partial:
       layer_style:
         get_fill_color: [85, 107, 47]
+        get_line_color: [0, 0, 0, 200]
+        get_line_width: 0.55
         get_radius: 5
         opacity: 0.75
-        stroked: false
+        stroked: true
       legend:
-        title: Elephant sightings 
+        title: Legend 
         values: #556b2f
-          - label: Sighting 
+          - label: Elephant sightings 
             color: "#556b2f"
       geodataframe: ${{ workflow.remove_mep_invalid_geoms.return }}
   
@@ -235,11 +237,57 @@ workflow:
         - x: 1.000000
           y: 1.000000
 
+  - name: Get previous period 
+    id: get_custom_previous_period
+    task: get_previous_period
+    partial:
+      time_range: ${{ workflow.time_range.return }}
+
+  - name: Get subject group observations for previous relocs
+    id: previous_subject_observations
+    task: get_subjectgroup_observations
+    partial: 
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.get_custom_previous_period.return }}
+      subject_group_name: ${{ workflow.subject_group_var.return }}
+      raise_on_empty: false 
+      include_details: true
+      include_subjectsource_details: true
+
+  - name: Transform previous observations to relocations 
+    id: previous_subject_reloc
+    task: process_relocations 
+    partial: 
+      observations: ${{ workflow.previous_subject_observations.return }}
+      relocs_columns: 
+        - groupby_col
+        - fixtime
+        - junk_status 
+        - geometry
+        - extra__subject__name
+        - extra__subject__hex
+        - extra__subject__sex
+        - extra__created_at
+        - extra__subject__subject_subtype
+        - extra__subjectsource__id
+        - extra__subjectsource__assigned_range
+        - extra__observation_details
+        
+
+      filter_point_coords:
+        - x: 180.000000
+          y: 90.000000
+        - x: 0.000000
+          y: 0.000000
+        - x: 1.000000
+          y: 1.000000
+
   - name: Create collared charts for all subjects 
     id: process_subject_charts 
     task: process_collar_voltage_charts 
     partial: 
       relocs: ${{ workflow.subject_observations.return }}
+      previous_relocs: ${{ workflow.previous_subject_observations.return }}
       time_range: ${{ workflow.time_range.return }}
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }} # convert outputs to png 
   
@@ -684,7 +732,6 @@ workflow:
       filename: foot_patrols_map.html
       text: ${{ workflow.draw_foot_map.return }} # convert this to png 
 
-
   # proceed to add the ndvi charts now 
   - name: Download ROI file and persist
     id: download_roi_file
@@ -721,6 +768,78 @@ workflow:
       time_range: ${{ workflow.time_range.return }}
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
 
+  # html to png 
+  - name: Convert elephant sighting events html to png 
+    id: convert_sightings_png 
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      html_path: ${{ workflow.persist_sightings_urls.return }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 40000
+        max_concurrent_pages: 1
+
+  - name: Convert elephant speedmap html to png 
+    id: convert_speedmap_png 
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      html_path: ${{ workflow.persist_speedmap_html.return }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 40000
+        max_concurrent_pages: 1
+
+  - name: Convert vehicle patrol html to png 
+    id: convert_vehicle_png 
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      html_path: ${{ workflow.vehicle_patrol_map.return }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 40000
+        max_concurrent_pages: 1
+
+  - name: Convert foot patrol html to png 
+    id: convert_foot_png 
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      html_path: ${{ workflow.foot_patrol_map.return }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 40000
+        max_concurrent_pages: 1
+
+  - name: Convert NDVI html to png 
+    id: convert_ndvi_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      html_path: ${{ workflow.process_ndvi_charts.return }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+
+  - name: Convert collared plot html to png 
+    id: convert_collared_png 
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      html_path: ${{ workflow.process_subject_charts.return }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
 
   - name: MEP monthly report  dashboard
     id: mep_monthly_dashboard

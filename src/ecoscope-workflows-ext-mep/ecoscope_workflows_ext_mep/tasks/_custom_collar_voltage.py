@@ -8,6 +8,14 @@ from ecoscope_workflows_core.tasks.io import persist_text
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame
 from ecoscope_workflows_core.tasks.filter._filter import TimeRange
 from ecoscope_workflows_core.tasks import analysis, transformation
+from ecoscope_workflows_core.tasks.analysis._aggregation import (
+dataframe_column_first_unique,
+dataframe_column_percentile,
+dataframe_column_mean,
+apply_arithmetic_operation,
+dataframe_column_min,
+dataframe_column_max)
+
 from ecoscope_workflows_core.tasks.transformation._extract import FieldType
 from ecoscope_workflows_core.tasks.transformation._filter import ComparisonOperator
 from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import (
@@ -25,18 +33,28 @@ logger = logging.getLogger(__name__)
 def process_collar_voltage_charts(
     relocs: Annotated[
         AnyGeoDataFrame,
-        Field(description="The relocation geodataframe.", exclude=True)
+        Field(description="The relocation geodataframe for current period.", exclude=True)
     ],
     time_range: Annotated[TimeRange, Field(description="Time range for voltage analysis")],
     output_dir: Annotated[str, Field(description="Directory to save output HTML charts")],
+    previous_relocs: Annotated[
+        AnyGeoDataFrame | None,
+        Field(
+            default=None,
+            description="Optional relocation geodataframe for previous period to use for historical baseline calculations. If None, uses data before time_range.since from relocs.",
+            exclude=True
+        )
+    ] = None,
 ) -> List[str]:
     """
     Generate collar voltage charts for all unique subjects in relocation data.
     
     Args:
-        relocs: GeoDataFrame containing relocation data with voltage information
+        relocs: GeoDataFrame containing relocation data with voltage information for current period
         time_range: TimeRange object specifying analysis period
         output_dir: Directory to save generated HTML charts
+        previous_relocs: Optional GeoDataFrame for previous period data to calculate historical baselines.
+                        If not provided, uses historical data from before time_range.since in relocs.
         
     Returns:
         List of file paths for successfully generated charts
@@ -45,8 +63,12 @@ def process_collar_voltage_charts(
     if output_dir is None or str(output_dir).strip() == "":
         output_dir = os.getcwd()
     
+    # Extract columns for current relocations
     relocs = transformation.extract_column_as_type(
-        relocs, "extra__subjectsource__assigned_range", FieldType.SERIES, "extra.extra.subjectsource__assigned_range."
+        relocs, 
+        "extra__subjectsource__assigned_range", 
+        FieldType.SERIES, 
+        "extra.extra.subjectsource__assigned_range."
     )
     relocs = transformation.extract_column_as_type(
         relocs,
@@ -54,6 +76,21 @@ def process_collar_voltage_charts(
         FieldType.DATETIME,
         "extra.extra.subjectsource__assigned_range.upper",
     )
+
+    # If previous_relocs provided, extract columns for it too
+    if previous_relocs is not None:
+        previous_relocs = transformation.extract_column_as_type(
+            previous_relocs, 
+            "extra__subjectsource__assigned_range", 
+            FieldType.SERIES, 
+            "extra.extra.subjectsource__assigned_range."
+        )
+        previous_relocs = transformation.extract_column_as_type(
+            previous_relocs,
+            "extra.extra.subjectsource__assigned_range.upper",
+            FieldType.DATETIME,
+            "extra.extra.subjectsource__assigned_range.upper",
+        )
 
     groups = relocs.groupby(by=["extra__subject__name", "extra__subjectsource__id"])
 
@@ -69,7 +106,7 @@ def process_collar_voltage_charts(
         logger.info(f"Processing subject: {subject_name} (ID: {subjectsource_id})")
         
         try:
-            subjectsource_upperbound = analysis.dataframe_column_first_unique(
+            subjectsource_upperbound = dataframe_column_first_unique(
                 dataframe, "extra.extra.subjectsource__assigned_range.upper"
             )
 
@@ -87,44 +124,70 @@ def process_collar_voltage_charts(
                 "voltage",
             )
 
+            # Filter current period data
             curr_df = transformation.filter_df(dataframe, "fixtime", ComparisonOperator.GE, time_range.since)
             curr_df = transformation.filter_df(curr_df, "fixtime", ComparisonOperator.LT, time_range.until)
-            hist_df = transformation.filter_df(dataframe, "fixtime", ComparisonOperator.LT, time_range.since)
+
+            # Get historical data - either from previous_relocs or from before time_range.since
+            if previous_relocs is not None:
+                # Use previous relocations for historical baseline
+                subject_prev_data = previous_relocs[
+                    (previous_relocs["extra__subject__name"] == subject_name) & 
+                    (previous_relocs["extra__subjectsource__id"] == subjectsource_id)
+                ].copy()
+                
+                if not subject_prev_data.empty:
+                    subject_prev_data = transformation.sort_values(subject_prev_data, "fixtime")
+                    hist_df = transformation.extract_value_from_json_column(
+                        subject_prev_data,
+                        "extra__observation_details",
+                        ["battery", "mainVoltage", "batt", "power"],
+                        FieldType.FLOAT,
+                        "voltage",
+                    )
+                    logger.info(f"Using previous period data for {subject_name} baseline ({len(hist_df)} records)")
+                else:
+                    hist_df = pd.DataFrame()
+                    logger.warning(f"No previous period data found for {subject_name}")
+            else:
+                # Use historical data from before time_range.since (original behavior)
+                hist_df = transformation.filter_df(dataframe, "fixtime", ComparisonOperator.LT, time_range.since)
+                logger.info(f"Using historical data before {time_range.since} for {subject_name} baseline")
 
             if curr_df.empty and hist_df.empty:
                 logger.warning(f"Skipping {subject_name}: no data in current or historic range")
                 skipped_count += 1
                 continue
+                
             if hist_df.empty:
-                print(f"WARNING: No historical data before {time_range.since}")
+                print(f"WARNING: No historical data for {subject_name}")
                 print(f"FALLBACK: Using current period data for baseline calculations")
                 hist_df = curr_df.copy()
                 
-            volt_upper = analysis.dataframe_column_percentile(hist_df, "voltage", 97.5)
-            volt_lower = analysis.dataframe_column_percentile(hist_df, "voltage", 2.5)
-            volt_mean = analysis.dataframe_column_mean(hist_df, "voltage")
+            volt_upper = dataframe_column_percentile(hist_df, "voltage", 97.5)
+            volt_lower = dataframe_column_percentile(hist_df, "voltage", 2.5)
+            volt_mean = dataframe_column_mean(hist_df, "voltage")
 
             if volt_upper == volt_lower:
-                volt_upper_diff = analysis.apply_arithmetic_operation(volt_upper, 0.025, "multiply")
-                volt_upper = analysis.apply_arithmetic_operation(volt_upper, volt_upper_diff, "add")
-                volt_lower_diff = analysis.apply_arithmetic_operation(volt_lower, 0.025, "multiply")
-                volt_lower = analysis.apply_arithmetic_operation(volt_lower, volt_lower_diff, "subtract")
+                volt_upper_diff = apply_arithmetic_operation(volt_upper, 0.025, "multiply")
+                volt_upper = apply_arithmetic_operation(volt_upper, volt_upper_diff, "add")
+                volt_lower_diff = apply_arithmetic_operation(volt_lower, 0.025, "multiply")
+                volt_lower = apply_arithmetic_operation(volt_lower, volt_lower_diff, "subtract")
 
             transformation.assign_value(curr_df, "max", volt_upper)
             transformation.assign_value(curr_df, "min", volt_lower)
             transformation.assign_value(curr_df, "mean", volt_mean)
 
-            hist_lower_y = analysis.dataframe_column_min(hist_df, "voltage")
-            curr_lower_y = analysis.dataframe_column_min(curr_df, "voltage")
-            lower_y = analysis.apply_arithmetic_operation(hist_lower_y, curr_lower_y, "min")
-            lower_y_diff = analysis.apply_arithmetic_operation(lower_y, 0.1, "multiply")
-            lower_y = analysis.apply_arithmetic_operation(lower_y, lower_y_diff, "subtract")
+            hist_lower_y = dataframe_column_min(hist_df, "voltage")
+            curr_lower_y = dataframe_column_min(curr_df, "voltage")
+            lower_y = apply_arithmetic_operation(hist_lower_y, curr_lower_y, "min")
+            lower_y_diff = apply_arithmetic_operation(lower_y, 0.1, "multiply")
+            lower_y = apply_arithmetic_operation(lower_y, lower_y_diff, "subtract")
 
-            hist_upper_y = analysis.dataframe_column_max(hist_df, "voltage")
-            curr_upper_y = analysis.dataframe_column_max(curr_df, "voltage")
-            upper_y = analysis.apply_arithmetic_operation(hist_upper_y, curr_upper_y, "max")
-            upper_y_diff = analysis.apply_arithmetic_operation(upper_y, 0.1, "multiply")
-            upper_y = analysis.apply_arithmetic_operation(upper_y, upper_y_diff, "add")
+            hist_upper_y = dataframe_column_max(hist_df, "voltage")
+            curr_upper_y = dataframe_column_max(curr_df, "voltage")
+            upper_y = apply_arithmetic_operation(hist_upper_y, curr_upper_y, "max")
+            upper_y_diff = apply_arithmetic_operation(upper_y, 0.1, "multiply")
 
             html_output = draw_historic_timeseries(
                 dataframe=curr_df,

@@ -50,6 +50,15 @@ get_subjectgroup_observations = create_task_magicmock(  # 🧪
     anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
     func_name="get_subjectgroup_observations",  # 🧪
 )  # 🧪
+from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
+    process_relocations as process_relocations,
+)
+from ecoscope_workflows_ext_mep.tasks import get_previous_period as get_previous_period
+
+get_subjectgroup_observations = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
+    func_name="get_subjectgroup_observations",  # 🧪
+)  # 🧪
 from ecoscope_workflows_core.tasks.transformation import (
     add_temporal_index as add_temporal_index,
 )
@@ -58,9 +67,6 @@ from ecoscope_workflows_ext_custom.tasks.results import (
     create_path_layer as create_path_layer,
 )
 from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df as persist_df
-from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
-    process_relocations as process_relocations,
-)
 from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
     relocations_to_trajectory as relocations_to_trajectory,
 )
@@ -89,6 +95,7 @@ get_patrol_observations = create_task_magicmock(  # 🧪
     func_name="get_patrol_observations",  # 🧪
 )  # 🧪
 from ecoscope_workflows_core.tasks.results import gather_dashboard as gather_dashboard
+from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
 from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
 from ecoscope_workflows_ext_mep.tasks import (
     process_aoi_ndvi_charts as process_aoi_ndvi_charts,
@@ -127,7 +134,18 @@ def main(params: Params):
         "subject_group_var": [],
         "subject_observations": ["er_client_name", "time_range", "subject_group_var"],
         "subject_reloc": ["subject_observations"],
-        "process_subject_charts": ["subject_observations", "time_range"],
+        "get_custom_previous_period": ["time_range"],
+        "previous_subject_observations": [
+            "er_client_name",
+            "get_custom_previous_period",
+            "subject_group_var",
+        ],
+        "previous_subject_reloc": ["previous_subject_observations"],
+        "process_subject_charts": [
+            "subject_observations",
+            "previous_subject_observations",
+            "time_range",
+        ],
         "convert_to_trajectories": ["subject_reloc"],
         "add_temporal_index_to_traj": ["convert_to_trajectories", "groupers"],
         "classify_trajectories_speed_bins": ["add_temporal_index_to_traj"],
@@ -175,6 +193,12 @@ def main(params: Params):
         "load_roi": ["download_roi_file"],
         "transform_roi": ["load_roi"],
         "process_ndvi_charts": ["transform_roi", "gee_project_name", "time_range"],
+        "convert_sightings_png": ["persist_sightings_urls"],
+        "convert_speedmap_png": ["persist_speedmap_html"],
+        "convert_vehicle_png": ["vehicle_patrol_map"],
+        "convert_foot_png": ["foot_patrol_map"],
+        "convert_ndvi_png": ["process_ndvi_charts"],
+        "convert_collared_png": ["process_subject_charts"],
         "mep_monthly_dashboard": ["workflow_details", "time_range", "groupers"],
     }
 
@@ -375,15 +399,22 @@ def main(params: Params):
                         107,
                         47,
                     ],
+                    "get_line_color": [
+                        0,
+                        0,
+                        0,
+                        200,
+                    ],
+                    "get_line_width": 0.55,
                     "get_radius": 5,
                     "opacity": 0.75,
-                    "stroked": False,
+                    "stroked": True,
                 },
                 "legend": {
-                    "title": "Elephant sightings",
+                    "title": "Legend",
                     "values": [
                         {
-                            "label": "Sighting",
+                            "label": "Elephant sightings",
                             "color": "#556b2f",
                         },
                     ],
@@ -549,6 +580,96 @@ def main(params: Params):
             | (params_dict.get("subject_reloc") or {}),
             method="call",
         ),
+        "get_custom_previous_period": Node(
+            async_task=get_previous_period.validate()
+            .set_task_instance_id("get_custom_previous_period")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "time_range": DependsOn("time_range"),
+            }
+            | (params_dict.get("get_custom_previous_period") or {}),
+            method="call",
+        ),
+        "previous_subject_observations": Node(
+            async_task=get_subjectgroup_observations.validate()
+            .set_task_instance_id("previous_subject_observations")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "client": DependsOn("er_client_name"),
+                "time_range": DependsOn("get_custom_previous_period"),
+                "subject_group_name": DependsOn("subject_group_var"),
+                "raise_on_empty": False,
+                "include_details": True,
+                "include_subjectsource_details": True,
+            }
+            | (params_dict.get("previous_subject_observations") or {}),
+            method="call",
+        ),
+        "previous_subject_reloc": Node(
+            async_task=process_relocations.validate()
+            .set_task_instance_id("previous_subject_reloc")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "observations": DependsOn("previous_subject_observations"),
+                "relocs_columns": [
+                    "groupby_col",
+                    "fixtime",
+                    "junk_status",
+                    "geometry",
+                    "extra__subject__name",
+                    "extra__subject__hex",
+                    "extra__subject__sex",
+                    "extra__created_at",
+                    "extra__subject__subject_subtype",
+                    "extra__subjectsource__id",
+                    "extra__subjectsource__assigned_range",
+                    "extra__observation_details",
+                ],
+                "filter_point_coords": [
+                    {
+                        "x": 180.0,
+                        "y": 90.0,
+                    },
+                    {
+                        "x": 0.0,
+                        "y": 0.0,
+                    },
+                    {
+                        "x": 1.0,
+                        "y": 1.0,
+                    },
+                ],
+            }
+            | (params_dict.get("previous_subject_reloc") or {}),
+            method="call",
+        ),
         "process_subject_charts": Node(
             async_task=process_collar_voltage_charts.validate()
             .set_task_instance_id("process_subject_charts")
@@ -564,6 +685,7 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "relocs": DependsOn("subject_observations"),
+                "previous_relocs": DependsOn("previous_subject_observations"),
                 "time_range": DependsOn("time_range"),
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             }
@@ -1508,6 +1630,162 @@ def main(params: Params):
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             }
             | (params_dict.get("process_ndvi_charts") or {}),
+            method="call",
+        ),
+        "convert_sightings_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_sightings_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "html_path": DependsOn("persist_sightings_urls"),
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 40000,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_sightings_png") or {}),
+            method="call",
+        ),
+        "convert_speedmap_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_speedmap_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "html_path": DependsOn("persist_speedmap_html"),
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 40000,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_speedmap_png") or {}),
+            method="call",
+        ),
+        "convert_vehicle_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_vehicle_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "html_path": DependsOn("vehicle_patrol_map"),
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 40000,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_vehicle_png") or {}),
+            method="call",
+        ),
+        "convert_foot_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_foot_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "html_path": DependsOn("foot_patrol_map"),
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 40000,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_foot_png") or {}),
+            method="call",
+        ),
+        "convert_ndvi_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_ndvi_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "html_path": DependsOn("process_ndvi_charts"),
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_ndvi_png") or {}),
+            method="call",
+        ),
+        "convert_collared_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_collared_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "html_path": DependsOn("process_subject_charts"),
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_collared_png") or {}),
             method="call",
         ),
         "mep_monthly_dashboard": Node(

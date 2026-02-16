@@ -3,6 +3,7 @@
 [workspace]
 name = "ecoscope-workflows-mep-collared-report-workflow"
 channels = [
+    "file:///tmp/ecoscope-workflows-custom/release/artifacts/",
     "https://repo.prefix.dev/ecoscope-workflows-custom/",
     "https://repo.prefix.dev/ecoscope-workflows/",
     "conda-forge",
@@ -31,7 +32,7 @@ version = "0.0.23.*"
 channel = "https://repo.prefix.dev/ecoscope-workflows-custom/"
 
 [dependencies.ecoscope-workflows-ext-ste]
-version = "0.0.10.*"
+version = "0.0.13.*"
 channel = "https://repo.prefix.dev/ecoscope-workflows-custom/"
 
 [dependencies.ecoscope-workflows-ext-mnc]
@@ -39,8 +40,8 @@ version = "0.0.2.*"
 channel = "https://repo.prefix.dev/ecoscope-workflows-custom/"
 
 [dependencies.ecoscope-workflows-ext-mep]
-version = "0.0.6.*"
-channel = "https://repo.prefix.dev/ecoscope-workflows-custom/"
+version = "*"
+channel = "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
 
 [feature.runner.dependencies.ecoscope-workflows-runner]
 version = "0.20.6.*"
@@ -136,5 +137,5 @@ solve-group = "test"
 no-default-feature = true
 
 [tasks]
-docker-build = "docker buildx build -t ecoscope-workflows-mep-collared-report-workflow ."
+docker-build = "mkdir -p .tmp/ecoscope-workflows/release/artifacts/\n&& cp -r /tmp/ecoscope-workflows/release/artifacts/* .tmp/ecoscope-workflows/release/artifacts/\n&& docker buildx build -t ecoscope-workflows-mep-collared-report-workflow .\n"
 ecoscope-workflows-mep-collared-report-workflow = "python -m ecoscope_workflows_mep_collared_report_workflow.cli"

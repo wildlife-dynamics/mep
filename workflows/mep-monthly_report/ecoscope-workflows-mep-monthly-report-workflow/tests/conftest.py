@@ -41,6 +41,7 @@ MATCHSPEC_OVERRIDE = "ecoscope-workflows-mep-monthly-report-workflow"
 IO_TASKS_IMPORTABLE_REFERENCES = [
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_events",
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_subjectgroup_observations",
+    "ecoscope_workflows_ext_ecoscope.tasks.io.get_subjectgroup_observations",
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_patrol_observations",
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_patrol_observations",
 ]

@@ -29,6 +29,7 @@ from ecoscope_workflows_core.tasks.transformation import (
     add_temporal_index as add_temporal_index,
 )
 from ecoscope_workflows_core.tasks.transformation import sort_values as sort_values
+from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
 from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
 from ecoscope_workflows_ext_custom.tasks.results import (
     create_path_layer as create_path_layer,
@@ -64,6 +65,7 @@ from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     apply_color_map as apply_color_map,
 )
 from ecoscope_workflows_ext_mep.tasks import compile_sitrep as compile_sitrep
+from ecoscope_workflows_ext_mep.tasks import get_previous_period as get_previous_period
 from ecoscope_workflows_ext_mep.tasks import (
     get_sitrep_event_config as get_sitrep_event_config,
 )
@@ -346,7 +348,7 @@ exclude_mep_outliers = (
 
 
 # %% [markdown]
-# ## Remove elephant sightinginvalid points
+# ## Remove elephant sighting invalid points
 
 # %%
 # parameters
@@ -403,13 +405,15 @@ generate_mb_layers = (
     .partial(
         layer_style={
             "get_fill_color": [85, 107, 47],
+            "get_line_color": [0, 0, 0, 200],
+            "get_line_width": 0.55,
             "get_radius": 5,
             "opacity": 0.75,
-            "stroked": False,
+            "stroked": True,
         },
         legend={
-            "title": "Elephant sightings",
-            "values": [{"label": "Sighting", "color": "#556b2f"}],
+            "title": "Legend",
+            "values": [{"label": "Elephant sightings", "color": "#556b2f"}],
         },
         geodataframe=remove_mep_invalid_geoms,
         **generate_mb_layers_params,
@@ -639,6 +643,120 @@ subject_reloc = (
 
 
 # %% [markdown]
+# ## Get previous period
+
+# %%
+# parameters
+
+get_custom_previous_period_params = dict()
+
+# %%
+# call the task
+
+
+get_custom_previous_period = (
+    get_previous_period.set_task_instance_id("get_custom_previous_period")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(time_range=time_range, **get_custom_previous_period_params)
+    .call()
+)
+
+
+# %% [markdown]
+# ## Get subject group observations for previous relocs
+
+# %%
+# parameters
+
+previous_subject_observations_params = dict()
+
+# %%
+# call the task
+
+
+previous_subject_observations = (
+    get_subjectgroup_observations.set_task_instance_id("previous_subject_observations")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        client=er_client_name,
+        time_range=get_custom_previous_period,
+        subject_group_name=subject_group_var,
+        raise_on_empty=False,
+        include_details=True,
+        include_subjectsource_details=True,
+        **previous_subject_observations_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Transform previous observations to relocations
+
+# %%
+# parameters
+
+previous_subject_reloc_params = dict()
+
+# %%
+# call the task
+
+
+previous_subject_reloc = (
+    process_relocations.set_task_instance_id("previous_subject_reloc")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        observations=previous_subject_observations,
+        relocs_columns=[
+            "groupby_col",
+            "fixtime",
+            "junk_status",
+            "geometry",
+            "extra__subject__name",
+            "extra__subject__hex",
+            "extra__subject__sex",
+            "extra__created_at",
+            "extra__subject__subject_subtype",
+            "extra__subjectsource__id",
+            "extra__subjectsource__assigned_range",
+            "extra__observation_details",
+        ],
+        filter_point_coords=[
+            {"x": 180.0, "y": 90.0},
+            {"x": 0.0, "y": 0.0},
+            {"x": 1.0, "y": 1.0},
+        ],
+        **previous_subject_reloc_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
 # ## Create collared charts for all subjects
 
 # %%
@@ -663,6 +781,7 @@ process_subject_charts = (
     )
     .partial(
         relocs=subject_observations,
+        previous_relocs=previous_subject_observations,
         time_range=time_range,
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         **process_subject_charts_params,
@@ -1986,6 +2105,234 @@ process_ndvi_charts = (
         time_range=time_range,
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         **process_ndvi_charts_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Convert elephant sighting events html to png
+
+# %%
+# parameters
+
+convert_sightings_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_sightings_png = (
+    html_to_png.set_task_instance_id("convert_sightings_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        html_path=persist_sightings_urls,
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 40000,
+            "max_concurrent_pages": 1,
+        },
+        **convert_sightings_png_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Convert elephant speedmap html to png
+
+# %%
+# parameters
+
+convert_speedmap_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_speedmap_png = (
+    html_to_png.set_task_instance_id("convert_speedmap_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        html_path=persist_speedmap_html,
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 40000,
+            "max_concurrent_pages": 1,
+        },
+        **convert_speedmap_png_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Convert vehicle patrol html to png
+
+# %%
+# parameters
+
+convert_vehicle_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_vehicle_png = (
+    html_to_png.set_task_instance_id("convert_vehicle_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        html_path=vehicle_patrol_map,
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 40000,
+            "max_concurrent_pages": 1,
+        },
+        **convert_vehicle_png_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Convert foot patrol html to png
+
+# %%
+# parameters
+
+convert_foot_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_foot_png = (
+    html_to_png.set_task_instance_id("convert_foot_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        html_path=foot_patrol_map,
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 40000,
+            "max_concurrent_pages": 1,
+        },
+        **convert_foot_png_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Convert NDVI html to png
+
+# %%
+# parameters
+
+convert_ndvi_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_ndvi_png = (
+    html_to_png.set_task_instance_id("convert_ndvi_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        html_path=process_ndvi_charts,
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_ndvi_png_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Convert collared plot html to png
+
+# %%
+# parameters
+
+convert_collared_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_collared_png = (
+    html_to_png.set_task_instance_id("convert_collared_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        html_path=process_subject_charts,
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_collared_png_params,
     )
     .call()
 )

@@ -240,7 +240,7 @@ class LocalFile(BaseModel):
 
 
 class ValueGrouper(str, Enum):
-    subject_name = "subject_name"
+    Subject_Name = "subject_name"
 
 
 class TimeRange(BaseModel):

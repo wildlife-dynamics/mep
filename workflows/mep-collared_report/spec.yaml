@@ -13,7 +13,7 @@ requirements:
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.10.*"
+    version: "0.0.13.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mnc
@@ -21,8 +21,8 @@ requirements:
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mep
-    version: "0.0.6.*"
-    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+    version: "*"
+    channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
 
 rjsf-overrides:
   properties: 
@@ -129,11 +129,11 @@ workflow:
         get_text: name 
         get_color: [0,0,0,255]
         
-        get_size: 1500
+        get_size: 1000
         size_units: meters 
-        size_min_pixels: 70 #65 
-        size_max_pixels: 100
-        size_scale: 2.25 
+        size_min_pixels: 40 #65 
+        size_max_pixels: 75
+        size_scale: 1.25 
 
         font_family: Arial
         font_weight: normal
@@ -543,7 +543,6 @@ workflow:
       argnames: df
       argvalues: ${{ workflow.sort_trajs_by_speed.return }}
     
-  
   - name: Filter df for map rendering 
     id: filter_speedmap_gdf 
     task: filter_df_cols
@@ -584,6 +583,16 @@ workflow:
       argvalues: ${{ workflow.filter_speedmap_gdf.return }}
   
   - name: Zoom to gdf extent 
+    id: zoom_gdf_extent
+    task: custom_view_state_from_gdf
+    partial: 
+      max_zoom: 20
+      padding_percent: 0.05
+    mapvalues:
+      argnames: gdf
+      argvalues: ${{ workflow.filter_speedmap_gdf.return }}
+
+  - name: Zoom to gdf extent 
     id: zoom_speed_gdf_extent
     task: custom_view_state_deck_gdf
     partial: 
@@ -613,7 +622,7 @@ workflow:
     partial: 
       sequences: 
         - ${{ workflow.combined_ldx_speed_layers.return }}
-        - ${{ workflow.zoom_speed_gdf_extent.return }}
+        - ${{ workflow.zoom_gdf_extent.return }}
     
   - name: Draw speedmap 
     id: draw_speedmap
@@ -800,7 +809,7 @@ workflow:
     partial: 
       sequences: 
         - ${{ workflow.combined_ldx_home_range_layers.return }}
-        - ${{ workflow.zoom_hr_gdf_extent.return }}
+        - ${{ workflow.zoom_gdf_extent.return }}
 
   - name: Draw home range map
     id: draw_home_range_map
@@ -899,7 +908,7 @@ workflow:
         wireframe: false
         get_fill_color: season_colors
         get_line_color: [0,0,0,255]
-        opacity: 0.45
+        opacity: 0.15
         get_line_width: 0.35
         get_elevation: 0
         get_point_radius: 1
@@ -986,7 +995,7 @@ workflow:
     partial: 
       sequences: 
         - ${{ workflow.combined_ldx_seasonal_hr_layers.return }}
-        - ${{ workflow.zoom_seasons_gdf_extent.return }}
+        - ${{ workflow.zoom_gdf_extent.return }}
 
   - name: Draw seasonal home range map
     id: draw_seasonal_home_range_map
@@ -1680,53 +1689,83 @@ workflow:
       widgets: ${{ workflow.total_night_day_ratio_sv_widgets.return }}
 
   # Convert all html to png 
+  - name: Combine homerange path with zoom value 
+    id: zip_hr_value
+    task: zip_groupbykey 
+    partial: 
+      sequences: 
+        - ${{ workflow.zoom_speed_gdf_extent.return }}
+        - ${{ workflow.persist_homerange_html.return }}
+
   - name: Convert homerange map html to png 
     id: convert_homerange_png 
-    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    task: zoom_map_and_screenshot
     partial: 
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      config: 
+      screenshot_config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 30000
+        wait_for_timeout: 100
         max_concurrent_pages: 1
         width: 602
         height: 855
-    mapvalues: 
-      argnames: html_path
-      argvalues: ${{ workflow.persist_homerange_html.return }}
+    mapvalues:
+      argnames: 
+        - view_state
+        - input_file
+      argvalues: ${{ workflow.zip_hr_value.return }}
+
+  - name: Combine speedmap path with zoom value 
+    id: zip_speed_value
+    task: zip_groupbykey 
+    partial: 
+      sequences: 
+        - ${{ workflow.zoom_speed_gdf_extent.return }}
+        - ${{ workflow.persist_speedmap_html.return }}
 
   - name: Convert speedmap html to png 
     id: convert_speedmap_png 
-    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    task: zoom_map_and_screenshot
     partial: 
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      config: 
+      screenshot_config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 30000
+        wait_for_timeout: 100
         max_concurrent_pages: 1
         width: 1280
         height: 720
-    mapvalues: 
-      argnames: html_path
-      argvalues: ${{ workflow.persist_speedmap_html.return }}
+    mapvalues:
+      argnames: 
+        - view_state
+        - input_file
+      argvalues: ${{ workflow.zip_speed_value.return }}
+
+  - name: Combine seasonal map path with zoom value 
+    id: zip_seasonal_value
+    task: zip_groupbykey 
+    partial: 
+      sequences: 
+        - ${{ workflow.zoom_speed_gdf_extent.return }}
+        -  ${{ workflow.persist_seasonal_home_range_html.return }}
 
   - name: Convert seasonal homerange html to png 
     id: convert_season_png 
-    task: ecoscope_workflows_ext_custom.tasks.io.html_to_png 
+    task: zoom_map_and_screenshot 
     partial: 
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      config: 
+      screenshot_config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 30000
+        wait_for_timeout: 100
         max_concurrent_pages: 1
         width: 602
         height: 855
-    mapvalues: 
-      argnames: html_path
-      argvalues: ${{ workflow.persist_seasonal_home_range_html.return }}
+    mapvalues:
+      argnames: 
+        - view_state
+        - input_file
+      argvalues: ${{ workflow.zip_seasonal_value.return }}
 
   - name: Convert nsd plot html to png 
     id: convert_nsd_png 
@@ -1805,7 +1844,7 @@ workflow:
     id: download_cover_page
     task: fetch_and_persist_file
     partial:
-      url: https://www.dropbox.com/scl/fi/nfv96xs38r3wunp6y866f/cer_cover_page.docx?rlkey=sbl545v87g94tolfafwyfd8b8&st=jnvtvo2i&dl=0
+      url: https://www.dropbox.com/scl/fi/nfv96xs38r3wunp6y866f/cer_cover_page.docx?rlkey=sbl545v87g94tolfafwyfd8b8&st=oyydvpy9&dl=0
       output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       overwrite_existing: false
       unzip: false
@@ -1816,7 +1855,7 @@ workflow:
     id: download_sect_templates
     task: fetch_and_persist_file
     partial:
-      url: https://www.dropbox.com/scl/fi/4symf1385ksnh8mu8sx9v/mep_subject_template_two.docx?rlkey=v5f26c3aiadaasnilhc76owgr&st=otul6hus&dl=0
+      url: https://www.dropbox.com/scl/fi/4symf1385ksnh8mu8sx9v/mep_subject_template_two.docx?rlkey=v5f26c3aiadaasnilhc76owgr&st=wz6mce8l&dl=0
       output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       overwrite_existing: false
       unzip: false

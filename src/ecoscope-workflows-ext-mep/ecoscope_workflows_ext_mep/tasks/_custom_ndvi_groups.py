@@ -31,7 +31,7 @@ def process_aoi_ndvi_charts(
         Field(description="EarthEngine client connection", exclude=True),
     ],
    aoi_column: Annotated[str, Field(description="Column name containing ranch names")],
-    time_range: Annotated[TimeRange, Field(description="Time range for NDVI analysis")],
+   time_range: Annotated[TimeRange, Field(description="Time range for NDVI analysis")],
     output_dir: Annotated[str, Field(description="Directory to save output HTML charts")],
 ) -> Union[str, List[str]]:
     # Validate ranch name column exists
