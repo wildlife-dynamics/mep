@@ -2,7 +2,6 @@ version: 6
 environments:
   default:
     channels:
-    - url: file:///tmp/ecoscope-workflows-custom/release/artifacts/
     - url: https://repo.prefix.dev/ecoscope-workflows-custom/
     - url: https://repo.prefix.dev/ecoscope-workflows/
     - url: https://conda.anaconda.org/conda-forge/
@@ -108,14 +107,15 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/earthranger-client-1.0.49-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-v2.10.12-pyh4616a5c_5.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-core-0.22.9-pyh4616a5c_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.27-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.28-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-ext-ecoscope-0.22.9-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.0.7-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.6-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-ste-0.0.15-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/epoxy-1.5.10-hb03c661_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.2.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.2-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/folium-0.20.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-inconsolata-3.000-h77eed37_0.tar.bz2
@@ -142,8 +142,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/glog-0.7.1-hbabe93e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/glpk-5.0-h445213a_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/gmp-6.3.0-hac33072_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-python-client-2.190.0-pyh332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-httplib2-0.3.0-pyhd8ed1ab_0.conda
@@ -385,7 +385,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-2.8.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydantic-core-2.20.1-py312hf008fa9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-settings-2.13.0-pyhd8ed1ab_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.1-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.2-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydot-4.0.1-pyhcf101f3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyee-13.0.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyerfa-2.0.1.5-py310h32771cd_2.conda
@@ -512,7 +512,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-1.3.1-hb9d3cd8_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.0.7.dev7+g974799513.d20260219-pyh4616a5c_0.conda
       linux-aarch64:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/_openmp_mutex-4.5-20_gnu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_2.conda
@@ -613,14 +612,15 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/earthranger-client-1.0.49-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-v2.10.12-pyh4616a5c_5.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-core-0.22.9-pyh4616a5c_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.27-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.28-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-ext-ecoscope-0.22.9-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.0.7-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.6-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-ste-0.0.15-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/epoxy-1.5.10-he30d5cf_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.2.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.2-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/folium-0.20.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-inconsolata-3.000-h77eed37_0.tar.bz2
@@ -647,8 +647,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/glog-0.7.1-h468a4a4_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/glpk-5.0-h66325d0_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/gmp-6.3.0-h0a1ffab_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-python-client-2.190.0-pyh332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-httplib2-0.3.0-pyhd8ed1ab_0.conda
@@ -890,7 +890,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-2.8.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pydantic-core-2.20.1-py312h3dd116e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-settings-2.13.0-pyhd8ed1ab_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.1-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.2-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydot-4.0.1-pyhcf101f3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyee-13.0.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pyerfa-2.0.1.5-py310hf07f68b_2.conda
@@ -1017,7 +1017,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/zlib-1.3.1-h86ecc28_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/zlib-ng-2.3.3-ha7cb516_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/zstd-1.5.7-h85ac4a6_6.conda
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.0.7.dev7+g974799513.d20260219-pyh4616a5c_0.conda
       osx-64:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/_openmp_mutex-4.5-7_kmp_llvm.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_2.conda
@@ -1116,14 +1115,15 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/earthranger-client-1.0.49-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-v2.10.12-pyh4616a5c_5.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-core-0.22.9-pyh4616a5c_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.27-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.28-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-ext-ecoscope-0.22.9-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.0.7-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.6-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-ste-0.0.15-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/epoxy-1.5.10-h8616949_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.2.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.2-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/folium-0.20.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-inconsolata-3.000-h77eed37_0.tar.bz2
@@ -1150,8 +1150,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/glog-0.7.1-h2790a97_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/glpk-5.0-h3cb5acd_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/osx-64/gmp-6.3.0-hf036a51_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-python-client-2.190.0-pyh332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-httplib2-0.3.0-pyhd8ed1ab_0.conda
@@ -1376,7 +1376,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-2.8.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydantic-core-2.20.1-py312ha47ea1c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-settings-2.13.0-pyhd8ed1ab_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.1-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.2-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydot-4.0.1-pyhcf101f3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyee-13.0.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyerfa-2.0.1.5-py310hcbffc5d_2.conda
@@ -1487,7 +1487,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-1.3.1-hd23fc13_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-ng-2.3.3-h8bce59a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h3eecb57_6.conda
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.0.7.dev7+g974799513.d20260219-pyh4616a5c_0.conda
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/_openmp_mutex-4.5-7_kmp_llvm.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_2.conda
@@ -1586,14 +1585,15 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/earthranger-client-1.0.49-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-v2.10.12-pyh4616a5c_5.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-core-0.22.9-pyh4616a5c_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.27-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.28-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-ext-ecoscope-0.22.9-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.0.7-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.6-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-ste-0.0.15-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/epoxy-1.5.10-hc919400_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.2.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.2-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/folium-0.20.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-inconsolata-3.000-h77eed37_0.tar.bz2
@@ -1620,8 +1620,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/glog-0.7.1-heb240a5_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/glpk-5.0-h6d7a090_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/gmp-6.3.0-h7bae524_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-python-client-2.190.0-pyh332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-httplib2-0.3.0-pyhd8ed1ab_0.conda
@@ -1846,7 +1846,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-2.8.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydantic-core-2.20.1-py312h552d48e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-settings-2.13.0-pyhd8ed1ab_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.1-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.2-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydot-4.0.1-pyhcf101f3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyee-13.0.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyerfa-2.0.1.5-py310hbb12772_2.conda
@@ -1957,7 +1957,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.1-h8359307_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-hed4e4f5_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.0.7.dev7+g974799513.d20260219-pyh4616a5c_0.conda
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/win-64/_libavif_api-1.3.0-h57928b3_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/_openmp_mutex-4.5-20_gnu.conda
@@ -2052,13 +2051,14 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/earthranger-client-1.0.49-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-v2.10.12-pyh4616a5c_5.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-core-0.22.9-pyh4616a5c_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.27-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.28-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-ext-ecoscope-0.22.9-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.0.7-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.6-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-ste-0.0.15-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.2.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.2-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/folium-0.20.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-inconsolata-3.000-h77eed37_0.tar.bz2
@@ -2082,8 +2082,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/giflib-5.2.2-h64bf75a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/glpk-5.0-h8ffe710_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/win-64/gmp-6.3.0-hfeafd45_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-python-client-2.190.0-pyh332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-httplib2-0.3.0-pyhd8ed1ab_0.conda
@@ -2293,7 +2293,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-2.8.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydantic-core-2.20.1-py312h2615798_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydantic-settings-2.13.0-pyhd8ed1ab_0.conda
-      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.1-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.2-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydot-4.0.1-pyhcf101f3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyee-13.0.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyerfa-2.0.1.5-py310h1f63838_2.conda
@@ -2417,10 +2417,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.1-h2466b09_2.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.0.7.dev7+g974799513.d20260219-pyh4616a5c_0.conda
   runner:
     channels:
-    - url: file:///tmp/ecoscope-workflows-custom/release/artifacts/
     - url: https://repo.prefix.dev/ecoscope-workflows-custom/
     - url: https://repo.prefix.dev/ecoscope-workflows/
     - url: https://conda.anaconda.org/conda-forge/
@@ -2461,8 +2459,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/frozenlist-1.7.0-py313h6b9daa2_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-auth-5.4.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-pubsub-6.3.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -2597,8 +2595,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/frozenlist-1.7.0-py313hf71145f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-auth-5.4.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-pubsub-6.3.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -2732,8 +2730,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/frozenlist-1.7.0-py313haf29b43_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-auth-5.4.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-pubsub-6.3.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -2862,8 +2860,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/frozenlist-1.7.0-py313hf28abc0_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-auth-5.4.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-pubsub-6.3.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -2994,8 +2992,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/frozenlist-1.7.0-py313h0c48a3b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-auth-5.4.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-pubsub-6.3.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -3094,7 +3092,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
   test:
     channels:
-    - url: file:///tmp/ecoscope-workflows-custom/release/artifacts/
     - url: https://repo.prefix.dev/ecoscope-workflows-custom/
     - url: https://repo.prefix.dev/ecoscope-workflows/
     - url: https://conda.anaconda.org/conda-forge/
@@ -3164,8 +3161,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/gflags-2.2.2-h5888daf_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/giflib-5.2.2-hd590300_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/glog-0.7.1-hbabe93e_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -3419,8 +3416,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/gflags-2.2.2-h5ad3122_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/giflib-5.2.2-h31becfc_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/glog-0.7.1-h468a4a4_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -3674,8 +3671,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/gflags-2.2.2-hac325c4_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/giflib-5.2.2-h10d778d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/glog-0.7.1-h2790a97_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -3922,8 +3919,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/gflags-2.2.2-hf9b8971_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/giflib-5.2.2-h93a5062_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/glog-0.7.1-heb240a5_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -4169,8 +4166,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-auth-5.4.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/gcloud-aio-pubsub-6.3.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/giflib-5.2.2-h64bf75a_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-auth-2.48.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-batch-0.17.37-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/google-cloud-trace-1.18.0-pyhcf101f3_0.conda
@@ -8512,9 +8509,9 @@ packages:
   license: BSD-3-Clause
   size: 78536
   timestamp: 1771243755241
-- conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.27-pyh4616a5c_0.conda
-  sha256: 27738d7094b2852d13cdbf9fc36aa900dae699fae53015622d72aa7dbec32b1c
-  md5: e407b39ecc7e7275f5c2033cf1c8c97b
+- conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.28-pyh4616a5c_0.conda
+  sha256: a89aa28be1d753bfe83bb9443af82ec08391f677980b3d47e60604b9a7179d86
+  md5: e5b13d37a44169879bc90028f39ceaff
   depends:
   - python
   - pip
@@ -8523,15 +8520,15 @@ packages:
   - pytest-playwright
   - python-docx
   - pandas
-  - pydeck ==0.0.1
+  - pydeck ==0.0.2
   - docxtpl
   - pyarrow
   - docxcompose
   - pandasql
   - setuptools <=81.0.0
   license: BSD-3-Clause
-  size: 50249
-  timestamp: 1771328729629
+  size: 50272
+  timestamp: 1771491922509
 - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-ext-ecoscope-0.22.9-pyh4616a5c_0.conda
   sha256: 414c08c8fa4633105ebe1bf69bcbc61f4c7c2a9a4f7a3ca89bf5a75a476aebad
   md5: 9616d035e70e117ff341c881663619d2
@@ -8543,10 +8540,9 @@ packages:
   license: BSD-3-Clause
   size: 3137076
   timestamp: 1771243782968
-- conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.0.7.dev7+g974799513.d20260219-pyh4616a5c_0.conda
-  subdir: noarch
-  sha256: cfa855bd68bdf3458a13d11d3a4854c5673f6a98ae22093ca0961d480ecc8f14
-  md5: a055e850fe7a17993f0ffd7592e8df27
+- conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.0.7-pyh4616a5c_0.conda
+  sha256: ca1296f337c8ed46ee1a12ee194a92f035a04e3663f664de50c502ed864011d9
+  md5: b2691007d2876bf180ab109c49fc34b4
   depends:
   - python
   - ecoscope
@@ -8560,10 +8556,9 @@ packages:
   - numpy
   - setuptools <=81.0.0
   - docxcompose
-  channel: file:///tmp/ecoscope-workflows-custom/release/artifacts
   license: BSD-3-Clause
-  size: 30571
-  timestamp: 1771486332968
+  size: 31105
+  timestamp: 1771491792373
 - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.6-pyh4616a5c_0.conda
   sha256: 23d18c24c6c86102472885bb1db5d5dc46aaa77fb59c187f4fd3af9f1adf883c
   md5: 932f720e357d0561dc9d72b1a5e8632b
@@ -8757,9 +8752,9 @@ packages:
   license_family: MIT
   size: 18920
   timestamp: 1771293215825
-- conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.2-pyhd8ed1ab_0.conda
-  sha256: 8a97eba37e0723720706d4636cc89c6b07eea1b7cc66fd8994fa8983a81ed988
-  md5: ba67a9febeda36948fee26a3dec3d914
+- conda: https://conda.anaconda.org/conda-forge/noarch/flask-3.1.3-pyhd8ed1ab_0.conda
+  sha256: 5413872fccaabd5faf76a93950047a4742d1102d280049070c8d099b598f333e
+  md5: 4804586a633fa189252ded67ccea6211
   depends:
   - blinker >=1.9.0
   - click >=8.1.3
@@ -8767,12 +8762,12 @@ packages:
   - itsdangerous >=2.2.0
   - jinja2 >=3.1.2
   - markupsafe >=2.1.1
-  - python >=3.9
+  - python >=3.10
   - werkzeug >=3.1.0
   license: BSD-3-Clause
   license_family: BSD
-  size: 82438
-  timestamp: 1755674743256
+  size: 83104
+  timestamp: 1771486509589
 - conda: https://conda.anaconda.org/conda-forge/noarch/folium-0.20.0-pyhd8ed1ab_0.conda
   sha256: 782fa186d7677fd3bc1ff7adb4cc3585f7d2c7177c30bcbce21f8c177135c520
   md5: a6997a7dcd6673c0692c61dfeaea14ab
@@ -9816,32 +9811,34 @@ packages:
   license: GPL-2.0-or-later OR LGPL-3.0-or-later
   size: 567053
   timestamp: 1718982076982
-- conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.29.0-pyhd8ed1ab_0.conda
-  sha256: 0f696294c9a117a16e344388347dd9dff644cd8ddb703002169d81f889c176df
-  md5: 7fd8158ff94ccf28a2ac1f534989d698
+- conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-2.30.0-pyhcf101f3_0.conda
+  sha256: 23b93f620c3fd07d8ac6440b547e3e04e6ce1192c585620f6236ef9381515fd0
+  md5: 7b98d992f037ebe87496162bd5885cf6
   depends:
-  - google-auth >=2.14.1,<3.0.0
-  - googleapis-common-protos >=1.56.2,<2.0.0
-  - proto-plus >=1.25.0,<2.0.0
-  - protobuf >=3.19.5,<7.0.0,!=3.20.0,!=3.20.1,!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5
   - python >=3.10
-  - requests >=2.18.0,<3.0.0
+  - googleapis-common-protos >=1.56.3,<2.0.0
+  - protobuf >=4.25.8,<7.0.0
+  - proto-plus >=1.25.0,<2.0.0
+  - google-auth >=2.14.1,<3.0.0
+  - requests >=2.20.0,<3.0.0
+  - python
   license: Apache-2.0
   license_family: APACHE
-  size: 98400
-  timestamp: 1768122057220
-- conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.29.0-pyhd8ed1ab_0.conda
-  sha256: d2216b7e2f0c8ad75dfcae96ac93623a51d8c7b5d3b7e8a7434eb5579a4d2f4e
-  md5: 5f65c34dc751a847a4872bf506346fa2
+  size: 105274
+  timestamp: 1771485965861
+- conda: https://conda.anaconda.org/conda-forge/noarch/google-api-core-grpc-2.30.0-pyhc195fe9_0.conda
+  sha256: d6b242bfb452b07a32547a979771b53d37b7c63680c180493a7ed7fbb1bada4d
+  md5: 8135a746d6fff7676e3b456ef0ed0595
   depends:
-  - google-api-core 2.29.0 pyhd8ed1ab_0
-  - grpcio >=1.49.1,<2.0.0
-  - grpcio-status >=1.49.1,<2.0.0
-  - python >=3.10,<3.14
+  - python >=3.10
+  - google-api-core ==2.30.0 pyhcf101f3_0
+  - grpcio >=1.75.1,<2.0.0
+  - grpcio-status >=1.75.1,<2.0.0
+  - python
   license: Apache-2.0
   license_family: APACHE
-  size: 7236
-  timestamp: 1768122069921
+  size: 11545
+  timestamp: 1771485965863
 - conda: https://conda.anaconda.org/conda-forge/noarch/google-api-python-client-2.190.0-pyh332efcf_0.conda
   sha256: 1248917059a6622d7aafeb765fdb0f2659494fe73b1761076f0fd0fb863b3874
   md5: c703efd02cf650db6388dbfc6f01751b
@@ -22093,8 +22090,9 @@ packages:
   license_family: MIT
   size: 49159
   timestamp: 1771212084622
-- conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.1-pyh4616a5c_0.conda
-  sha256: cc9de515cea44a3b190123f856f604878ad507b02eac720d86e27df325170b59
+- conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/pydeck-0.0.2-pyh4616a5c_0.conda
+  sha256: 68e4c37cf8372d571143ef12c1d96162264ecab53bdc919b733865ac561c5c63
+  md5: e3740e4cb96dacafd36ee62392041253
   depends:
   - python >=3.8
   - jinja2 >=2.10.1
@@ -22105,8 +22103,8 @@ packages:
   - python
   license: Apache-2.0
   license_family: Apache
-  size: 6253895
-  timestamp: 1761831013565
+  size: 6254351
+  timestamp: 1771455789913
 - conda: https://conda.anaconda.org/conda-forge/noarch/pydot-4.0.1-pyhcf101f3_2.conda
   sha256: af7213a8ca077895e7e10c8f33d5de3436b8a26828422e8a113cc59c9277a3e2
   md5: 15f6d0866b0997c5302fc230a566bc72

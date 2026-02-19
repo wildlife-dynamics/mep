@@ -9,7 +9,7 @@ requirements:
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.27.*"
+    version: "0.0.28.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
   - name: ecoscope-workflows-ext-ste
@@ -19,10 +19,10 @@ requirements:
   - name: ecoscope-workflows-ext-mnc
     version: "0.0.6.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-
+    
   - name: ecoscope-workflows-ext-mep
-    version: "*"
-    channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
+    version: "0.0.7.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
 task-instance-defaults:
   skipif:

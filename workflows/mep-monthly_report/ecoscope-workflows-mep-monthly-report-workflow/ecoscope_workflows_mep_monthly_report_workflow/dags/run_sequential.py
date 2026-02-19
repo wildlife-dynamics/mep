@@ -33,7 +33,7 @@ from ecoscope_workflows_ext_custom.tasks.results import (
     set_base_maps_pydeck as set_base_maps_pydeck,
 )
 from ecoscope_workflows_ext_custom.tasks.transformation import (
-    drop_null_geometry as drop_null_geometry,
+    drop_null_geometry as drop_null_geometry_1,
 )
 from ecoscope_workflows_ext_ecoscope.tasks.io import get_events as get_events
 from ecoscope_workflows_ext_ecoscope.tasks.io import (
@@ -247,7 +247,7 @@ def main(params: Params):
     )
 
     remove_mep_invalid_geoms = (
-        drop_null_geometry.validate()
+        drop_null_geometry_1.validate()
         .set_task_instance_id("remove_mep_invalid_geoms")
         .handle_errors()
         .with_tracing()
