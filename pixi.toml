@@ -23,7 +23,7 @@ ecoscope-workflows-ext-mep = "*"
 ecoscope-workflows-ext-mnc = "0.0.6.*"
 ecoscope-workflows-ext-ste = "0.0.15.*"
 ecoscope-workflows-core = "0.22.9.*"
-ecoscope-workflows-ext-custom = "0.0.27.*"
+ecoscope-workflows-ext-custom = "0.0.28.*"
 
 # Here we don't specify the channel on purpose, as we want to use the local channel if it exists,
 # otherwise we fall back to the default channel.
