@@ -893,7 +893,8 @@ workflow:
     partial: 
       cover_page_path: ${{ workflow.persist_cover_context.return }}
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      context_page_items: ${{ workflow.create_monthly_ctx.return }}
+      context_page_items: 
+        - ${{ workflow.create_monthly_ctx.return }}
       filename: null 
 
   - name: MEP monthly report  dashboard

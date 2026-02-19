@@ -1917,7 +1917,9 @@ def main(params: Params):
             partial={
                 "cover_page_path": DependsOn("persist_cover_context"),
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "context_page_items": DependsOn("create_monthly_ctx"),
+                "context_page_items": [
+                    DependsOn("create_monthly_ctx"),
+                ],
                 "filename": None,
             }
             | (params_dict.get("merge_mep_docx") or {}),

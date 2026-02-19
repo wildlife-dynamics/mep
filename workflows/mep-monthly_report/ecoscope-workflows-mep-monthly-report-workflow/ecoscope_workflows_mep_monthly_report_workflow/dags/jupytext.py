@@ -2552,7 +2552,7 @@ merge_mep_docx = (
     .partial(
         cover_page_path=persist_cover_context,
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        context_page_items=create_monthly_ctx,
+        context_page_items=[create_monthly_ctx],
         filename=None,
         **merge_mep_docx_params,
     )
