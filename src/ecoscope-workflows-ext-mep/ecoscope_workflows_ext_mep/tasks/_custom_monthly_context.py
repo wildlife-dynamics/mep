@@ -1,19 +1,20 @@
 import os
 import uuid
-import logging 
+import logging
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
 from docx.shared import Inches
 from docxtpl import InlineImage
 from docxtpl import DocxTemplate
-from typing import Optional, Dict, Any,List
+from typing import Optional, Dict, Any, List
 from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_core.tasks.filter._filter import TimeRange
 from ecoscope_workflows_core.skip import SKIP_SENTINEL, SkipSentinel
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
 logger = logging.getLogger(__name__)
+
 
 def validate_image_path(field_name: str, path: str) -> None:
     """Validate that an image file exists and has valid extension."""
@@ -30,7 +31,8 @@ def validate_image_path(field_name: str, path: str) -> None:
         )
 
     logger.info(f" Validated image for '{field_name}': {normalized_path}")
-    
+
+
 def _unwrap_and_validate_list(
     paths: List[str | SkipSentinel | None] | None,
 ) -> List[str]:
@@ -47,6 +49,7 @@ def _unwrap_and_validate_list(
             validated.append(p)
     return validated
 
+
 def _unwrap_skip(value):
     """
     Unwrap SkipSentinel values, converting them to None.
@@ -54,6 +57,7 @@ def _unwrap_skip(value):
     if value is None or value is SKIP_SENTINEL:
         return None
     return value
+
 
 def _stem_to_label(path: str) -> str:
     """
@@ -65,8 +69,9 @@ def _stem_to_label(path: str) -> str:
     "tsavo_east.png"       → "Tsavo East"
     "/data/ambo bull.png"  → "Ambo Bull"
     """
-    stem = Path(path).stem   
+    stem = Path(path).stem
     return stem.replace("_", " ").replace("-", " ").title()
+
 
 def safe_read_csv(file_path: str | None) -> pd.DataFrame:
     """
@@ -101,6 +106,7 @@ def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         logger.error(f"Error reading CSV file {file_path}: {e}")
         return pd.DataFrame()
 
+
 @task
 def create_monthly_ctx_cover(
     report_period: TimeRange,
@@ -130,8 +136,9 @@ def create_monthly_ctx_cover(
         "report_period": formatted_time_range,
         "prepared_by": prepared_by,
     }
-     
-@task   
+
+
+@task
 def create_mep_monthly_context(
     elephant_sightings_map_path: str | SkipSentinel | None,
     speedmap_path: str | SkipSentinel | None,
@@ -145,16 +152,16 @@ def create_mep_monthly_context(
     filename: Optional[str] = None,
 ) -> str:
     template_path = remove_file_scheme(template_path)
-    output_dir    = remove_file_scheme(output_dir)
+    output_dir = remove_file_scheme(output_dir)
 
-    speedmap_path               = _unwrap_skip(speedmap_path)
+    speedmap_path = _unwrap_skip(speedmap_path)
     elephant_sightings_map_path = _unwrap_skip(elephant_sightings_map_path)
-    foot_patrols_map_path       = _unwrap_skip(foot_patrols_map_path)
-    vehicle_patrol_map_path     = _unwrap_skip(vehicle_patrol_map_path)
-    sitrep_df_path              = _unwrap_skip(sitrep_df_path)  # fix: was sitrep_df_path
+    foot_patrols_map_path = _unwrap_skip(foot_patrols_map_path)
+    vehicle_patrol_map_path = _unwrap_skip(vehicle_patrol_map_path)
+    sitrep_df_path = _unwrap_skip(sitrep_df_path)  # fix: was sitrep_df_path
 
     collared_paths = _unwrap_and_validate_list(collared_elephant_plot_paths)
-    ndvi_paths     = _unwrap_and_validate_list(regional_ndvi_plot_paths)
+    ndvi_paths = _unwrap_and_validate_list(regional_ndvi_plot_paths)
 
     if not filename:
         filename = f"mep_report_{uuid.uuid4().hex[:4]}.docx"
@@ -165,36 +172,36 @@ def create_mep_monthly_context(
         logger.info(f"Loaded template: {template_path}")
     except Exception as e:
         raise ValueError(f"Failed to load template: {e}")
-    
+
     collar_voltage_list: List[Dict[str, Any]] = [
         {
             "collar_voltage_image": InlineImage(tpl, path, width=Inches(6.58), height=Inches(3.85)),
-            "subject":             _stem_to_label(path),
+            "subject": _stem_to_label(path),
         }
         for path in collared_paths
     ]
 
     ndvi_list: List[Dict[str, Any]] = [
         {
-            "ndvi_image":  InlineImage(tpl, path, width=Inches(6.58), height=Inches(3.85)),
-            "area":       _stem_to_label(path),
+            "ndvi_image": InlineImage(tpl, path, width=Inches(6.58), height=Inches(3.85)),
+            "area": _stem_to_label(path),
         }
         for path in ndvi_paths
     ]
-    
-    sitrep_df = safe_read_csv(sitrep_df_path) 
-    sitrep    = sitrep_df.to_dict(orient="records")
+
+    sitrep_df = safe_read_csv(sitrep_df_path)
+    sitrep = sitrep_df.to_dict(orient="records")
 
     context = {
-        "elephant_speedmap":     InlineImage(tpl, speedmap_path, width=Inches(6.58), height=Inches(3.85)),
+        "elephant_speedmap": InlineImage(tpl, speedmap_path, width=Inches(6.58), height=Inches(3.85)),
         "elephant_sighting_map": InlineImage(tpl, elephant_sightings_map_path, width=Inches(6.58), height=Inches(3.85)),
         "vehicle_patrol_tracks": InlineImage(tpl, vehicle_patrol_map_path, width=Inches(6.58), height=Inches(3.85)),
-        "foot_patrol_tracks":    InlineImage(tpl, foot_patrols_map_path, width=Inches(6.58), height=Inches(3.85)),
-        "sitrep":                sitrep,
-        "collar_voltage_list":   collar_voltage_list,
-        "ndvi_list":             ndvi_list,
+        "foot_patrol_tracks": InlineImage(tpl, foot_patrols_map_path, width=Inches(6.58), height=Inches(3.85)),
+        "sitrep": sitrep,
+        "collar_voltage_list": collar_voltage_list,
+        "ndvi_list": ndvi_list,
     }
-    
+
     try:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         tpl.render(context)

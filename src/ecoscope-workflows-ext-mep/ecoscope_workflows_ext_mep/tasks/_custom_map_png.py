@@ -98,7 +98,7 @@ def zoom_map_and_screenshot(
         new_html_content = html_content
 
     # Extract the base filename (without extension) from input file
-    original_filename = input_path.stem 
+    original_filename = input_path.stem
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".html", prefix=f"{original_filename}_", delete=False, encoding="utf-8"
     ) as temp_file:

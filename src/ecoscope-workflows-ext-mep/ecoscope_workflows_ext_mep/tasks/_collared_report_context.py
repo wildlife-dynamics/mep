@@ -122,6 +122,7 @@ def create_mep_ctx_cover(
         "prepared_by": prepared_by,
     }
 
+
 # subject template
 # 1. profile photo  -- download_profile_pic
 # 2. subject information -- download_subject_info
@@ -196,6 +197,7 @@ def create_mep_subject_context(
         if value is None or value is SKIP_SENTINEL:
             return None
         return value
+
     profile_photo_path = unwrap_skip(profile_photo_path)
     subject_info_path = unwrap_skip(subject_info_path)
     speedmap_path = unwrap_skip(speedmap_path)
@@ -334,7 +336,7 @@ def create_mep_subject_context(
 
     # Build context dictionary (None values are allowed and will be handled by template)
     ctx = {
-        # Media paths 
+        # Media paths
         "profile_photo": profile_photo_path,
         "mov_map": speedmap_path,
         "overview_map": homerange_map_path,
@@ -343,7 +345,6 @@ def create_mep_subject_context(
         "speed_plot": speed_plot_path,
         "collar_event_timeline": collared_event_plot_path,
         "mcp_plot": mcp_plot_path,
-        
         # Subject statistics
         "name": name,
         "mcp": mcp,
@@ -424,13 +425,11 @@ def prepare_mep_context_for_template(
     """
     # Define which fields map to which image dimensions
     image_field_mapping = {
-        
         # Timeline/plot images (wide format)
         "collar_event_timeline": {"height": 1.58, "width": 10.54},
         "nsd_plot": {"height": 2.61, "width": 10.58},
         "speed_plot": {"height": 2.61, "width": 10.58},
         "mcp_plot": {"height": 2.61, "width": 10.58},
-        
         # Range map -- seasons
         "range_map": {"height": 7.08, "width": 5.36},
         # mov_map --speedmap

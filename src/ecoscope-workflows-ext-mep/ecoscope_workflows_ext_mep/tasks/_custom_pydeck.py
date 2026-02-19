@@ -5,13 +5,10 @@ from ecoscope_workflows_ext_ste.tasks._mapdeck_utils import _zoom_from_bbox
 
 logger = logging.getLogger(__name__)
 
+
 @task
 def custom_view_state_deck_gdf(
-    gdf, pitch: int = 0, 
-    bearing: int = 0, 
-    map_width_px: int = 1280, 
-    map_height_px: int = 720, 
-    buffer: float = 0.25
+    gdf, pitch: int = 0, bearing: int = 0, map_width_px: int = 1280, map_height_px: int = 720, buffer: float = 0.25
 ) -> ViewState:
     if gdf.empty:
         raise ValueError("GeoDataFrame is empty. Cannot compute ViewState.")

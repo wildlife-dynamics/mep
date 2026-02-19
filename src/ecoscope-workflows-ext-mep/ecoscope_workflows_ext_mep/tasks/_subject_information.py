@@ -94,8 +94,8 @@ def persist_subject_photo(
 
     if column not in subject_df.columns:
         print(f"Column '{column}' not found. Available: {list(subject_df.columns)}")
-        return None 
-    
+        return None
+
     last_file_path: Optional[Path] = None
     for idx, url in subject_df[column].dropna().items():
         if not isinstance(url, str) or not url.startswith(("http://", "https://")):

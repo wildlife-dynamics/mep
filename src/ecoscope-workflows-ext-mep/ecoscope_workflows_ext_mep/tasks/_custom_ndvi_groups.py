@@ -1,7 +1,6 @@
 import os
 import logging
 from pydantic import Field
-from datetime import datetime
 from typing import Annotated, Union, List
 from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_core.tasks.io import persist_text
@@ -20,6 +19,7 @@ from ecoscope_workflows_ext_ecoscope.tasks.io._earthengine import calculate_ndvi
 
 logger = logging.getLogger(__name__)
 
+
 @task
 def process_aoi_ndvi_charts(
     df: Annotated[
@@ -30,8 +30,8 @@ def process_aoi_ndvi_charts(
         EarthEngineClient,
         Field(description="EarthEngine client connection", exclude=True),
     ],
-   aoi_column: Annotated[str, Field(description="Column name containing ranch names")],
-   time_range: Annotated[TimeRange, Field(description="Time range for NDVI analysis")],
+    aoi_column: Annotated[str, Field(description="Column name containing ranch names")],
+    time_range: Annotated[TimeRange, Field(description="Time range for NDVI analysis")],
     output_dir: Annotated[str, Field(description="Directory to save output HTML charts")],
 ) -> Union[str, List[str]]:
     # Validate ranch name column exists
@@ -51,7 +51,7 @@ def process_aoi_ndvi_charts(
     # Ensure CRS is 4326 before processing
     if df.crs is None or df.crs.to_epsg() != 4326:
         df = df.to_crs(4326)
-    
+
     # Process each ranch
     for idx, aoi_name in enumerate(aoi_names, 1):
         logger.info(f"Processing ranch {idx}/{len(aoi_names)}: {aoi_name}")
@@ -81,7 +81,7 @@ def process_aoi_ndvi_charts(
                 scale_factor=0.0001,
                 analysis_scale=500.0,
             )
-    
+
             # Create historic timeseries chart
             ndvi_chart = draw_historic_timeseries(
                 dataframe=dfs,

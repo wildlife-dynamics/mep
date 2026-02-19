@@ -1,6 +1,6 @@
 import logging
 import pandas as pd
-from datetime import datetime 
+from datetime import datetime
 import geopandas as gpd
 from typing import Dict, Any, List
 from ecoscope_workflows_core.decorators import task
@@ -16,35 +16,35 @@ logger = logging.getLogger(__name__)
 # Sitrep formatting functions
 def sitrep_illegal_charcoal(x: pd.Series) -> str:
     """Format illegal charcoal event details."""
-    return "Bags: {0}, Kilns: {1}, Destroyed: {2}, Tree Species: {3}, Transport: {4}. Details: {5}".format(
+    return "Bags:{0},Kilns:{1},Destroyed:{2},Tree Species:{3},Transport:{4}.Details:{5}".format(
         x["bag_count"], x["kiln_count"], x["destroyed"], x["tree_species"], x["transport_method"], x["details"]
     )
 
 
 def sitrep_illegal_logging(x: pd.Series) -> str:
     """Format illegal logging event details."""
-    return "Log Count: {0}, Tree Type: {1}, Timber: {2}. Details: {3}".format(
+    return "Log Count:{0},Tree Type:{1},Timber:{2}.Details:{3}".format(
         x["loggingRecovered"], x["logging_description"], x.get("bag_count"), x["details"]
     )
 
 
 def sitrep_wildlife_trap(x: pd.Series) -> str:
     """Format wildlife trap event details."""
-    return "Trap Type: {0}, Num Recovered: {1}, Species: {2}. Details: {3}".format(
+    return "Trap Type:{0},Num Recovered:{1},Species:{2}.Details:{3}".format(
         x["illegal_wildlife_trap_type"], x["num_recovered"], x["target_species"], x["details"]
     )
 
 
 def sitrep_mike(x: pd.Series) -> str:
     """Format MIKE (elephant mortality) event details."""
-    return "Type of Death: {0}, Cause of Death: {1}, Sex: {2}, Carcass Age: {3}, Tusk Status: {4}. Details: {5}".format(
+    return "Type of Death:{0},Cause of Death:{1},Sex:{2},Carcass Age:{3},Tusk Status:{4}.Details:{5}".format(
         x["TypeOfDeath"], x["CauseOfDeath"], x["ElephantSex"], x["CarcassAgeClass"], x["TuskStatus"], x["details"]
     )
 
 
 def sitrep_hwc(x: pd.Series) -> str:
     """Format Human-Wildlife Conflict event details."""
-    return "HWC Type: {0}, Crop Type: {1}, Farm Size: {2}. Mitigation Action: {3}, Success Index: {4}. Details: {5}".format(
+    return "HWC Type:{0},Crop Type:{1},Farm Size:{2}.Mitigation Action: {3}, Success Index: {4}. Details: {5}".format(
         x["hwc_type"],
         x["crop_type"],
         x.get("farm_size"),
@@ -56,32 +56,32 @@ def sitrep_hwc(x: pd.Series) -> str:
 
 def sitrep_illegal_bushmeat(x: pd.Series) -> str:
     """Format illegal bushmeat event details."""
-    return "Bushmeat: {0}, Details: {1}".format(x["bushmeatRecovered"], x["details"])
+    return "Bushmeat:{0}, Details:{1}".format(x["bushmeatRecovered"], x["details"])
 
 
 def sitrep_arrests(x: pd.Series) -> str:
     """Format arrest event details with recovered items."""
     details_string = []
-    
+
     def dict_arr(str_val: str) -> list:
         """Safely get list value from series."""
         return x[str_val] if isinstance(x.get(str_val), list) else []
-    
+
     # Firearms
     firearm_count = len([f for f in dict_arr("FirearmsRecovered") if f])
     if firearm_count > 0:
         details_string.append(f"Firearms: {firearm_count}")
-    
+
     # Bushmeat
     bushmeat_kgs = len([b for b in dict_arr("BushmeatRecovered") if b.get("BushmeatKgs")])
     if bushmeat_kgs > 0:
         details_string.append(f"Bushmeat Kgs: {bushmeat_kgs}")
-    
+
     # Skins
     skins_count = len([s for s in dict_arr("SkinsRecovered") if s.get("SkinsNumber")])
     if skins_count > 0:
         details_string.append(f"Skins: {skins_count}")
-    
+
     # Elephant tusks
     tusks = x.get("TusksRecovered", {})
     if isinstance(tusks, dict):
@@ -89,10 +89,10 @@ def sitrep_arrests(x: pd.Series) -> str:
         tusk_pieces = tusks.get("EleTuskPieces", 0)
     else:
         tusk_kgs = tusk_pieces = 0
-    
+
     if tusk_pieces > 0:
         details_string.append(f"Tusks: {tusk_pieces} ({tusk_kgs} kgs)")
-    
+
     # Rhino horn
     rhinohorn = x.get("RhinoHornRecovered", {})
     if isinstance(rhinohorn, dict):
@@ -100,16 +100,16 @@ def sitrep_arrests(x: pd.Series) -> str:
         rhinohorn_pieces = rhinohorn.get("RhinoHornPieces", 0)
     else:
         rhinohorn_kgs = rhinohorn_pieces = 0
-    
+
     if rhinohorn_pieces > 0:
         details_string.append(f"RhinoHorn: {rhinohorn_pieces} ({rhinohorn_kgs} kgs)")
-    
+
     # Additional notes
     if x.get("ExhibitsRecoveredNotes") is not None:
         details_string.append(f"Details: {x['ExhibitsRecoveredNotes']}")
     else:
         details_string.append(f"Details: {x.get('reported_by__additional__note', '')}")
-    
+
     return ", ".join(details_string)
 
 
@@ -117,10 +117,10 @@ def sitrep_arrests(x: pd.Series) -> str:
 def get_sitrep_event_config(region_column: str = "region") -> Dict[str, Dict[str, Any]]:
     """
     Get configuration for sitrep event types.
-    
+
     Args:
         region_column: Name of the column containing region information
-        
+
     Returns:
         Dictionary mapping event keys to their configuration including
         formatting function, event type name, event ID, and region column
@@ -168,15 +168,15 @@ def get_sitrep_event_config(region_column: str = "region") -> Dict[str, Dict[str
 def _download_events(er_io, params, since_filter, until_filter):
     try:
         df = er_io.get_events(
-            event_type=params["event_id"], 
-            since=since_filter, 
+            event_type=params["event_id"],
+            since=since_filter,
             until=until_filter,
             include_details=True,
             raise_on_empty=False,
-            include_null_geometry = True, 
-            include_updates = False,
-            include_related_events = False,
-            include_display_values = True,
+            include_null_geometry=True,
+            include_updates=False,
+            include_related_events=False,
+            include_display_values=True,
         )
     except AssertionError:
         return gpd.GeoDataFrame()
@@ -205,10 +205,11 @@ def _download_events(er_io, params, since_filter, until_filter):
         df["sitrep_comment"] = df.apply(params["sitrep_func"], axis=1)
         df["event_type"] = params["event_type"]
         df["region"] = df[params["region"]]
-        df_locations = df[~df.geometry.is_empty] 
+        df_locations = df[~df.geometry.is_empty]
         df["latitude"] = df_locations.geometry.y
         df["longitude"] = df_locations.geometry.x
         return df
+
 
 def _download_all_events(
     er_io,
@@ -217,13 +218,13 @@ def _download_all_events(
 ) -> List[AnyDataFrame]:
     """Download events from all configured sources."""
     downloaded_events = []
-    
+
     # Convert TimeRange to string format for API
     since_str = _format_timestamp(time_range.since)
     until_str = _format_timestamp(time_range.until)
-    
+
     logger.info(f"Downloading events from {since_str} to {until_str}")
-    
+
     for event_key, event_config in event_details.items():
         try:
             df = _download_events(
@@ -232,27 +233,27 @@ def _download_all_events(
                 since_str,
                 until_str,
             )
-            
+
             if not df.empty:
                 downloaded_events.append(df)
                 logger.info(f"Downloaded {len(df)} events for {event_key}")
             else:
                 logger.info(f"No events found for {event_key}")
-                
+
         except Exception as e:
             logger.error(f"Failed to download events for {event_key}: {e}", exc_info=True)
             continue
-    
+
     return downloaded_events
 
 
 def _format_timestamp(timestamp: pd.Timestamp) -> str:
     """
     Convert pandas Timestamp to ISO format string for API calls.
-    
+
     Args:
         timestamp: pandas Timestamp object or datetime object
-        
+
     Returns:
         ISO formatted datetime string
     """
@@ -270,19 +271,20 @@ def _clean_event_dataframes(
 ) -> List[AnyDataFrame]:
     """Clean and standardize event dataframes."""
     cleaned_events = []
-    
+
     for df in dataframes:
         df = df.loc[:, ~df.columns.duplicated(keep="first")]
         cols_to_keep = [col for col in selected_cols if col in df.columns]
-        
+
         if not cols_to_keep:
-            logger.warning(f"No valid columns found in dataframe. Skipping.")
+            logger.warning("No valid columns found in dataframe. Skipping.")
             continue
-        
+
         df = df[cols_to_keep]
         cleaned_events.append(df)
-    
+
     return cleaned_events
+
 
 def _compile_and_format_sitrep(
     cleaned_events: List[AnyDataFrame],
@@ -296,6 +298,7 @@ def _compile_and_format_sitrep(
     logger.info(f"Compiled sitrep with {len(sitrep_df)} total events")
     return sitrep_df
 
+
 @task
 def compile_sitrep(
     er_io: EarthRangerClient,
@@ -304,14 +307,14 @@ def compile_sitrep(
 ) -> AnyDataFrame:
     """
     Compile situation report from multiple event sources.
-    
+
     Args:
         er_io: Earth Ranger IO client
         event_details: Dictionary of event configurations
         time_range: TimeRange object specifying start and end times
         df_cols: Dictionary mapping original column names to display names
         selected_cols: List of columns to retain (uses defaults if None)
-        
+
     Returns:
         DataFrame with compiled and formatted events, sorted by date descending
     """
@@ -319,16 +322,16 @@ def compile_sitrep(
     df_cols = {
         "time": "date",
         "event_type": "event_type",
-        "name":"name",
-        "region":"region",
-        "sitrep_comment": "details"
+        "name": "name",
+        "region": "region",
+        "sitrep_comment": "details",
     }
     downloaded_events = _download_all_events(er_io, event_details, time_range)
-    
+
     if not downloaded_events:
         logger.warning("No events to compile. Returning empty DataFrame.")
         return pd.DataFrame()
     cleaned_events = _clean_event_dataframes(downloaded_events, selected_cols)
     sitrep_df = _compile_and_format_sitrep(cleaned_events, df_cols)
-    
+
     return sitrep_df

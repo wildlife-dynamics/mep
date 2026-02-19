@@ -100,6 +100,7 @@ def draw_season_nsd_plot(
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
+
 @task
 def draw_season_speed_plot(
     relocations_gdf: AnyGeoDataFrame,
@@ -124,6 +125,7 @@ def draw_season_speed_plot(
     figure = ecoscope.plotting.speed(trajs_gdf)
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
+
 
 @task
 def draw_season_mcp_plot(

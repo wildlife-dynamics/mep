@@ -10,13 +10,12 @@ from ecoscope_workflows_core.tasks.transformation._extract import FieldType
 from ecoscope_workflows_core.tasks.transformation._filter import ComparisonOperator
 from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import AxisStyle, LayoutStyle, LineStyle, PlotStyle
 
+
 @task
 def calculate_collar_voltage(
     relocs: Annotated[AnyGeoDataFrame, Field(description="The relocation geodataframe.", exclude=True)],
     time_range: Annotated[TimeRange, Field(description="Time range filter")],
 ) -> str:
-
-
     relocs = transformation.extract_column_as_type(
         relocs, "extra__subjectsource__assigned_range", FieldType.SERIES, "extra.extra.subjectsource__assigned_range."
     )
