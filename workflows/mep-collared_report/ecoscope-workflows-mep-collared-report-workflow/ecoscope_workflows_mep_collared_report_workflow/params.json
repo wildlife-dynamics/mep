@@ -540,7 +540,7 @@
     "DownloadFile": {
       "properties": {
         "url": {
-          "description": "URL to download the shapefile from (supports .gpkg, .shp and .geoparquet)",
+          "description": "URL to download a file",
           "title": "URL",
           "type": "string"
         }
@@ -554,7 +554,7 @@
     "LocalFile": {
       "properties": {
         "file_path": {
-          "description": "Path to the local shapefile or archive on the filesystem",
+          "description": "Path to a local file",
           "title": "Local file path",
           "type": "string"
         }

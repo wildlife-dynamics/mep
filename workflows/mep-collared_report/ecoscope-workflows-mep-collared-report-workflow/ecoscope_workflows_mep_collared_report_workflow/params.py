@@ -254,18 +254,12 @@ class GoogleEarthEngineConnection(BaseModel):
 
 
 class DownloadFile(BaseModel):
-    url: str = Field(
-        ...,
-        description="URL to download the shapefile from (supports .gpkg, .shp and .geoparquet)",
-        title="URL",
-    )
+    url: str = Field(..., description="URL to download a file", title="URL")
 
 
 class LocalFile(BaseModel):
     file_path: str = Field(
-        ...,
-        description="Path to the local shapefile or archive on the filesystem",
-        title="Local file path",
+        ..., description="Path to a local file", title="Local file path"
     )
 
 
