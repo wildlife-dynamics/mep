@@ -86,9 +86,6 @@ def compute_subject_stats(
             "Provide a single-subject GDF."
         )
     subject_id = non_null_ids[0]
-    print(f"\n{'='*60}")
-    print(f"Processing subject_id: {subject_id} (type: {type(subject_id)})")
-    print(f"{'='*60}")
 
     # Get maturity status
     mature = False
@@ -97,7 +94,6 @@ def compute_subject_stats(
             mrow = subject_df.loc[subject_df[groupby_col] == subject_id, "mature"]
             if not mrow.empty:
                 mature = bool(mrow.iloc[0])
-                print(f"Maturity status: {mature}")
 
     # Calculate MCP (Minimum Convex Polygon)
     hull_geom = traj_gdf.geometry.unary_union.convex_hull

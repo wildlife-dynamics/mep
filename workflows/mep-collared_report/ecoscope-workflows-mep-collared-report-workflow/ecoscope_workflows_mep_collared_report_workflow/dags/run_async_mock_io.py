@@ -17,13 +17,13 @@ from ecoscope_workflows_core.tasks.config import (
     set_workflow_details as set_workflow_details,
 )
 from ecoscope_workflows_core.tasks.filter import set_time_range as set_time_range
+from ecoscope_workflows_core.tasks.groupby import set_groupers as set_groupers
 from ecoscope_workflows_core.tasks.io import set_er_connection as set_er_connection
 from ecoscope_workflows_core.tasks.io import set_gee_connection as set_gee_connection
 from ecoscope_workflows_core.tasks.skip import (
     any_dependency_skipped as any_dependency_skipped,
 )
 from ecoscope_workflows_core.tasks.skip import any_is_empty_df as any_is_empty_df
-from ecoscope_workflows_core.tasks.transformation import map_columns as map_columns
 from ecoscope_workflows_core.testing import create_task_magicmock  # 🧪
 from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
 from ecoscope_workflows_ext_custom.tasks.results import (
@@ -36,6 +36,7 @@ from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     normalize_json_column as normalize_json_column,
 )
 from ecoscope_workflows_ext_mep.tasks import get_subject_df as get_subject_df
+from ecoscope_workflows_ext_mnc.tasks import transform_columns as transform_columns
 from ecoscope_workflows_ext_ste.tasks import (
     annotate_gdf_dict_with_geom_type as annotate_gdf_dict_with_geom_type,
 )
@@ -47,7 +48,6 @@ from ecoscope_workflows_ext_ste.tasks import (
 )
 from ecoscope_workflows_ext_ste.tasks import filter_df_cols as filter_df_cols
 from ecoscope_workflows_ext_ste.tasks import get_file_path as get_file_path
-from ecoscope_workflows_ext_ste.tasks import set_custom_groupers as set_custom_groupers
 from ecoscope_workflows_ext_ste.tasks import split_gdf_by_column as split_gdf_by_column
 
 get_subjectgroup_observations = create_task_magicmock(  # 🧪
@@ -55,6 +55,7 @@ get_subjectgroup_observations = create_task_magicmock(  # 🧪
     func_name="get_subjectgroup_observations",  # 🧪
 )  # 🧪
 from ecoscope_workflows_core.tasks.groupby import split_groups as split_groups
+from ecoscope_workflows_core.tasks.transformation import map_columns as map_columns
 from ecoscope_workflows_ext_ecoscope.tasks.io import persist_df as persist_df
 from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
     process_relocations as process_relocations,
@@ -101,13 +102,14 @@ from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
 from ecoscope_workflows_ext_mep.tasks import (
     custom_view_state_deck_gdf as custom_view_state_deck_gdf,
 )
-from ecoscope_workflows_ext_mnc.tasks import transform_columns as transform_columns
 from ecoscope_workflows_ext_ste.tasks import (
     combine_deckgl_map_layers as combine_deckgl_map_layers,
 )
 from ecoscope_workflows_ext_ste.tasks import (
     custom_trajectory_segment_filter as custom_trajectory_segment_filter,
 )
+from ecoscope_workflows_ext_ste.tasks import envelope_gdf as envelope_gdf
+from ecoscope_workflows_ext_ste.tasks import view_state_deck_gdf as view_state_deck_gdf
 from ecoscope_workflows_ext_ste.tasks import zip_groupbykey as zip_groupbykey
 
 determine_season_windows = create_task_magicmock(  # 🧪
@@ -167,6 +169,9 @@ from ecoscope_workflows_ext_mep.tasks import (
 )
 from ecoscope_workflows_ext_mep.tasks import (
     draw_season_speed_plot as draw_season_speed_plot,
+)
+from ecoscope_workflows_ext_mep.tasks import (
+    zoom_map_and_screenshot as zoom_map_and_screenshot,
 )
 from ecoscope_workflows_ext_ste.tasks import (
     calculate_seasonal_home_range as calculate_seasonal_home_range,
@@ -231,16 +236,15 @@ def main(params: Params):
         "apply_speed_colormap": ["sort_trajs_by_speed"],
         "filter_speedmap_gdf": ["apply_speed_colormap"],
         "generate_speedmap_layers": ["filter_speedmap_gdf"],
+        "gdf_bounding_extent": ["filter_speedmap_gdf"],
+        "zoom_gdf_extent": ["gdf_bounding_extent"],
         "zoom_speed_gdf_extent": ["filter_speedmap_gdf"],
         "combined_ldx_speed_layers": [
             "create_ldx_styled_layers",
             "create_ldx_text_layer",
             "generate_speedmap_layers",
         ],
-        "zip_speedmap_with_viewstate": [
-            "combined_ldx_speed_layers",
-            "zoom_speed_gdf_extent",
-        ],
+        "zip_speedmap_with_viewstate": ["combined_ldx_speed_layers", "zoom_gdf_extent"],
         "draw_speedmap": ["configure_base_maps", "zip_speedmap_with_viewstate"],
         "persist_speedmap_html": ["draw_speedmap"],
         "create_speedmap_widgets": ["persist_speedmap_html"],
@@ -263,10 +267,7 @@ def main(params: Params):
             "generate_home_range_layers",
         ],
         "zoom_hr_gdf_extent": ["apply_etd_colormap"],
-        "zip_hr_with_viewstate": [
-            "combined_ldx_home_range_layers",
-            "zoom_hr_gdf_extent",
-        ],
+        "zip_hr_with_viewstate": ["combined_ldx_home_range_layers", "zoom_gdf_extent"],
         "draw_home_range_map": ["configure_base_maps", "zip_hr_with_viewstate"],
         "persist_homerange_html": ["draw_home_range_map"],
         "create_home_range_widgets": ["persist_homerange_html"],
@@ -285,7 +286,7 @@ def main(params: Params):
         "zoom_seasons_gdf_extent": ["apply_seasonal_colormap"],
         "zip_seasonal_hr_with_viewstate": [
             "combined_ldx_seasonal_hr_layers",
-            "zoom_seasons_gdf_extent",
+            "zoom_gdf_extent",
         ],
         "draw_seasonal_home_range_map": [
             "configure_base_maps",
@@ -364,9 +365,15 @@ def main(params: Params):
         "compute_subject_night_day_ratio": ["generate_subject_stats"],
         "total_night_day_ratio_sv_widgets": ["compute_subject_night_day_ratio"],
         "sndrs_sv_widget": ["total_night_day_ratio_sv_widgets"],
-        "convert_homerange_png": ["persist_homerange_html"],
-        "convert_speedmap_png": ["persist_speedmap_html"],
-        "convert_season_png": ["persist_seasonal_home_range_html"],
+        "zip_hr_value": ["zoom_speed_gdf_extent", "persist_homerange_html"],
+        "convert_homerange_png": ["zip_hr_value"],
+        "zip_speed_value": ["zoom_speed_gdf_extent", "persist_speedmap_html"],
+        "convert_speedmap_png": ["zip_speed_value"],
+        "zip_seasonal_value": [
+            "zoom_speed_gdf_extent",
+            "persist_seasonal_home_range_html",
+        ],
+        "convert_season_png": ["zip_seasonal_value"],
         "convert_nsd_png": ["persist_nsd_html_urls"],
         "convert_mcp_png": ["persist_mcp_html_urls"],
         "convert_speed_png": ["persist_speed_html_urls"],
@@ -453,7 +460,7 @@ def main(params: Params):
             method="call",
         ),
         "groupers": Node(
-            async_task=set_custom_groupers.validate()
+            async_task=set_groupers.validate()
             .set_task_instance_id("groupers")
             .handle_errors()
             .with_tracing()
@@ -465,12 +472,7 @@ def main(params: Params):
                 unpack_depth=1,
             )
             .set_executor("lithops"),
-            partial={
-                "groupers": [
-                    "subject_name",
-                ],
-            }
-            | (params_dict.get("groupers") or {}),
+            partial=(params_dict.get("groupers") or {}),
             method="call",
         ),
         "configure_base_maps": Node(
@@ -649,11 +651,11 @@ def main(params: Params):
                         0,
                         255,
                     ],
-                    "get_size": 1500,
+                    "get_size": 1000,
                     "size_units": "meters",
-                    "size_min_pixels": 70,
-                    "size_max_pixels": 100,
-                    "size_scale": 2.25,
+                    "size_min_pixels": 40,
+                    "size_max_pixels": 75,
+                    "size_scale": 1.25,
                     "font_family": "Arial",
                     "font_weight": "normal",
                     "get_text_anchor": "middle",
@@ -847,7 +849,7 @@ def main(params: Params):
             method="call",
         ),
         "rename_subject_cols": Node(
-            async_task=map_columns.validate()
+            async_task=transform_columns.validate()
             .set_task_instance_id("rename_subject_cols")
             .handle_errors()
             .with_tracing()
@@ -869,21 +871,6 @@ def main(params: Params):
                     "additional__tm_animal_id",
                     "additional__external_name",
                 ],
-                "retain_columns": [
-                    "id",
-                    "name",
-                    "hex",
-                    "additional__rgb",
-                    "additional__sex",
-                    "additional__Bio",
-                    "additional__DOB",
-                    "additional__notes",
-                    "additional__status",
-                    "additional__region",
-                    "additional__country",
-                    "additional__id_photo",
-                    "additional__distribution",
-                ],
                 "rename_columns": {
                     "id": "groupby_col",
                     "name": "subject_name",
@@ -899,6 +886,11 @@ def main(params: Params):
                     "additional__id_photo": "photo",
                     "additional__distribution": "distribution",
                 },
+                "skip_missing_rename": True,
+                "required_columns": [
+                    "id",
+                    "name",
+                ],
                 "df": DependsOn("normalize_subject_info"),
             }
             | (params_dict.get("rename_subject_cols") or {}),
@@ -918,6 +910,7 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
+                "filter": "clean",
                 "client": DependsOn("er_client_name"),
                 "time_range": DependsOn("time_range"),
                 "subject_group_name": DependsOn("subject_group_var"),
@@ -986,6 +979,7 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
+                "raise_if_not_found": True,
                 "rename_columns": {
                     "name": "subject_name",
                     "hex": "hex_color",
@@ -1358,6 +1352,7 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
+                "raise_if_not_found": True,
                 "df": DependsOn("classify_trajectories_speed_bins"),
                 "rename_columns": {
                     "extra__hex_color": "hex_color",
@@ -1517,6 +1512,50 @@ def main(params: Params):
                 "argvalues": DependsOn("filter_speedmap_gdf"),
             },
         ),
+        "gdf_bounding_extent": Node(
+            async_task=envelope_gdf.validate()
+            .set_task_instance_id("gdf_bounding_extent")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial=(params_dict.get("gdf_bounding_extent") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["gdf"],
+                "argvalues": DependsOn("filter_speedmap_gdf"),
+            },
+        ),
+        "zoom_gdf_extent": Node(
+            async_task=view_state_deck_gdf.validate()
+            .set_task_instance_id("zoom_gdf_extent")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "pitch": 0,
+                "bearing": 0,
+            }
+            | (params_dict.get("zoom_gdf_extent") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["gdf"],
+                "argvalues": DependsOn("gdf_bounding_extent"),
+            },
+        ),
         "zoom_speed_gdf_extent": Node(
             async_task=custom_view_state_deck_gdf.validate()
             .set_task_instance_id("zoom_speed_gdf_extent")
@@ -1586,7 +1625,7 @@ def main(params: Params):
             partial={
                 "sequences": [
                     DependsOn("combined_ldx_speed_layers"),
-                    DependsOn("zoom_speed_gdf_extent"),
+                    DependsOn("zoom_gdf_extent"),
                 ],
             }
             | (params_dict.get("zip_speedmap_with_viewstate") or {}),
@@ -1979,7 +2018,7 @@ def main(params: Params):
             partial={
                 "sequences": [
                     DependsOn("combined_ldx_home_range_layers"),
-                    DependsOn("zoom_hr_gdf_extent"),
+                    DependsOn("zoom_gdf_extent"),
                 ],
             }
             | (params_dict.get("zip_hr_with_viewstate") or {}),
@@ -2190,7 +2229,7 @@ def main(params: Params):
                         0,
                         255,
                     ],
-                    "opacity": 0.45,
+                    "opacity": 0.15,
                     "get_line_width": 0.35,
                     "get_elevation": 0,
                     "get_point_radius": 1,
@@ -2362,7 +2401,7 @@ def main(params: Params):
             partial={
                 "sequences": [
                     DependsOn("combined_ldx_seasonal_hr_layers"),
-                    DependsOn("zoom_seasons_gdf_extent"),
+                    DependsOn("zoom_gdf_extent"),
                 ],
             }
             | (params_dict.get("zip_seasonal_hr_with_viewstate") or {}),
@@ -3872,8 +3911,30 @@ def main(params: Params):
             | (params_dict.get("sndrs_sv_widget") or {}),
             method="call",
         ),
+        "zip_hr_value": Node(
+            async_task=zip_groupbykey.validate()
+            .set_task_instance_id("zip_hr_value")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "sequences": [
+                    DependsOn("zoom_speed_gdf_extent"),
+                    DependsOn("persist_homerange_html"),
+                ],
+            }
+            | (params_dict.get("zip_hr_value") or {}),
+            method="call",
+        ),
         "convert_homerange_png": Node(
-            async_task=html_to_png.validate()
+            async_task=zoom_map_and_screenshot.validate()
             .set_task_instance_id("convert_homerange_png")
             .handle_errors()
             .with_tracing()
@@ -3887,10 +3948,10 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {
+                "screenshot_config": {
                     "full_page": False,
                     "device_scale_factor": 2.0,
-                    "wait_for_timeout": 30000,
+                    "wait_for_timeout": 40000,
                     "max_concurrent_pages": 1,
                     "width": 602,
                     "height": 855,
@@ -3899,12 +3960,34 @@ def main(params: Params):
             | (params_dict.get("convert_homerange_png") or {}),
             method="mapvalues",
             kwargs={
-                "argnames": ["html_path"],
-                "argvalues": DependsOn("persist_homerange_html"),
+                "argnames": ["view_state", "input_file"],
+                "argvalues": DependsOn("zip_hr_value"),
             },
         ),
+        "zip_speed_value": Node(
+            async_task=zip_groupbykey.validate()
+            .set_task_instance_id("zip_speed_value")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "sequences": [
+                    DependsOn("zoom_speed_gdf_extent"),
+                    DependsOn("persist_speedmap_html"),
+                ],
+            }
+            | (params_dict.get("zip_speed_value") or {}),
+            method="call",
+        ),
         "convert_speedmap_png": Node(
-            async_task=html_to_png.validate()
+            async_task=zoom_map_and_screenshot.validate()
             .set_task_instance_id("convert_speedmap_png")
             .handle_errors()
             .with_tracing()
@@ -3918,10 +4001,10 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {
+                "screenshot_config": {
                     "full_page": False,
                     "device_scale_factor": 2.0,
-                    "wait_for_timeout": 30000,
+                    "wait_for_timeout": 40000,
                     "max_concurrent_pages": 1,
                     "width": 1280,
                     "height": 720,
@@ -3930,12 +4013,34 @@ def main(params: Params):
             | (params_dict.get("convert_speedmap_png") or {}),
             method="mapvalues",
             kwargs={
-                "argnames": ["html_path"],
-                "argvalues": DependsOn("persist_speedmap_html"),
+                "argnames": ["view_state", "input_file"],
+                "argvalues": DependsOn("zip_speed_value"),
             },
         ),
+        "zip_seasonal_value": Node(
+            async_task=zip_groupbykey.validate()
+            .set_task_instance_id("zip_seasonal_value")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "sequences": [
+                    DependsOn("zoom_speed_gdf_extent"),
+                    DependsOn("persist_seasonal_home_range_html"),
+                ],
+            }
+            | (params_dict.get("zip_seasonal_value") or {}),
+            method="call",
+        ),
         "convert_season_png": Node(
-            async_task=html_to_png.validate()
+            async_task=zoom_map_and_screenshot.validate()
             .set_task_instance_id("convert_season_png")
             .handle_errors()
             .with_tracing()
@@ -3949,10 +4054,10 @@ def main(params: Params):
             .set_executor("lithops"),
             partial={
                 "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-                "config": {
+                "screenshot_config": {
                     "full_page": False,
                     "device_scale_factor": 2.0,
-                    "wait_for_timeout": 30000,
+                    "wait_for_timeout": 40000,
                     "max_concurrent_pages": 1,
                     "width": 602,
                     "height": 855,
@@ -3961,8 +4066,8 @@ def main(params: Params):
             | (params_dict.get("convert_season_png") or {}),
             method="mapvalues",
             kwargs={
-                "argnames": ["html_path"],
-                "argvalues": DependsOn("persist_seasonal_home_range_html"),
+                "argnames": ["view_state", "input_file"],
+                "argvalues": DependsOn("zip_seasonal_value"),
             },
         ),
         "convert_nsd_png": Node(
@@ -4123,7 +4228,7 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
-                "url": "https://www.dropbox.com/scl/fi/nfv96xs38r3wunp6y866f/cer_cover_page.docx?rlkey=sbl545v87g94tolfafwyfd8b8&st=jnvtvo2i&dl=0",
+                "url": "https://www.dropbox.com/scl/fi/nfv96xs38r3wunp6y866f/cer_cover_page.docx?rlkey=sbl545v87g94tolfafwyfd8b8&st=oyydvpy9&dl=0",
                 "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
                 "overwrite_existing": False,
                 "unzip": False,
@@ -4146,7 +4251,7 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
-                "url": "https://www.dropbox.com/scl/fi/4symf1385ksnh8mu8sx9v/mep_subject_template_two.docx?rlkey=v5f26c3aiadaasnilhc76owgr&st=otul6hus&dl=0",
+                "url": "https://www.dropbox.com/scl/fi/4symf1385ksnh8mu8sx9v/mep_subject_template_two.docx?rlkey=v5f26c3aiadaasnilhc76owgr&st=wz6mce8l&dl=0",
                 "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
                 "overwrite_existing": False,
                 "unzip": False,

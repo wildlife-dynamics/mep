@@ -1,0 +1,36 @@
+workflow_details:
+  description: ''
+  name: custom_
+time_range:
+  timezone:
+    label: UTC
+    tzCode: UTC
+    name: UTC
+    utc: '+03:00'
+  time_format: '%d %b %Y %H:%M:%S'
+  since: '2025-12-31T21:00:00.000Z'
+  until: '2026-01-31T21:00:00.000Z'
+configure_base_maps:
+  base_maps:
+    - url: >-
+        https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}
+      opacity: 1
+      max_zoom: 20
+    - url: >-
+        https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}
+      opacity: 0.2
+      max_zoom: 20
+er_client_name:
+  data_source:
+    name: ymep
+gee_project_name:
+  data_source:
+    name: ecoscope_poc
+vehicle_patrols:
+  status:
+    - done
+foot_patrols:
+  status:
+    - done
+subject_group_var:
+  var: MEP_Elephants_Everywhere

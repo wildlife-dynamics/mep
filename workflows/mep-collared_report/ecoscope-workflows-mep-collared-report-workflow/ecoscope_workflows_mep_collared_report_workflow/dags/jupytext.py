@@ -23,6 +23,7 @@ from ecoscope_workflows_core.tasks.config import (
     set_workflow_details as set_workflow_details,
 )
 from ecoscope_workflows_core.tasks.filter import set_time_range as set_time_range
+from ecoscope_workflows_core.tasks.groupby import set_groupers as set_groupers
 from ecoscope_workflows_core.tasks.groupby import split_groups as split_groups
 from ecoscope_workflows_core.tasks.io import persist_text as persist_text
 from ecoscope_workflows_core.tasks.io import set_er_connection as set_er_connection
@@ -138,6 +139,9 @@ from ecoscope_workflows_ext_mep.tasks import (
 from ecoscope_workflows_ext_mep.tasks import (
     process_subject_information as process_subject_information,
 )
+from ecoscope_workflows_ext_mep.tasks import (
+    zoom_map_and_screenshot as zoom_map_and_screenshot,
+)
 from ecoscope_workflows_ext_mnc.tasks import transform_columns as transform_columns
 from ecoscope_workflows_ext_ste.tasks import (
     annotate_gdf_dict_with_geom_type as annotate_gdf_dict_with_geom_type,
@@ -161,6 +165,7 @@ from ecoscope_workflows_ext_ste.tasks import (
 from ecoscope_workflows_ext_ste.tasks import (
     custom_trajectory_segment_filter as custom_trajectory_segment_filter,
 )
+from ecoscope_workflows_ext_ste.tasks import envelope_gdf as envelope_gdf
 from ecoscope_workflows_ext_ste.tasks import (
     fetch_and_persist_file as fetch_and_persist_file,
 )
@@ -168,8 +173,8 @@ from ecoscope_workflows_ext_ste.tasks import filter_df_cols as filter_df_cols
 from ecoscope_workflows_ext_ste.tasks import generate_mcp_gdf as generate_mcp_gdf
 from ecoscope_workflows_ext_ste.tasks import get_file_path as get_file_path
 from ecoscope_workflows_ext_ste.tasks import merge_mapbook_files as merge_mapbook_files
-from ecoscope_workflows_ext_ste.tasks import set_custom_groupers as set_custom_groupers
 from ecoscope_workflows_ext_ste.tasks import split_gdf_by_column as split_gdf_by_column
+from ecoscope_workflows_ext_ste.tasks import view_state_deck_gdf as view_state_deck_gdf
 from ecoscope_workflows_ext_ste.tasks import zip_groupbykey as zip_groupbykey
 
 # %% [markdown]
@@ -243,14 +248,16 @@ time_range = (
 # %%
 # parameters
 
-groupers_params = dict()
+groupers_params = dict(
+    groupers=...,
+)
 
 # %%
 # call the task
 
 
 groupers = (
-    set_custom_groupers.set_task_instance_id("groupers")
+    set_groupers.set_task_instance_id("groupers")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -260,7 +267,7 @@ groupers = (
         ],
         unpack_depth=1,
     )
-    .partial(groupers=["subject_name"], **groupers_params)
+    .partial(**groupers_params)
     .call()
 )
 
@@ -543,11 +550,11 @@ create_ldx_text_layer = (
         layer_style={
             "get_text": "name",
             "get_color": [0, 0, 0, 255],
-            "get_size": 1500,
+            "get_size": 1000,
             "size_units": "meters",
-            "size_min_pixels": 70,
-            "size_max_pixels": 100,
-            "size_scale": 2.25,
+            "size_min_pixels": 40,
+            "size_max_pixels": 75,
+            "size_scale": 1.25,
             "font_family": "Arial",
             "font_weight": "normal",
             "get_text_anchor": "middle",
@@ -772,7 +779,7 @@ rename_subject_cols_params = dict()
 
 
 rename_subject_cols = (
-    map_columns.set_task_instance_id("rename_subject_cols")
+    transform_columns.set_task_instance_id("rename_subject_cols")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -792,21 +799,7 @@ rename_subject_cols = (
             "additional__tm_animal_id",
             "additional__external_name",
         ],
-        retain_columns=[
-            "id",
-            "name",
-            "hex",
-            "additional__rgb",
-            "additional__sex",
-            "additional__Bio",
-            "additional__DOB",
-            "additional__notes",
-            "additional__status",
-            "additional__region",
-            "additional__country",
-            "additional__id_photo",
-            "additional__distribution",
-        ],
+        retain_columns=[],
         rename_columns={
             "id": "groupby_col",
             "name": "subject_name",
@@ -822,6 +815,8 @@ rename_subject_cols = (
             "additional__id_photo": "photo",
             "additional__distribution": "distribution",
         },
+        skip_missing_rename=True,
+        required_columns=["id", "name"],
         df=normalize_subject_info,
         **rename_subject_cols_params,
     )
@@ -853,6 +848,7 @@ subject_observations = (
         unpack_depth=1,
     )
     .partial(
+        filter="clean",
         client=er_client_name,
         time_range=time_range,
         subject_group_name=subject_group_var,
@@ -936,6 +932,7 @@ rename_reloc_cols = (
         unpack_depth=1,
     )
     .partial(
+        raise_if_not_found=True,
         drop_columns=[],
         retain_columns=[],
         rename_columns={
@@ -1468,6 +1465,7 @@ rename_traj_cols = (
         unpack_depth=1,
     )
     .partial(
+        raise_if_not_found=True,
         df=classify_trajectories_speed_bins,
         drop_columns=[],
         retain_columns=[],
@@ -1665,6 +1663,64 @@ generate_speedmap_layers = (
 # %%
 # parameters
 
+gdf_bounding_extent_params = dict(
+    expansion_factor=...,
+)
+
+# %%
+# call the task
+
+
+gdf_bounding_extent = (
+    envelope_gdf.set_task_instance_id("gdf_bounding_extent")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(**gdf_bounding_extent_params)
+    .mapvalues(argnames=["gdf"], argvalues=filter_speedmap_gdf)
+)
+
+
+# %% [markdown]
+# ## Zoom to gdf extent for image
+
+# %%
+# parameters
+
+zoom_gdf_extent_params = dict()
+
+# %%
+# call the task
+
+
+zoom_gdf_extent = (
+    view_state_deck_gdf.set_task_instance_id("zoom_gdf_extent")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(pitch=0, bearing=0, **zoom_gdf_extent_params)
+    .mapvalues(argnames=["gdf"], argvalues=gdf_bounding_extent)
+)
+
+
+# %% [markdown]
+# ## Zoom to gdf extent
+
+# %%
+# parameters
+
 zoom_speed_gdf_extent_params = dict()
 
 # %%
@@ -1749,7 +1805,7 @@ zip_speedmap_with_viewstate = (
         unpack_depth=1,
     )
     .partial(
-        sequences=[combined_ldx_speed_layers, zoom_speed_gdf_extent],
+        sequences=[combined_ldx_speed_layers, zoom_gdf_extent],
         **zip_speedmap_with_viewstate_params,
     )
     .call()
@@ -2250,7 +2306,7 @@ zip_hr_with_viewstate = (
         unpack_depth=1,
     )
     .partial(
-        sequences=[combined_ldx_home_range_layers, zoom_hr_gdf_extent],
+        sequences=[combined_ldx_home_range_layers, zoom_gdf_extent],
         **zip_hr_with_viewstate_params,
     )
     .call()
@@ -2509,7 +2565,7 @@ generate_season_layers = (
             "wireframe": False,
             "get_fill_color": "season_colors",
             "get_line_color": [0, 0, 0, 255],
-            "opacity": 0.45,
+            "opacity": 0.15,
             "get_line_width": 0.35,
             "get_elevation": 0,
             "get_point_radius": 1,
@@ -2699,7 +2755,7 @@ zip_seasonal_hr_with_viewstate = (
         unpack_depth=1,
     )
     .partial(
-        sequences=[combined_ldx_seasonal_hr_layers, zoom_seasons_gdf_extent],
+        sequences=[combined_ldx_seasonal_hr_layers, zoom_gdf_extent],
         **zip_seasonal_hr_with_viewstate_params,
     )
     .call()
@@ -4724,6 +4780,36 @@ sndrs_sv_widget = (
 
 
 # %% [markdown]
+# ## Combine homerange path with zoom value
+
+# %%
+# parameters
+
+zip_hr_value_params = dict()
+
+# %%
+# call the task
+
+
+zip_hr_value = (
+    zip_groupbykey.set_task_instance_id("zip_hr_value")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        sequences=[zoom_speed_gdf_extent, persist_homerange_html], **zip_hr_value_params
+    )
+    .call()
+)
+
+
+# %% [markdown]
 # ## Convert homerange map html to png
 
 # %%
@@ -4736,7 +4822,7 @@ convert_homerange_png_params = dict()
 
 
 convert_homerange_png = (
-    html_to_png.set_task_instance_id("convert_homerange_png")
+    zoom_map_and_screenshot.set_task_instance_id("convert_homerange_png")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -4748,17 +4834,48 @@ convert_homerange_png = (
     )
     .partial(
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        config={
+        screenshot_config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 30000,
+            "wait_for_timeout": 40000,
             "max_concurrent_pages": 1,
             "width": 602,
             "height": 855,
         },
         **convert_homerange_png_params,
     )
-    .mapvalues(argnames=["html_path"], argvalues=persist_homerange_html)
+    .mapvalues(argnames=["view_state", "input_file"], argvalues=zip_hr_value)
+)
+
+
+# %% [markdown]
+# ## Combine speedmap path with zoom value
+
+# %%
+# parameters
+
+zip_speed_value_params = dict()
+
+# %%
+# call the task
+
+
+zip_speed_value = (
+    zip_groupbykey.set_task_instance_id("zip_speed_value")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        sequences=[zoom_speed_gdf_extent, persist_speedmap_html],
+        **zip_speed_value_params,
+    )
+    .call()
 )
 
 
@@ -4775,7 +4892,7 @@ convert_speedmap_png_params = dict()
 
 
 convert_speedmap_png = (
-    html_to_png.set_task_instance_id("convert_speedmap_png")
+    zoom_map_and_screenshot.set_task_instance_id("convert_speedmap_png")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -4787,17 +4904,48 @@ convert_speedmap_png = (
     )
     .partial(
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        config={
+        screenshot_config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 30000,
+            "wait_for_timeout": 40000,
             "max_concurrent_pages": 1,
             "width": 1280,
             "height": 720,
         },
         **convert_speedmap_png_params,
     )
-    .mapvalues(argnames=["html_path"], argvalues=persist_speedmap_html)
+    .mapvalues(argnames=["view_state", "input_file"], argvalues=zip_speed_value)
+)
+
+
+# %% [markdown]
+# ## Combine seasonal map path with zoom value
+
+# %%
+# parameters
+
+zip_seasonal_value_params = dict()
+
+# %%
+# call the task
+
+
+zip_seasonal_value = (
+    zip_groupbykey.set_task_instance_id("zip_seasonal_value")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        sequences=[zoom_speed_gdf_extent, persist_seasonal_home_range_html],
+        **zip_seasonal_value_params,
+    )
+    .call()
 )
 
 
@@ -4814,7 +4962,7 @@ convert_season_png_params = dict()
 
 
 convert_season_png = (
-    html_to_png.set_task_instance_id("convert_season_png")
+    zoom_map_and_screenshot.set_task_instance_id("convert_season_png")
     .handle_errors()
     .with_tracing()
     .skipif(
@@ -4826,17 +4974,17 @@ convert_season_png = (
     )
     .partial(
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        config={
+        screenshot_config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 30000,
+            "wait_for_timeout": 40000,
             "max_concurrent_pages": 1,
             "width": 602,
             "height": 855,
         },
         **convert_season_png_params,
     )
-    .mapvalues(argnames=["html_path"], argvalues=persist_seasonal_home_range_html)
+    .mapvalues(argnames=["view_state", "input_file"], argvalues=zip_seasonal_value)
 )
 
 
@@ -5048,7 +5196,7 @@ download_cover_page = (
         unpack_depth=1,
     )
     .partial(
-        url="https://www.dropbox.com/scl/fi/nfv96xs38r3wunp6y866f/cer_cover_page.docx?rlkey=sbl545v87g94tolfafwyfd8b8&st=jnvtvo2i&dl=0",
+        url="https://www.dropbox.com/scl/fi/nfv96xs38r3wunp6y866f/cer_cover_page.docx?rlkey=sbl545v87g94tolfafwyfd8b8&st=oyydvpy9&dl=0",
         output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         overwrite_existing=False,
         unzip=False,
@@ -5083,7 +5231,7 @@ download_sect_templates = (
         unpack_depth=1,
     )
     .partial(
-        url="https://www.dropbox.com/scl/fi/4symf1385ksnh8mu8sx9v/mep_subject_template_two.docx?rlkey=v5f26c3aiadaasnilhc76owgr&st=otul6hus&dl=0",
+        url="https://www.dropbox.com/scl/fi/4symf1385ksnh8mu8sx9v/mep_subject_template_two.docx?rlkey=v5f26c3aiadaasnilhc76owgr&st=wz6mce8l&dl=0",
         output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         overwrite_existing=False,
         unzip=False,
