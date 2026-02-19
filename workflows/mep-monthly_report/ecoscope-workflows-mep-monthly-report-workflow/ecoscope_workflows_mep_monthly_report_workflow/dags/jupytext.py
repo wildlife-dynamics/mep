@@ -2492,9 +2492,7 @@ persist_cover_context = (
 # %%
 # parameters
 
-create_monthly_ctx_params = dict(
-    stirep_df_path=...,
-)
+create_monthly_ctx_params = dict()
 
 # %%
 # call the task

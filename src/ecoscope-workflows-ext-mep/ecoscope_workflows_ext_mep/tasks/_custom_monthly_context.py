@@ -139,7 +139,7 @@ def create_mep_monthly_context(
     vehicle_patrol_map_path: str | SkipSentinel | None,
     collared_elephant_plot_paths: List[str | SkipSentinel | None] | None,
     regional_ndvi_plot_paths: List[str | SkipSentinel | None] | None,
-    stirep_df_path: str | SkipSentinel | None,
+    sitrep_df_path: str | SkipSentinel | None,
     template_path: str,
     output_dir: str,
     filename: Optional[str] = None,
@@ -151,7 +151,7 @@ def create_mep_monthly_context(
     elephant_sightings_map_path = _unwrap_skip(elephant_sightings_map_path)
     foot_patrols_map_path       = _unwrap_skip(foot_patrols_map_path)
     vehicle_patrol_map_path     = _unwrap_skip(vehicle_patrol_map_path)
-    stirep_df_path              = _unwrap_skip(stirep_df_path)  # fix: was sitrep_df_path
+    sitrep_df_path              = _unwrap_skip(sitrep_df_path)  # fix: was sitrep_df_path
 
     collared_paths = _unwrap_and_validate_list(collared_elephant_plot_paths)
     ndvi_paths     = _unwrap_and_validate_list(regional_ndvi_plot_paths)
@@ -182,7 +182,7 @@ def create_mep_monthly_context(
         for path in ndvi_paths
     ]
     
-    sitrep_df = safe_read_csv(stirep_df_path) 
+    sitrep_df = safe_read_csv(sitrep_df_path) 
     sitrep    = sitrep_df.to_dict(orient="records")
 
     context = {

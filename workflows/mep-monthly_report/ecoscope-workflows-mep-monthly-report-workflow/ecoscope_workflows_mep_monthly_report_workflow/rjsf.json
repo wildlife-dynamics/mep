@@ -366,27 +366,6 @@
       "required": [],
       "type": "object",
       "title": "Retrieve foot patrols"
-    },
-    "create_monthly_ctx": {
-      "additionalProperties": false,
-      "properties": {
-        "stirep_df_path": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Stirep Df Path"
-        }
-      },
-      "required": [
-        "stirep_df_path"
-      ],
-      "type": "object",
-      "title": "Create monthly report"
     }
   },
   "$defs": {
@@ -468,8 +447,7 @@
       "gee_project_name",
       "Subject Group",
       "vehicle_patrols",
-      "foot_patrols",
-      "create_monthly_ctx"
+      "foot_patrols"
     ]
   },
   "additionalProperties": false

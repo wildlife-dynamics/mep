@@ -221,13 +221,6 @@ class FootPatrols(BaseModel):
     )
 
 
-class CreateMonthlyCtx(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    stirep_df_path: str | None = Field(..., title="Stirep Df Path")
-
-
 class TimezoneInfo(BaseModel):
     label: str = Field(..., title="Label")
     tzCode: str = Field(..., title="Tzcode")
@@ -299,6 +292,3 @@ class Params(BaseModel):
         None, title="Retrieve vehicle patrols"
     )
     foot_patrols: FootPatrols | None = Field(None, title="Retrieve foot patrols")
-    create_monthly_ctx: CreateMonthlyCtx | None = Field(
-        None, title="Create monthly report"
-    )
