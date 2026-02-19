@@ -38,7 +38,7 @@ from ecoscope_workflows_ext_custom.tasks.results import (
 )
 from ecoscope_workflows_ext_custom.tasks.results import draw_map as draw_map
 from ecoscope_workflows_ext_custom.tasks.transformation import (
-    drop_null_geometry as drop_null_geometry,
+    drop_null_geometry as drop_null_geometry_1,
 )
 from ecoscope_workflows_ext_mnc.tasks import (
     exclude_geom_outliers as exclude_geom_outliers,
@@ -277,7 +277,7 @@ def main(params: Params):
     )
 
     remove_mep_invalid_geoms = (
-        drop_null_geometry.validate()
+        drop_null_geometry_1.validate()
         .set_task_instance_id("remove_mep_invalid_geoms")
         .handle_errors()
         .with_tracing()
