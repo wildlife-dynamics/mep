@@ -93,8 +93,9 @@ def persist_subject_photo(
     output_path.mkdir(parents=True, exist_ok=True)
 
     if column not in subject_df.columns:
-        raise KeyError(f"Column '{column}' not found. Available: {list(subject_df.columns)}")
-
+        print(f"Column '{column}' not found. Available: {list(subject_df.columns)}")
+        return None 
+    
     last_file_path: Optional[Path] = None
     for idx, url in subject_df[column].dropna().items():
         if not isinstance(url, str) or not url.startswith(("http://", "https://")):
@@ -159,25 +160,8 @@ def process_subject_information(
     os.makedirs(output_path, exist_ok=True)
 
     if subject_df.empty:
-        raise ValueError("DataFrame is empty")
-
-    required_columns = [
-        "subject_name",
-        "subject_bio",
-        "date_of_birth",
-        "subject_sex",
-        "notes",
-        "country",
-        "distribution",
-        "status",
-    ]
-
-    missing = [c for c in required_columns if c not in subject_df.columns]
-    if missing:
-        raise KeyError(
-            f"Required columns {missing} don't exist in the dataframe. "
-            f"Available columns: {list(subject_df.columns)}"
-        )
+        empty_cols = ["subject_name", "dob", "sex", "country", "notes", "status", "status_raw", "bio", "distribution"]
+        return cast(AnyDataFrame, pd.DataFrame([{col: "" for col in empty_cols}]))
 
     def process_single_subject(row: pd.Series) -> Dict[str, str]:
         bio = safe_strip(row.get("subject_bio", ""))
@@ -201,6 +185,5 @@ def process_subject_information(
         }
         return {k: ("" if v is None else str(v)) for k, v in subject_info.items()}
 
-    # Process all rows into a list of dicts
     processed_records = [process_single_subject(row) for _, row in subject_df.iterrows()]
     return cast(AnyDataFrame, pd.DataFrame(processed_records))

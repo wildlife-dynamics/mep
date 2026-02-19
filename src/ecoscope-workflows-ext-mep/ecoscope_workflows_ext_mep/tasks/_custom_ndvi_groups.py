@@ -42,7 +42,6 @@ def process_aoi_ndvi_charts(
     # Get unique ranch names
     aoi_names = df[aoi_column].unique()
     logger.info(f"Processing NDVI charts for {len(aoi_names)} ranches")
-    print(f"Processing NDVI charts for {len(aoi_names)} ranches")
 
     if output_dir is None or str(output_dir).strip() == "":
         output_dir = os.getcwd()
@@ -52,33 +51,24 @@ def process_aoi_ndvi_charts(
     # Ensure CRS is 4326 before processing
     if df.crs is None or df.crs.to_epsg() != 4326:
         df = df.to_crs(4326)
-        print(f"Converted dataframe to CRS: {df.crs}")
-    else:
-        print(f"Dataframe already in CRS: {df.crs}")
     
     # Process each ranch
     for idx, aoi_name in enumerate(aoi_names, 1):
         logger.info(f"Processing ranch {idx}/{len(aoi_names)}: {aoi_name}")
-        print(f"Processing ranch {idx}/{len(aoi_names)}: {aoi_name}")
 
         try:
-            # Filter to current ranch
             aoi = df[df[aoi_column] == aoi_name].copy()
 
             if aoi.empty:
                 logger.warning(f"No data found for ranch: {aoi_name}")
-                print(f"No data found for ranch: {aoi_name}")
                 continue
 
-            # Validate geometry
             if not aoi.geometry.is_valid.all():
                 logger.warning(f"Invalid geometries found for ranch: {aoi_name}, attempting repair")
-                print(f"Invalid geometries found for ranch: {aoi_name}, attempting repair")
                 aoi["geometry"] = aoi.geometry.buffer(0)
 
                 if not aoi.geometry.is_valid.all():
                     logger.error(f"Could not repair geometries for ranch: {aoi_name}")
-                    print(f"Could not repair geometries for ranch: {aoi_name}")
                     continue
 
             # Calculate NDVI range
@@ -103,7 +93,7 @@ def process_aoi_ndvi_charts(
                 historic_mean_column="mean",
                 historic_mean_title="Historic Mean",
                 layout_style=LayoutStyle(
-                    title="",
+                    title=f"{aoi_name}",
                     title_x=0.5,
                     font_size=14,
                     font_color="#222222",
@@ -141,17 +131,14 @@ def process_aoi_ndvi_charts(
                     ),
                 ),
             )
-
-            # Persist chart - pass Path object directly
-            file_path = persist_text(ndvi_chart, str(output_dir), f"{aoi_name}.html")
+            safe_name = str(aoi_name).replace(" ", "_").replace("/", "_")
+            file_path = persist_text(ndvi_chart, str(output_dir), f"{safe_name}.html")
 
             file_paths.append(file_path)
             logger.info(f"Saved chart for {aoi_name} to {file_path}")
-            print(f"Saved chart for {aoi_name} to {file_path}")
 
         except Exception as e:
             logger.error(f"Failed to process ranch {aoi_name}: {e}")
-            print(f"Failed to process ranch {aoi_name}: {e}")
             continue
 
     return file_paths

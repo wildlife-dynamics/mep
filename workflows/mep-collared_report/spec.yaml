@@ -1,23 +1,23 @@
 id: mep_collared_report
 requirements:
   - name: ecoscope-workflows-core
-    version: "0.20.6.*"
+    version: "0.22.9.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-ecoscope
-    version: "0.20.6.*"
+    version: "0.22.9.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.23.*"
+    version: "0.0.27.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.13.*"
+    version: "0.0.15.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mnc
-    version: "0.0.2.*"
+    version: "0.0.6.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mep
@@ -27,11 +27,11 @@ requirements:
 rjsf-overrides:
   properties: 
     Subject Group.properties.subject_group_var.properties.var.title: Subject Group Name
-    Subject Group..properties.subject_group_var.properties.var.default: subject_name
+    Subject Group.properties.subject_group_var.properties.var.default: Elephants
 
   $defs:
-    # Restrict category options to Subject Name only
-    ValueGrouper.oneOf:
+    # Restrict category options to Subject Name ,Subject Sex and Subject Subtype
+    ValueGrouper.properties.index_name.oneOf:
       - const: subject_name
         title: Subject Name
 
@@ -55,10 +55,7 @@ workflow:
   # set groupers -- limiting this to subject_name
   - name: Configure grouping strategy 
     id: groupers 
-    task: set_custom_groupers
-    partial:
-      groupers:
-        - subject_name
+    task: set_groupers
   
   # set basemaps
   - name: Configure base map layers 
@@ -197,7 +194,6 @@ workflow:
           - label: National Park 
             color: "#115631"
 
-
   # 1. Retrieve subjects df from ER 
   - name: Retrieve subjects df from ER 
     id: retrieve_subjects_df 
@@ -227,7 +223,7 @@ workflow:
   
   - name: Rename additional subject columns 
     id: rename_subject_cols 
-    task: map_columns 
+    task: transform_columns 
     partial: 
       drop_columns:
         - url
@@ -238,20 +234,7 @@ workflow:
         - additional__tm_animal_id
         - additional__external_name
 
-      retain_columns:
-        - id
-        - name
-        - hex
-        - additional__rgb
-        - additional__sex
-        - additional__Bio
-        - additional__DOB
-        - additional__notes
-        - additional__status
-        - additional__region
-        - additional__country
-        - additional__id_photo
-        - additional__distribution
+      retain_columns: []
 
       rename_columns:
         id: groupby_col
@@ -268,12 +251,17 @@ workflow:
         additional__id_photo: photo
         additional__distribution: distribution 
 
+      skip_missing_rename: true 
+      required_columns: 
+        - id 
+        - name
       df: ${{ workflow.normalize_subject_info.return }}
 
   - name: Choose subject group to analyze 
     id: subject_observations 
     task: get_subjectgroup_observations 
     partial: 
+      filter: clean
       client: ${{ workflow.er_client_name.return }}
       time_range: ${{ workflow.time_range.return }}
       subject_group_name: ${{ workflow.subject_group_var.return }}
@@ -309,6 +297,7 @@ workflow:
     id: rename_reloc_cols
     task: map_columns
     partial:
+      raise_if_not_found: true
       drop_columns: []
       retain_columns: []
       rename_columns:
@@ -496,6 +485,7 @@ workflow:
     id: rename_traj_cols 
     task: map_columns 
     partial:
+      raise_if_not_found: true
       df: ${{ workflow.classify_trajectories_speed_bins.return }}
       drop_columns: []
       retain_columns: [] 
@@ -506,7 +496,6 @@ workflow:
         extra__subject_subtype: subject_subtype
         extra__created_at: created_at
     
-
   - name: Split trajectories by group 
     id: split_traj_by_group 
     task: split_groups
@@ -583,14 +572,21 @@ workflow:
       argvalues: ${{ workflow.filter_speedmap_gdf.return }}
   
   - name: Zoom to gdf extent 
-    id: zoom_gdf_extent
-    task: custom_view_state_from_gdf
-    partial: 
-      max_zoom: 20
-      padding_percent: 0.05
+    id: gdf_bounding_extent
+    task: envelope_gdf
     mapvalues:
       argnames: gdf
       argvalues: ${{ workflow.filter_speedmap_gdf.return }}
+
+  - name: Zoom to gdf extent for image 
+    id: zoom_gdf_extent 
+    task: view_state_deck_gdf
+    partial:
+      pitch: 0 
+      bearing: 0 
+    mapvalues:
+      argnames: gdf 
+      argvalues: ${{ workflow.gdf_bounding_extent.return }}
 
   - name: Zoom to gdf extent 
     id: zoom_speed_gdf_extent
@@ -1705,7 +1701,7 @@ workflow:
       screenshot_config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 100
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
         width: 602
         height: 855
@@ -1731,7 +1727,7 @@ workflow:
       screenshot_config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 100
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
         width: 1280
         height: 720
@@ -1757,7 +1753,7 @@ workflow:
       screenshot_config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 100
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
         width: 602
         height: 855

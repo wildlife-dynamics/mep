@@ -37,9 +37,8 @@ def zoom_map_and_screenshot(
     Returns:
         Path to the generated PNG file, or None if input_file is None
     """
-    # Handle None input gracefully - skip processing
     if input_file is None:
-        logger.info("Input_file is None - skipping processing")
+        logger.info("Input_file is None - skipping...")
         return None
 
     input_path = Path(input_file)
@@ -99,10 +98,7 @@ def zoom_map_and_screenshot(
         new_html_content = html_content
 
     # Extract the base filename (without extension) from input file
-    original_filename = input_path.stem  # Gets filename without extension
-
-    # Create a temporary file with the adjusted HTML
-    # Use the original filename for the temp file to preserve it for the PNG
+    original_filename = input_path.stem 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".html", prefix=f"{original_filename}_", delete=False, encoding="utf-8"
     ) as temp_file:

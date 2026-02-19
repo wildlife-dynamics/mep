@@ -10,13 +10,15 @@ from ._collared_report_context import (
     create_mep_grouper_page,
 )
 from ._custom_pydeck import custom_view_state_deck_gdf
-from ._inspect import print_output, view_df
 from ._custom_ndvi_groups import process_aoi_ndvi_charts
 from ._custom_collar_voltage import process_collar_voltage_charts
 from ._sitrep import get_sitrep_event_config,compile_sitrep
 from ._custom_map_png import zoom_map_and_screenshot
 from ._custom_period import get_previous_period
+from ._custom_monthly_context import create_mep_monthly_context,create_monthly_ctx_cover
 __all__ = [
+    "create_monthly_ctx_cover",
+    "create_mep_monthly_context",
     "zoom_map_and_screenshot",
     "calculate_collar_voltage",
     "get_subject_df",
@@ -36,13 +38,10 @@ __all__ = [
     "create_mep_subject_context_page",
     "create_mep_grouper_page",
     "create_mep_subject_context",
-    "custom_view_state_deck_gdf",
-    "print_output",
-    "view_df",
-    
+    "custom_view_state_deck_gdf",    
     "process_aoi_ndvi_charts",
     "process_collar_voltage_charts",
-    
+
     "get_sitrep_event_config",
     "compile_sitrep",
     "get_previous_period"

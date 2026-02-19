@@ -1,39 +1,28 @@
 id: mep_monthly_report
 requirements:
   - name: ecoscope-workflows-core
-    version: "0.20.6.*"
+    version: "0.22.9.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-ecoscope
-    version: "0.20.6.*"
+    version: "0.22.9.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.23.*"
+    version: "0.0.27.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.10.*"
+    version: "0.0.15.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mnc
-    version: "0.0.2.*"
+    version: "0.0.6.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mep
     version: "*"
     channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
-
-rjsf-overrides:
-  properties: 
-    Subject Group.properties.subject_group_var.properties.var.title: Subject Group Name
-    Subject Group..properties.subject_group_var.properties.var.default: subject_name
-
-  $defs:
-    # Restrict category options to Subject Name only
-    ValueGrouper.oneOf:
-      - const: subject_name
-        title: Subject Name
 
 task-instance-defaults:
   skipif:
@@ -55,7 +44,7 @@ workflow:
   # set groupers -- limiting this to subject_name
   - name: Configure grouping strategy 
     id: groupers 
-    task: set_custom_groupers
+    task: set_groupers
     partial:
       groupers: []
   
@@ -138,12 +127,12 @@ workflow:
         get_fill_color: [85, 107, 47]
         get_line_color: [0, 0, 0, 200]
         get_line_width: 0.55
-        get_radius: 5
+        get_radius: 3.55
         opacity: 0.75
         stroked: true
       legend:
         title: Legend 
-        values: #556b2f
+        values:
           - label: Elephant sightings 
             color: "#556b2f"
       geodataframe: ${{ workflow.remove_mep_invalid_geoms.return }}
@@ -203,6 +192,7 @@ workflow:
     id: subject_observations
     task: get_subjectgroup_observations
     partial: 
+      filter: clean
       client: ${{ workflow.er_client_name.return }}
       time_range: ${{ workflow.time_range.return }}
       subject_group_name: ${{ workflow.subject_group_var.return }}
@@ -247,6 +237,7 @@ workflow:
     id: previous_subject_observations
     task: get_subjectgroup_observations
     partial: 
+      filter: clean
       client: ${{ workflow.er_client_name.return }}
       time_range: ${{ workflow.get_custom_previous_period.return }}
       subject_group_name: ${{ workflow.subject_group_var.return }}
@@ -435,7 +426,7 @@ workflow:
       time_range: ${{ workflow.time_range.return }}
   
   - name: Persist sitrep as csv
-    id: persist_livestock_events_gpkg
+    id: persist_sitrep_csv
     task: persist_df 
     skipif:
       conditions:
@@ -840,6 +831,70 @@ workflow:
         device_scale_factor: 2.0
         wait_for_timeout: 10
         max_concurrent_pages: 1
+
+  - name: Download monthly cover page template  
+    id: download_cover_page 
+    task: fetch_and_persist_file
+    partial:
+      url: https://www.dropbox.com/scl/fi/95fux8w00h9u4wg2sufij/mep_monthly_report.docx?rlkey=nbibg8ulnlz0w4q53jw2db6y3&st=6own6h01&dl=0
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      overwrite_existing: false 
+      retries: 3 
+      unzip: false
+
+  - name: Download monthly content template  
+    id: download_content_page 
+    task: fetch_and_persist_file
+    partial:
+      url: https://www.dropbox.com/scl/fi/1u7d68pr8hvc27gf2ns85/mep_monthly_indv_report.docx?rlkey=wss0x8sa9i5fgl9yjco7paa03&st=b8fsdnxg&dl=0
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      overwrite_existing: false 
+      retries: 3 
+      unzip: false
+
+  - name: Create cover template context 
+    id: create_cover_tpl_context
+    task: create_monthly_ctx_cover
+    partial:
+      report_period: ${{ workflow.time_range.return }}
+      prepared_by: "Ecoscope"
+
+  - name: Persist cover page context
+    id: persist_cover_context 
+    task: create__mep_context_page
+    partial:
+      template_path: ${{ workflow.download_cover_page.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      context: ${{ workflow.create_cover_tpl_context.return }}
+      filename: mep_cover_page.docx
+
+  - name: Create monthly report 
+    id: create_monthly_ctx 
+    task: create_mep_monthly_context
+    partial: 
+      filename: mep_context.docx 
+      template_path: ${{ workflow.download_content_page.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+
+      elephant_sightings_map_path: ${{ workflow.convert_sightings_png.return }}
+      speedmap_path: ${{ workflow.convert_speedmap_png.return }}
+      foot_patrols_map_path: ${{ workflow.convert_foot_png.return }}
+      vehicle_patrol_map_path: ${{ workflow.convert_vehicle_png.return }}
+
+      collared_elephant_plot_paths: ${{ workflow.convert_collared_png.return }}
+      regional_ndvi_plot_paths: ${{ workflow.convert_ndvi_png.return }}
+
+      sitrep_df_path: ${{ workflow.persist_sitrep_csv.return }}
+
+
+  - name: Merge mep word docs
+    id: merge_mep_docx
+    task: merge_mapbook_files 
+    partial: 
+      cover_page_path: ${{ workflow.persist_cover_context.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      context_page_items: ${{ workflow.create_monthly_ctx.return }}
+      filename: null 
 
   - name: MEP monthly report  dashboard
     id: mep_monthly_dashboard

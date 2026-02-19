@@ -60,27 +60,12 @@ def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
             line_width=0,
             layer="below",
         )
-
-        # midpoint = start_dt + (end_dt - start_dt) / 2
-        # fig.add_annotation(
-        #     x=midpoint,
-        #     y=1.02,
-        #     text=row.get("season", "Season").capitalize(),
-        #     showarrow=False,
-        #     xanchor="center",
-        #     yanchor="bottom",
-        #     font=dict(size=12),
-        # )
-
     return fig
 
 
 def _load_seasons_df(seasons_df: Union[str, Path, AnyDataFrame]) -> AnyDataFrame:
-    # Check if it's already a DataFrame
     if isinstance(seasons_df, pd.DataFrame):
         return seasons_df
-
-    # Normalize the path and convert to Path object
     normalized_path = remove_file_scheme(str(seasons_df))
     p = Path(normalized_path)
     if p.suffix.lower() in {".csv"}:
@@ -115,7 +100,6 @@ def draw_season_nsd_plot(
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
-
 @task
 def draw_season_speed_plot(
     relocations_gdf: AnyGeoDataFrame,
@@ -140,7 +124,6 @@ def draw_season_speed_plot(
     figure = ecoscope.plotting.speed(trajs_gdf)
     figure = add_seasons_square(figure, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
-
 
 @task
 def draw_season_mcp_plot(
@@ -184,8 +167,6 @@ def collar_event_timeline_plot(
     geodataframe = geodataframe.dropna(subset=["fixtime"]).copy()
 
     ys = [0]
-
-    # Plot events if available
     if collar_events is not None and not collar_events.empty:
         collar_events = collar_events.dropna(subset=["time"]).copy()
 
@@ -193,12 +174,10 @@ def collar_event_timeline_plot(
             times = collar_events["time"].to_list()
             times.append(geodataframe["fixtime"].iloc[-1])
 
-            # Create x and y coordinates for each event line
             xs = [[times[i]] * 3 + [times[i + 1]] for i in range(len(collar_events))]
             ys = [[0, i + 1, 0, 0] for i in range(len(collar_events))]
             colors = collar_events["priority_label"]
 
-            # Plot each event as a line
             for x, y, color in zip(xs, ys, colors):
                 fig.add_trace(
                     go.Scatter(
@@ -210,7 +189,6 @@ def collar_event_timeline_plot(
                     )
                 )
 
-            # Add annotations for events
             fig.update_layout(
                 annotations=[
                     go.layout.Annotation(
@@ -223,9 +201,7 @@ def collar_event_timeline_plot(
                 ]
             )
 
-    # Plot relocations as baseline markers
     x = geodataframe["fixtime"]
-    # Calculate max_y from the nested ys list
     max_y = max([max(y_list) for y_list in ys]) if isinstance(ys[0], list) else max(ys)
     y = np.full(len(x), max_y / 10 if max_y > 0 else 0.5)
 
@@ -240,8 +216,6 @@ def collar_event_timeline_plot(
             hovertemplate="Relocation: %{x}",
         )
     )
-
-    # Update layout
     fig.update_layout(
         margin_l=50,
         margin_r=10,
@@ -250,7 +224,6 @@ def collar_event_timeline_plot(
         yaxis_visible=False,
         showlegend=False,
     )
-
     return fig
 
 
@@ -288,8 +261,6 @@ def draw_season_collared_plot(
         if events_gdf.empty:
             logger.warning(f"No events found for subject '{subject_name}'.")
             events_gdf = None
-
-    # Generate visualization with or without events
     fig = collar_event_timeline_plot(relocations_gdf, events_gdf)
     figure = add_seasons_square(fig, seasons_df)
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))

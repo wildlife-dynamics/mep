@@ -301,7 +301,7 @@
           "additionalProperties": false,
           "properties": {
             "var": {
-              "title": "Subject Group Name",
+              "title": "",
               "type": "string"
             }
           },
@@ -310,17 +310,6 @@
           ],
           "type": "object",
           "title": ""
-        }
-      },
-      "": {
-        "properties": {
-          "subject_group_var": {
-            "properties": {
-              "var": {
-                "default": "subject_name"
-              }
-            }
-          }
         }
       }
     },
@@ -377,6 +366,27 @@
       "required": [],
       "type": "object",
       "title": "Retrieve foot patrols"
+    },
+    "create_monthly_ctx": {
+      "additionalProperties": false,
+      "properties": {
+        "stirep_df_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stirep Df Path"
+        }
+      },
+      "required": [
+        "stirep_df_path"
+      ],
+      "type": "object",
+      "title": "Create monthly report"
     }
   },
   "$defs": {
@@ -433,14 +443,6 @@
       ],
       "title": "GoogleEarthEngineConnection",
       "type": "object"
-    },
-    "ValueGrouper": {
-      "oneOf": [
-        {
-          "const": "subject_name",
-          "title": "Subject Name"
-        }
-      ]
     }
   },
   "uiSchema": {
@@ -466,7 +468,8 @@
       "gee_project_name",
       "Subject Group",
       "vehicle_patrols",
-      "foot_patrols"
+      "foot_patrols",
+      "create_monthly_ctx"
     ]
   },
   "additionalProperties": false

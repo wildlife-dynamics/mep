@@ -7,6 +7,7 @@ from ecoscope_workflows_core.tasks.config import (
     set_workflow_details as set_workflow_details,
 )
 from ecoscope_workflows_core.tasks.filter import set_time_range as set_time_range
+from ecoscope_workflows_core.tasks.groupby import set_groupers as set_groupers
 from ecoscope_workflows_core.tasks.io import persist_text as persist_text
 from ecoscope_workflows_core.tasks.io import set_er_connection as set_er_connection
 from ecoscope_workflows_core.tasks.io import set_gee_connection as set_gee_connection
@@ -55,6 +56,15 @@ from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     apply_color_map as apply_color_map,
 )
 from ecoscope_workflows_ext_mep.tasks import compile_sitrep as compile_sitrep
+from ecoscope_workflows_ext_mep.tasks import (
+    create__mep_context_page as create__mep_context_page,
+)
+from ecoscope_workflows_ext_mep.tasks import (
+    create_mep_monthly_context as create_mep_monthly_context,
+)
+from ecoscope_workflows_ext_mep.tasks import (
+    create_monthly_ctx_cover as create_monthly_ctx_cover,
+)
 from ecoscope_workflows_ext_mep.tasks import get_previous_period as get_previous_period
 from ecoscope_workflows_ext_mep.tasks import (
     get_sitrep_event_config as get_sitrep_event_config,
@@ -72,7 +82,7 @@ from ecoscope_workflows_ext_ste.tasks import (
     fetch_and_persist_file as fetch_and_persist_file,
 )
 from ecoscope_workflows_ext_ste.tasks import filter_df_cols as filter_df_cols
-from ecoscope_workflows_ext_ste.tasks import set_custom_groupers as set_custom_groupers
+from ecoscope_workflows_ext_ste.tasks import merge_mapbook_files as merge_mapbook_files
 from ecoscope_workflows_ext_ste.tasks import transform_gdf_crs as transform_gdf_crs
 from ecoscope_workflows_ext_ste.tasks import view_state_deck_gdf as view_state_deck_gdf
 
@@ -115,7 +125,7 @@ def main(params: Params):
     )
 
     groupers = (
-        set_custom_groupers.validate()
+        set_groupers.validate()
         .set_task_instance_id("groupers")
         .handle_errors()
         .with_tracing()
@@ -273,7 +283,7 @@ def main(params: Params):
                 "get_fill_color": [85, 107, 47],
                 "get_line_color": [0, 0, 0, 200],
                 "get_line_width": 0.55,
-                "get_radius": 5,
+                "get_radius": 3.55,
                 "opacity": 0.75,
                 "stroked": True,
             },
@@ -383,6 +393,7 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
+            filter="clean",
             client=er_client_name,
             time_range=time_range,
             subject_group_name=subject_group_var,
@@ -464,6 +475,7 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
+            filter="clean",
             client=er_client_name,
             time_range=get_custom_previous_period,
             subject_group_name=subject_group_var,
@@ -825,9 +837,9 @@ def main(params: Params):
         .call()
     )
 
-    persist_livestock_events_gpkg = (
+    persist_sitrep_csv = (
         persist_df.validate()
-        .set_task_instance_id("persist_livestock_events_gpkg")
+        .set_task_instance_id("persist_sitrep_csv")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -842,7 +854,7 @@ def main(params: Params):
             filetype="csv",
             filename="sitrep_report",
             df=generate_sitrep_df,
-            **(params_dict.get("persist_livestock_events_gpkg") or {}),
+            **(params_dict.get("persist_sitrep_csv") or {}),
         )
         .call()
     )
@@ -1588,6 +1600,144 @@ def main(params: Params):
                 "max_concurrent_pages": 1,
             },
             **(params_dict.get("convert_collared_png") or {}),
+        )
+        .call()
+    )
+
+    download_cover_page = (
+        fetch_and_persist_file.validate()
+        .set_task_instance_id("download_cover_page")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            url="https://www.dropbox.com/scl/fi/95fux8w00h9u4wg2sufij/mep_monthly_report.docx?rlkey=nbibg8ulnlz0w4q53jw2db6y3&st=6own6h01&dl=0",
+            output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            overwrite_existing=False,
+            retries=3,
+            unzip=False,
+            **(params_dict.get("download_cover_page") or {}),
+        )
+        .call()
+    )
+
+    download_content_page = (
+        fetch_and_persist_file.validate()
+        .set_task_instance_id("download_content_page")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            url="https://www.dropbox.com/scl/fi/1u7d68pr8hvc27gf2ns85/mep_monthly_indv_report.docx?rlkey=wss0x8sa9i5fgl9yjco7paa03&st=b8fsdnxg&dl=0",
+            output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            overwrite_existing=False,
+            retries=3,
+            unzip=False,
+            **(params_dict.get("download_content_page") or {}),
+        )
+        .call()
+    )
+
+    create_cover_tpl_context = (
+        create_monthly_ctx_cover.validate()
+        .set_task_instance_id("create_cover_tpl_context")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            report_period=time_range,
+            prepared_by="Ecoscope",
+            **(params_dict.get("create_cover_tpl_context") or {}),
+        )
+        .call()
+    )
+
+    persist_cover_context = (
+        create__mep_context_page.validate()
+        .set_task_instance_id("persist_cover_context")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            template_path=download_cover_page,
+            output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            context=create_cover_tpl_context,
+            filename="mep_cover_page.docx",
+            **(params_dict.get("persist_cover_context") or {}),
+        )
+        .call()
+    )
+
+    create_monthly_ctx = (
+        create_mep_monthly_context.validate()
+        .set_task_instance_id("create_monthly_ctx")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            filename="mep_context.docx",
+            template_path=download_content_page,
+            output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            elephant_sightings_map_path=convert_sightings_png,
+            speedmap_path=convert_speedmap_png,
+            foot_patrols_map_path=convert_foot_png,
+            vehicle_patrol_map_path=convert_vehicle_png,
+            collared_elephant_plot_paths=convert_collared_png,
+            regional_ndvi_plot_paths=convert_ndvi_png,
+            sitrep_df_path=persist_sitrep_csv,
+            **(params_dict.get("create_monthly_ctx") or {}),
+        )
+        .call()
+    )
+
+    merge_mep_docx = (
+        merge_mapbook_files.validate()
+        .set_task_instance_id("merge_mep_docx")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            cover_page_path=persist_cover_context,
+            output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            context_page_items=create_monthly_ctx,
+            filename=None,
+            **(params_dict.get("merge_mep_docx") or {}),
         )
         .call()
     )

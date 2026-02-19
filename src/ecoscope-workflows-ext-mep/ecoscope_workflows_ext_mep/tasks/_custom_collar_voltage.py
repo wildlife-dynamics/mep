@@ -95,7 +95,6 @@ def process_collar_voltage_charts(
     groups = relocs.groupby(by=["extra__subject__name", "extra__subjectsource__id"])
 
     logger.info(f"Processing voltage charts for {len(groups)} subjects")
-    print(f"Processing voltage charts for {len(groups)} subjects")
     
     # Process each group
     file_paths = []
@@ -160,8 +159,8 @@ def process_collar_voltage_charts(
                 continue
                 
             if hist_df.empty:
-                print(f"WARNING: No historical data for {subject_name}")
-                print(f"FALLBACK: Using current period data for baseline calculations")
+                logger.info(f"WARNING: No historical data for {subject_name}")
+                logger.info(f"FALLBACK: Using current period data for baseline calculations")
                 hist_df = curr_df.copy()
                 
             volt_upper = dataframe_column_percentile(hist_df, "voltage", 97.5)
@@ -210,6 +209,12 @@ def process_collar_voltage_charts(
                 layout_style=LayoutStyle(
                     yaxis=AxisStyle(range=[lower_y, upper_y], title="Collar Voltage"),
                     xaxis=AxisStyle(title="Time"),
+                    title=f"{subject_name}",
+                    title_x=0.5,
+                    font_size=14,
+                    font_color="#222222",
+                    plot_bgcolor="#f5f5f5",
+                    hovermode="x unified",
                 ),
             )
 
@@ -227,7 +232,4 @@ def process_collar_voltage_charts(
 
     # Log summary
     logger.info(f"Processing complete: {processed_count} charts generated, {skipped_count} subjects skipped")
-    print(f"Processing complete: {processed_count} charts generated, {skipped_count} subjects skipped")
-    
-    # CRITICAL: Return the file paths
     return file_paths

@@ -122,6 +122,19 @@ def create_mep_ctx_cover(
         "prepared_by": prepared_by,
     }
 
+# subject template
+# 1. profile photo  -- download_profile_pic
+# 2. subject information -- download_subject_info
+# 3. speedmap  -- convert_speedmap_png
+# 4. homerange map  -- convert_homerange_png
+# 5. seasonal homerange map -- convert_season_png
+# 6. nsd plot  -- convert_nsd_png
+# 7. speed plot -- convert_speed_png
+# 8. collared event plot -- convert_events_png
+# 9. mcp plot -- convert_mcp_png
+# 10. subject stats table -- persist_subject_stats
+# 11. subject occupancy table -- persist_subject_occupancy
+
 
 def validate_image_path(field_name: str, path: str) -> None:
     """Validate that an image file exists and has valid extension."""
@@ -137,21 +150,7 @@ def validate_image_path(field_name: str, path: str) -> None:
             f"Expected one of {valid_extensions}"
         )
 
-    print(f" Validated image for '{field_name}': {normalized_path}")
-
-
-# subject template
-# 1. profile photo  -- download_profile_pic
-# 2. subject information -- download_subject_info
-# 3. speedmap  -- convert_speedmap_png
-# 4. homerange map  -- convert_homerange_png
-# 5. seasonal homerange map -- convert_season_png
-# 6. nsd plot  -- convert_nsd_png
-# 7. speed plot -- convert_speed_png
-# 8. collared event plot -- convert_events_png
-# 9. mcp plot -- convert_mcp_png
-# 10. subject stats table -- persist_subject_stats
-# 11. subject occupancy table -- persist_subject_occupancy
+    logger.info(f" Validated image for '{field_name}': {normalized_path}")
 
 
 @task
@@ -197,8 +196,6 @@ def create_mep_subject_context(
         if value is None or value is SKIP_SENTINEL:
             return None
         return value
-
-    # ------------------ NORMALIZE ALL INPUTS ------------------
     profile_photo_path = unwrap_skip(profile_photo_path)
     subject_info_path = unwrap_skip(subject_info_path)
     speedmap_path = unwrap_skip(speedmap_path)
@@ -337,7 +334,7 @@ def create_mep_subject_context(
 
     # Build context dictionary (None values are allowed and will be handled by template)
     ctx = {
-        # Media paths (can be None if files don't exist)
+        # Media paths 
         "profile_photo": profile_photo_path,
         "mov_map": speedmap_path,
         "overview_map": homerange_map_path,
@@ -346,6 +343,7 @@ def create_mep_subject_context(
         "speed_plot": speed_plot_path,
         "collar_event_timeline": collared_event_plot_path,
         "mcp_plot": mcp_plot_path,
+        
         # Subject statistics
         "name": name,
         "mcp": mcp,
@@ -378,10 +376,6 @@ def create_mep_subject_context(
     logger.info(f"Created context for subject: {name}")
     logger.info(f"Media files available: {total_paths - none_paths}/{total_paths}")
     logger.debug(f"Full context: {ctx}")
-    print(f"Full context: {ctx}")
-    print(f" Created context for subject: {name}")
-    print(f" Media files available: {total_paths - none_paths}/{total_paths}")
-
     return ctx
 
 
@@ -430,11 +424,13 @@ def prepare_mep_context_for_template(
     """
     # Define which fields map to which image dimensions
     image_field_mapping = {
+        
         # Timeline/plot images (wide format)
         "collar_event_timeline": {"height": 1.58, "width": 10.54},
         "nsd_plot": {"height": 2.61, "width": 10.58},
         "speed_plot": {"height": 2.61, "width": 10.58},
         "mcp_plot": {"height": 2.61, "width": 10.58},
+        
         # Range map -- seasons
         "range_map": {"height": 7.08, "width": 5.36},
         # mov_map --speedmap
@@ -471,7 +467,6 @@ def prepare_mep_context_for_template(
                 logger.debug(f"Created InlineImage for {field_name}: {dimensions['width']}x{dimensions['height']} cm")
             except Exception as e:
                 logger.error(f"Failed to create InlineImage for {field_name}: {e}")
-                # Keep original path as fallback
                 continue
 
     return rendered_context
@@ -501,7 +496,6 @@ def create_mep_grouper_page(
     template_path = remove_file_scheme(template_path)
     output_dir = remove_file_scheme(output_dir)
 
-    # Validate paths
     if not template_path.strip():
         raise ValueError("template_path is empty after normalization")
     if not output_dir.strip():
@@ -510,20 +504,16 @@ def create_mep_grouper_page(
     if not os.path.exists(template_path):
         raise FileNotFoundError(f"Template file not found: {template_path}")
 
-    # Create output directory if it doesn't exist
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    # Generate filename if not provided
     if not filename:
         subject_name = context.get("name", "unknown")
-        # Sanitize subject name for filename
         safe_name = "".join(c for c in subject_name if c.isalnum() or c in (" ", "-", "_")).strip()
         safe_name = safe_name.replace(" ", "_")
         filename = f"{safe_name}_report_{uuid.uuid4().hex[:8]}.docx"
 
     output_path = Path(output_dir) / filename
 
-    # Validate image paths if requested
     if validate_images:
         image_fields = [
             "profile_photo",
@@ -544,14 +534,12 @@ def create_mep_grouper_page(
                     if not path.exists():
                         logger.warning(f"Image file not found for {field_name}: {value}")
 
-    # Load template
     try:
         tpl = DocxTemplate(template_path)
         logger.info(f"Loaded template: {template_path}")
     except Exception as e:
         raise ValueError(f"Failed to load templxate: {e}")
 
-    # Prepare context with inline images
     try:
         rendered_context = prepare_mep_context_for_template(
             context=context,
@@ -561,7 +549,6 @@ def create_mep_grouper_page(
     except Exception as e:
         raise ValueError(f"Failed to prepare context: {e}")
 
-    # Render and save document
     try:
         tpl.render(rendered_context)
         tpl.save(output_path)

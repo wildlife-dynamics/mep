@@ -1,22 +1,21 @@
-from typing import Annotated
-
-from ecoscope_workflows_core.annotations import AnyGeoDataFrame
-from ecoscope_workflows_core.decorators import task
-from ecoscope_workflows_core.tasks.filter._filter import TimeRange
+import pandas as pd
 from pydantic import Field
-
+from typing import Annotated
+from ecoscope_workflows_core.decorators import task
+from ecoscope_workflows_ext_ecoscope.tasks import results
+from ecoscope_workflows_core.annotations import AnyGeoDataFrame
+from ecoscope_workflows_core.tasks.filter._filter import TimeRange
+from ecoscope_workflows_core.tasks import analysis, transformation
+from ecoscope_workflows_core.tasks.transformation._extract import FieldType
+from ecoscope_workflows_core.tasks.transformation._filter import ComparisonOperator
+from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import AxisStyle, LayoutStyle, LineStyle, PlotStyle
 
 @task
 def calculate_collar_voltage(
     relocs: Annotated[AnyGeoDataFrame, Field(description="The relocation geodataframe.", exclude=True)],
     time_range: Annotated[TimeRange, Field(description="Time range filter")],
 ) -> str:
-    import pandas as pd
-    from ecoscope_workflows_core.tasks import analysis, transformation
-    from ecoscope_workflows_core.tasks.transformation._extract import FieldType
-    from ecoscope_workflows_core.tasks.transformation._filter import ComparisonOperator
-    from ecoscope_workflows_ext_ecoscope.tasks import results
-    from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import AxisStyle, LayoutStyle, LineStyle, PlotStyle
+
 
     relocs = transformation.extract_column_as_type(
         relocs, "extra__subjectsource__assigned_range", FieldType.SERIES, "extra.extra.subjectsource__assigned_range."

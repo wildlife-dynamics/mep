@@ -16,6 +16,7 @@ from ecoscope_workflows_core.tasks.config import (
     set_workflow_details as set_workflow_details,
 )
 from ecoscope_workflows_core.tasks.filter import set_time_range as set_time_range
+from ecoscope_workflows_core.tasks.groupby import set_groupers as set_groupers
 from ecoscope_workflows_core.tasks.io import set_er_connection as set_er_connection
 from ecoscope_workflows_core.tasks.io import set_gee_connection as set_gee_connection
 from ecoscope_workflows_core.tasks.skip import (
@@ -26,7 +27,6 @@ from ecoscope_workflows_core.testing import create_task_magicmock  # 🧪
 from ecoscope_workflows_ext_custom.tasks.results import (
     set_base_maps_pydeck as set_base_maps_pydeck,
 )
-from ecoscope_workflows_ext_ste.tasks import set_custom_groupers as set_custom_groupers
 
 get_events = create_task_magicmock(  # 🧪
     anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
@@ -98,11 +98,21 @@ from ecoscope_workflows_core.tasks.results import gather_dashboard as gather_das
 from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
 from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
 from ecoscope_workflows_ext_mep.tasks import (
+    create__mep_context_page as create__mep_context_page,
+)
+from ecoscope_workflows_ext_mep.tasks import (
+    create_mep_monthly_context as create_mep_monthly_context,
+)
+from ecoscope_workflows_ext_mep.tasks import (
+    create_monthly_ctx_cover as create_monthly_ctx_cover,
+)
+from ecoscope_workflows_ext_mep.tasks import (
     process_aoi_ndvi_charts as process_aoi_ndvi_charts,
 )
 from ecoscope_workflows_ext_ste.tasks import (
     fetch_and_persist_file as fetch_and_persist_file,
 )
+from ecoscope_workflows_ext_ste.tasks import merge_mapbook_files as merge_mapbook_files
 from ecoscope_workflows_ext_ste.tasks import transform_gdf_crs as transform_gdf_crs
 
 from ..params import Params
@@ -162,7 +172,7 @@ def main(params: Params):
         "persist_speedmap_html": ["draw_speedmap"],
         "get_sitrep_config": [],
         "generate_sitrep_df": ["er_client_name", "get_sitrep_config", "time_range"],
-        "persist_livestock_events_gpkg": ["generate_sitrep_df"],
+        "persist_sitrep_csv": ["generate_sitrep_df"],
         "vehicle_patrols": ["er_client_name", "time_range"],
         "vehicle_patrol_reloc": ["vehicle_patrols"],
         "vehicle_patrol_traj": ["vehicle_patrol_reloc"],
@@ -199,6 +209,21 @@ def main(params: Params):
         "convert_foot_png": ["foot_patrol_map"],
         "convert_ndvi_png": ["process_ndvi_charts"],
         "convert_collared_png": ["process_subject_charts"],
+        "download_cover_page": [],
+        "download_content_page": [],
+        "create_cover_tpl_context": ["time_range"],
+        "persist_cover_context": ["download_cover_page", "create_cover_tpl_context"],
+        "create_monthly_ctx": [
+            "download_content_page",
+            "convert_sightings_png",
+            "convert_speedmap_png",
+            "convert_foot_png",
+            "convert_vehicle_png",
+            "convert_collared_png",
+            "convert_ndvi_png",
+            "persist_sitrep_csv",
+        ],
+        "merge_mep_docx": ["persist_cover_context", "create_monthly_ctx"],
         "mep_monthly_dashboard": ["workflow_details", "time_range", "groupers"],
     }
 
@@ -236,7 +261,7 @@ def main(params: Params):
             method="call",
         ),
         "groupers": Node(
-            async_task=set_custom_groupers.validate()
+            async_task=set_groupers.validate()
             .set_task_instance_id("groupers")
             .handle_errors()
             .with_tracing()
@@ -406,7 +431,7 @@ def main(params: Params):
                         200,
                     ],
                     "get_line_width": 0.55,
-                    "get_radius": 5,
+                    "get_radius": 3.55,
                     "opacity": 0.75,
                     "stroked": True,
                 },
@@ -523,6 +548,7 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
+                "filter": "clean",
                 "client": DependsOn("er_client_name"),
                 "time_range": DependsOn("time_range"),
                 "subject_group_name": DependsOn("subject_group_var"),
@@ -613,6 +639,7 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
+                "filter": "clean",
                 "client": DependsOn("er_client_name"),
                 "time_range": DependsOn("get_custom_previous_period"),
                 "subject_group_name": DependsOn("subject_group_var"),
@@ -997,9 +1024,9 @@ def main(params: Params):
             | (params_dict.get("generate_sitrep_df") or {}),
             method="call",
         ),
-        "persist_livestock_events_gpkg": Node(
+        "persist_sitrep_csv": Node(
             async_task=persist_df.validate()
-            .set_task_instance_id("persist_livestock_events_gpkg")
+            .set_task_instance_id("persist_sitrep_csv")
             .handle_errors()
             .with_tracing()
             .skipif(
@@ -1016,7 +1043,7 @@ def main(params: Params):
                 "filename": "sitrep_report",
                 "df": DependsOn("generate_sitrep_df"),
             }
-            | (params_dict.get("persist_livestock_events_gpkg") or {}),
+            | (params_dict.get("persist_sitrep_csv") or {}),
             method="call",
         ),
         "vehicle_patrols": Node(
@@ -1786,6 +1813,144 @@ def main(params: Params):
                 },
             }
             | (params_dict.get("convert_collared_png") or {}),
+            method="call",
+        ),
+        "download_cover_page": Node(
+            async_task=fetch_and_persist_file.validate()
+            .set_task_instance_id("download_cover_page")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "url": "https://www.dropbox.com/scl/fi/95fux8w00h9u4wg2sufij/mep_monthly_report.docx?rlkey=nbibg8ulnlz0w4q53jw2db6y3&st=6own6h01&dl=0",
+                "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "overwrite_existing": False,
+                "retries": 3,
+                "unzip": False,
+            }
+            | (params_dict.get("download_cover_page") or {}),
+            method="call",
+        ),
+        "download_content_page": Node(
+            async_task=fetch_and_persist_file.validate()
+            .set_task_instance_id("download_content_page")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "url": "https://www.dropbox.com/scl/fi/1u7d68pr8hvc27gf2ns85/mep_monthly_indv_report.docx?rlkey=wss0x8sa9i5fgl9yjco7paa03&st=b8fsdnxg&dl=0",
+                "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "overwrite_existing": False,
+                "retries": 3,
+                "unzip": False,
+            }
+            | (params_dict.get("download_content_page") or {}),
+            method="call",
+        ),
+        "create_cover_tpl_context": Node(
+            async_task=create_monthly_ctx_cover.validate()
+            .set_task_instance_id("create_cover_tpl_context")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "report_period": DependsOn("time_range"),
+                "prepared_by": "Ecoscope",
+            }
+            | (params_dict.get("create_cover_tpl_context") or {}),
+            method="call",
+        ),
+        "persist_cover_context": Node(
+            async_task=create__mep_context_page.validate()
+            .set_task_instance_id("persist_cover_context")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "template_path": DependsOn("download_cover_page"),
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "context": DependsOn("create_cover_tpl_context"),
+                "filename": "mep_cover_page.docx",
+            }
+            | (params_dict.get("persist_cover_context") or {}),
+            method="call",
+        ),
+        "create_monthly_ctx": Node(
+            async_task=create_mep_monthly_context.validate()
+            .set_task_instance_id("create_monthly_ctx")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "filename": "mep_context.docx",
+                "template_path": DependsOn("download_content_page"),
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "elephant_sightings_map_path": DependsOn("convert_sightings_png"),
+                "speedmap_path": DependsOn("convert_speedmap_png"),
+                "foot_patrols_map_path": DependsOn("convert_foot_png"),
+                "vehicle_patrol_map_path": DependsOn("convert_vehicle_png"),
+                "collared_elephant_plot_paths": DependsOn("convert_collared_png"),
+                "regional_ndvi_plot_paths": DependsOn("convert_ndvi_png"),
+                "sitrep_df_path": DependsOn("persist_sitrep_csv"),
+            }
+            | (params_dict.get("create_monthly_ctx") or {}),
+            method="call",
+        ),
+        "merge_mep_docx": Node(
+            async_task=merge_mapbook_files.validate()
+            .set_task_instance_id("merge_mep_docx")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "cover_page_path": DependsOn("persist_cover_context"),
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "context_page_items": DependsOn("create_monthly_ctx"),
+                "filename": None,
+            }
+            | (params_dict.get("merge_mep_docx") or {}),
             method="call",
         ),
         "mep_monthly_dashboard": Node(

@@ -166,7 +166,6 @@ def get_sitrep_event_config(region_column: str = "region") -> Dict[str, Dict[str
 
 
 def _download_events(er_io, params, since_filter, until_filter):
-    print(params["event_type"])
     try:
         df = er_io.get_events(
             event_type=params["event_id"], 
@@ -205,7 +204,6 @@ def _download_events(er_io, params, since_filter, until_filter):
         df["time"] = pd.to_datetime(df["time"])
         df["sitrep_comment"] = df.apply(params["sitrep_func"], axis=1)
         df["event_type"] = params["event_type"]
-        print("df", df.columns)
         df["region"] = df[params["region"]]
         df_locations = df[~df.geometry.is_empty] 
         df["latitude"] = df_locations.geometry.y
@@ -296,7 +294,6 @@ def _compile_and_format_sitrep(
     sitrep_df["time"] = sitrep_df["time"].dt.strftime("%d-%b-%Y")
     sitrep_df.rename(columns=df_cols, inplace=True)
     logger.info(f"Compiled sitrep with {len(sitrep_df)} total events")
-    print(f"Compiled sitrep with {len(sitrep_df)} total events")   
     return sitrep_df
 
 @task

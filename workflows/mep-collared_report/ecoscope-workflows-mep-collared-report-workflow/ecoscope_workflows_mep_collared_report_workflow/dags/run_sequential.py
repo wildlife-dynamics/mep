@@ -13,6 +13,7 @@ from ecoscope_workflows_core.tasks.config import (
     set_workflow_details as set_workflow_details,
 )
 from ecoscope_workflows_core.tasks.filter import set_time_range as set_time_range
+from ecoscope_workflows_core.tasks.groupby import set_groupers as set_groupers
 from ecoscope_workflows_core.tasks.groupby import split_groups as split_groups
 from ecoscope_workflows_core.tasks.io import persist_text as persist_text
 from ecoscope_workflows_core.tasks.io import set_er_connection as set_er_connection
@@ -154,9 +155,7 @@ from ecoscope_workflows_ext_ste.tasks import (
 from ecoscope_workflows_ext_ste.tasks import (
     custom_trajectory_segment_filter as custom_trajectory_segment_filter,
 )
-from ecoscope_workflows_ext_ste.tasks import (
-    custom_view_state_from_gdf as custom_view_state_from_gdf,
-)
+from ecoscope_workflows_ext_ste.tasks import envelope_gdf as envelope_gdf
 from ecoscope_workflows_ext_ste.tasks import (
     fetch_and_persist_file as fetch_and_persist_file,
 )
@@ -164,8 +163,8 @@ from ecoscope_workflows_ext_ste.tasks import filter_df_cols as filter_df_cols
 from ecoscope_workflows_ext_ste.tasks import generate_mcp_gdf as generate_mcp_gdf
 from ecoscope_workflows_ext_ste.tasks import get_file_path as get_file_path
 from ecoscope_workflows_ext_ste.tasks import merge_mapbook_files as merge_mapbook_files
-from ecoscope_workflows_ext_ste.tasks import set_custom_groupers as set_custom_groupers
 from ecoscope_workflows_ext_ste.tasks import split_gdf_by_column as split_gdf_by_column
+from ecoscope_workflows_ext_ste.tasks import view_state_deck_gdf as view_state_deck_gdf
 from ecoscope_workflows_ext_ste.tasks import zip_groupbykey as zip_groupbykey
 
 from ..params import Params
@@ -207,7 +206,7 @@ def main(params: Params):
     )
 
     groupers = (
-        set_custom_groupers.validate()
+        set_groupers.validate()
         .set_task_instance_id("groupers")
         .handle_errors()
         .with_tracing()
@@ -218,7 +217,7 @@ def main(params: Params):
             ],
             unpack_depth=1,
         )
-        .partial(groupers=["subject_name"], **(params_dict.get("groupers") or {}))
+        .partial(**(params_dict.get("groupers") or {}))
         .call()
     )
 
@@ -546,7 +545,7 @@ def main(params: Params):
     )
 
     rename_subject_cols = (
-        map_columns.validate()
+        transform_columns.validate()
         .set_task_instance_id("rename_subject_cols")
         .handle_errors()
         .with_tracing()
@@ -567,21 +566,7 @@ def main(params: Params):
                 "additional__tm_animal_id",
                 "additional__external_name",
             ],
-            retain_columns=[
-                "id",
-                "name",
-                "hex",
-                "additional__rgb",
-                "additional__sex",
-                "additional__Bio",
-                "additional__DOB",
-                "additional__notes",
-                "additional__status",
-                "additional__region",
-                "additional__country",
-                "additional__id_photo",
-                "additional__distribution",
-            ],
+            retain_columns=[],
             rename_columns={
                 "id": "groupby_col",
                 "name": "subject_name",
@@ -597,6 +582,8 @@ def main(params: Params):
                 "additional__id_photo": "photo",
                 "additional__distribution": "distribution",
             },
+            skip_missing_rename=True,
+            required_columns=["id", "name"],
             df=normalize_subject_info,
             **(params_dict.get("rename_subject_cols") or {}),
         )
@@ -616,6 +603,7 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
+            filter="clean",
             client=er_client_name,
             time_range=time_range,
             subject_group_name=subject_group_var,
@@ -675,6 +663,7 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
+            raise_if_not_found=True,
             drop_columns=[],
             retain_columns=[],
             rename_columns={
@@ -1030,6 +1019,7 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
+            raise_if_not_found=True,
             df=classify_trajectories_speed_bins,
             drop_columns=[],
             retain_columns=[],
@@ -1164,8 +1154,24 @@ def main(params: Params):
         .mapvalues(argnames=["geodataframe"], argvalues=filter_speedmap_gdf)
     )
 
+    gdf_bounding_extent = (
+        envelope_gdf.validate()
+        .set_task_instance_id("gdf_bounding_extent")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(**(params_dict.get("gdf_bounding_extent") or {}))
+        .mapvalues(argnames=["gdf"], argvalues=filter_speedmap_gdf)
+    )
+
     zoom_gdf_extent = (
-        custom_view_state_from_gdf.validate()
+        view_state_deck_gdf.validate()
         .set_task_instance_id("zoom_gdf_extent")
         .handle_errors()
         .with_tracing()
@@ -1176,12 +1182,8 @@ def main(params: Params):
             ],
             unpack_depth=1,
         )
-        .partial(
-            max_zoom=20,
-            padding_percent=0.05,
-            **(params_dict.get("zoom_gdf_extent") or {}),
-        )
-        .mapvalues(argnames=["gdf"], argvalues=filter_speedmap_gdf)
+        .partial(pitch=0, bearing=0, **(params_dict.get("zoom_gdf_extent") or {}))
+        .mapvalues(argnames=["gdf"], argvalues=gdf_bounding_extent)
     )
 
     zoom_speed_gdf_extent = (
@@ -3173,7 +3175,7 @@ def main(params: Params):
             screenshot_config={
                 "full_page": False,
                 "device_scale_factor": 2.0,
-                "wait_for_timeout": 100,
+                "wait_for_timeout": 40000,
                 "max_concurrent_pages": 1,
                 "width": 602,
                 "height": 855,
@@ -3219,7 +3221,7 @@ def main(params: Params):
             screenshot_config={
                 "full_page": False,
                 "device_scale_factor": 2.0,
-                "wait_for_timeout": 100,
+                "wait_for_timeout": 40000,
                 "max_concurrent_pages": 1,
                 "width": 1280,
                 "height": 720,
@@ -3265,7 +3267,7 @@ def main(params: Params):
             screenshot_config={
                 "full_page": False,
                 "device_scale_factor": 2.0,
-                "wait_for_timeout": 100,
+                "wait_for_timeout": 40000,
                 "max_concurrent_pages": 1,
                 "width": 602,
                 "height": 855,

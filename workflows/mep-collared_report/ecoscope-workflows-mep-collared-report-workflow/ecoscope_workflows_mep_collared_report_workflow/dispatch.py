@@ -5,12 +5,6 @@ import traceback
 
 from pydantic import BaseModel
 
-from .dags import (
-    run_async,
-    run_async_mock_io,
-    run_sequential,
-    run_sequential_mock_io,
-)
 from .params import Params
 from .response import ResponseModel
 
@@ -22,12 +16,20 @@ def dispatch(
 ) -> ResponseModel:
     match execution_mode, mock_io:
         case ("async", True):
+            from .dags import run_async_mock_io
+
             dispatcher = run_async_mock_io
         case ("async", False):
+            from .dags import run_async
+
             dispatcher = run_async
         case ("sequential", True):
+            from .dags import run_sequential_mock_io
+
             dispatcher = run_sequential_mock_io
         case ("sequential", False):
+            from .dags import run_sequential
+
             dispatcher = run_sequential
         case _:
             raise ValueError(f"Invalid execution mode: {execution_mode}")

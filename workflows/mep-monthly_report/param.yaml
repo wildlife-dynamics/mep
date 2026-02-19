@@ -1,6 +1,6 @@
 workflow_details:
   description: ''
-  name: mep_monthly
+  name: custom_
 time_range:
   timezone:
     label: UTC
@@ -17,8 +17,8 @@ configure_base_maps:
       opacity: 1
       max_zoom: 20
     - url: >-
-        https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}
-      opacity: 0.25
+        https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}
+      opacity: 0.2
       max_zoom: 20
 er_client_name:
   data_source:
