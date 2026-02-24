@@ -217,7 +217,10 @@ def main(params: Params):
             ],
             unpack_depth=1,
         )
-        .partial(**(params_dict.get("groupers") or {}))
+        .partial(
+            groupers=[{"index_name": "subject_name"}],
+            **(params_dict.get("groupers") or {}),
+        )
         .call()
     )
 

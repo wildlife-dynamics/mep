@@ -222,29 +222,6 @@ class TimezoneInfo(BaseModel):
     utc: str = Field(..., title="Utc")
 
 
-class SpatialGrouper(BaseModel):
-    spatial_index_name: str = Field(..., title="Spatial Regions")
-
-
-class TemporalIndex(str, Enum):
-    Year__example__2024_ = "%Y"
-    Month__example__September_ = "%B"
-    Year_and_Month__example__2023_01_ = "%Y-%m"
-    Day_of_the_year_as_a_number__example__365_ = "%j"
-    Day_of_the_month_as_a_number__example__31_ = "%d"
-    Day_of_the_week__example__Sunday_ = "%A"
-    Hour__24_hour_clock__as_number__example__22_ = "%H"
-    Date__example__2025_01_31_ = "%Y-%m-%d"
-
-
-class TemporalGrouper(BaseModel):
-    temporal_index: TemporalIndex = Field(..., title="Time")
-
-
-class ValueGrouper(BaseModel):
-    index_name: str = Field(..., title="Category")
-
-
 class EarthRangerConnection(BaseModel):
     name: str = Field(..., title="Data Source")
 
@@ -272,17 +249,6 @@ class TimeRange(BaseModel):
     timezone: TimezoneInfo | None = Field(None, title="Timezone")
     time_format: str | None = Field(
         "%d %b %Y %H:%M:%S", description="The time format", title="Time Format"
-    )
-
-
-class Groupers(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    groupers: list[ValueGrouper | TemporalGrouper | SpatialGrouper] | None = Field(
-        None,
-        description="            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            ",
-        title=" ",
     )
 
 
@@ -325,7 +291,6 @@ class Params(BaseModel):
         description="Choose the period of time to analyze.",
         title="Define analysis time range",
     )
-    groupers: Groupers | None = Field(None, title="Configure grouping strategy")
     configure_base_maps: ConfigureBaseMaps | None = Field(
         None, title="Configure base map layers"
     )

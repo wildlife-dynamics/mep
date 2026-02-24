@@ -472,7 +472,14 @@ def main(params: Params):
                 unpack_depth=1,
             )
             .set_executor("lithops"),
-            partial=(params_dict.get("groupers") or {}),
+            partial={
+                "groupers": [
+                    {
+                        "index_name": "subject_name",
+                    },
+                ],
+            }
+            | (params_dict.get("groupers") or {}),
             method="call",
         ),
         "configure_base_maps": Node(
