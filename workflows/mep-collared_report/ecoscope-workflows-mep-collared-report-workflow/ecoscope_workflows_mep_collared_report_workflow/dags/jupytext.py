@@ -248,9 +248,7 @@ time_range = (
 # %%
 # parameters
 
-groupers_params = dict(
-    groupers=...,
-)
+groupers_params = dict()
 
 # %%
 # call the task
@@ -267,7 +265,7 @@ groupers = (
         ],
         unpack_depth=1,
     )
-    .partial(**groupers_params)
+    .partial(groupers=[{"index_name": "subject_name"}], **groupers_params)
     .call()
 )
 
