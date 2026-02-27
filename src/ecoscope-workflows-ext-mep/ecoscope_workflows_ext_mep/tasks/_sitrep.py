@@ -8,6 +8,7 @@ from ecoscope_workflows_core.annotations import AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.connections import EarthRangerClient
 from ecoscope_workflows_ext_ecoscope.tasks.transformation._normalize import normalize_json_column
 
+
 # Sitrep formatting functions
 def sitrep_illegal_charcoal(x: pd.Series) -> str:
     """Format illegal charcoal event details."""

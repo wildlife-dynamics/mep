@@ -26,6 +26,7 @@ from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import (
     draw_historic_timeseries,
 )
 
+
 @task
 def process_collar_voltage_charts(
     relocs: Annotated[

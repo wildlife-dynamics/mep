@@ -6,6 +6,7 @@ from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_ext_custom.tasks.results._map import ViewState
 from ecoscope_workflows_ext_custom.tasks.io._html_to_png import ScreenshotConfig, html_to_png
 
+
 @task
 def zoom_map_and_screenshot(
     input_file: Optional[Union[str, Path]] = None,

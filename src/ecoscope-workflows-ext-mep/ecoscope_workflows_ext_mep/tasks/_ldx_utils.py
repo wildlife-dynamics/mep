@@ -7,6 +7,7 @@ from typing import Union, cast, Optional, Dict, List
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AnyDataFrame
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
+
 @task
 def build_template_region_lookup(
     gdf: AnyGeoDataFrame,

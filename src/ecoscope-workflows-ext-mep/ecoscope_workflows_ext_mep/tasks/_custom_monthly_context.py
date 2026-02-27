@@ -103,6 +103,7 @@ def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         print(f"Error reading CSV file {file_path}: {e}")
         return pd.DataFrame()
 
+
 @task
 def create_monthly_ctx_cover(
     report_period: TimeRange,

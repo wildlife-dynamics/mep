@@ -16,6 +16,7 @@ from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_schem
 
 warnings.filterwarnings("ignore")
 
+
 @task
 def create__mep_context_page(
     template_path: Annotated[
@@ -86,6 +87,7 @@ def create__mep_context_page(
     doc.save(output_path)
     return str(output_path)
 
+
 @task
 def create_mep_ctx_cover(
     count: int,
@@ -132,6 +134,7 @@ def create_mep_ctx_cover(
 # 10. subject stats table -- persist_subject_stats
 # 11. subject occupancy table -- persist_subject_occupancy
 
+
 def validate_image_path(field_name: str, path: str) -> None:
     """Validate that an image file exists and has valid extension."""
     normalized_path = remove_file_scheme(path)
@@ -147,6 +150,7 @@ def validate_image_path(field_name: str, path: str) -> None:
         )
 
     print(f" Validated image for '{field_name}': {normalized_path}")
+
 
 @task
 def create_mep_subject_context(

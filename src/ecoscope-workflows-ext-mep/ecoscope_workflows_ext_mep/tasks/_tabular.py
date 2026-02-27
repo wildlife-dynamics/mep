@@ -9,6 +9,7 @@ from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.tasks.analysis._summary import SummaryParam
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
+
 @task
 def compute_maturity(
     subject_df: AnyDataFrame,

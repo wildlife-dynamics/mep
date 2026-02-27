@@ -11,6 +11,7 @@ from ecoscope_workflows_ext_ecoscope.connections import EarthRangerClient
 from ecoscope_workflows_core.annotations import AdvancedField, AnyDataFrame
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
+
 @task
 def get_subject_df(
     client: EarthRangerClient,
@@ -79,7 +80,6 @@ def persist_subject_photo(
     image_type: str = ".png",
     overwrite_existing: bool = True,
 ) -> Optional[str]:
-
     def extract_url(value) -> Optional[str]:
         """Safely extract a URL string from str, dict, or other types."""
         if isinstance(value, str):
@@ -162,11 +162,10 @@ def format_date(date_str: str) -> str:
             continue
     return s
 
+
 @task
 def process_subject_information(
-    subject_df: AnyDataFrame, 
-    output_path: Union[str, Path], 
-    maxlen: int = 1000
+    subject_df: AnyDataFrame, output_path: Union[str, Path], maxlen: int = 1000
 ) -> Optional[AnyDataFrame]:
     if output_path is None or str(output_path).strip() == "":
         output_path = os.getcwd()
@@ -176,11 +175,7 @@ def process_subject_information(
     os.makedirs(output_path, exist_ok=True)
 
     if subject_df.empty:
-        empty_cols = [
-            "subject_name", "dob", "sex", 
-            "country", "notes", "status", 
-            "status_raw", "bio", "distribution"
-            ]
+        empty_cols = ["subject_name", "dob", "sex", "country", "notes", "status", "status_raw", "bio", "distribution"]
         return cast(AnyDataFrame, pd.DataFrame([{col: "" for col in empty_cols}]))
 
     def process_single_subject(row: pd.Series) -> Dict[str, str]:

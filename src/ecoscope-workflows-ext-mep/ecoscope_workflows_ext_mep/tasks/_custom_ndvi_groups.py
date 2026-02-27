@@ -15,6 +15,7 @@ from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import (
 )
 from ecoscope_workflows_ext_ecoscope.tasks.io._earthengine import calculate_ndvi_range
 
+
 @task
 def process_aoi_ndvi_charts(
     df: Annotated[
