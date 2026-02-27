@@ -17,6 +17,7 @@ yq = "*"
 hatch = "*"
 pip="*"
 hatch-vcs = "*"
+virtualenv = "20.39.0.*"
 
 [feature.compile.dependencies]
 ecoscope-workflows-ext-mep = "*"
