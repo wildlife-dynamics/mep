@@ -1,5 +1,4 @@
 import os
-import logging
 from pydantic import Field
 from typing import Annotated, Union, List
 from ecoscope_workflows_core.decorators import task
@@ -15,9 +14,6 @@ from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import (
     draw_historic_timeseries,
 )
 from ecoscope_workflows_ext_ecoscope.tasks.io._earthengine import calculate_ndvi_range
-
-
-logger = logging.getLogger(__name__)
 
 
 @task
@@ -41,7 +37,7 @@ def process_aoi_ndvi_charts(
 
     # Get unique ranch names
     aoi_names = df[aoi_column].unique()
-    logger.info(f"Processing NDVI charts for {len(aoi_names)} ranches")
+    print(f"Processing NDVI charts for {len(aoi_names)} ranches")
 
     if output_dir is None or str(output_dir).strip() == "":
         output_dir = os.getcwd()
@@ -54,21 +50,21 @@ def process_aoi_ndvi_charts(
 
     # Process each ranch
     for idx, aoi_name in enumerate(aoi_names, 1):
-        logger.info(f"Processing ranch {idx}/{len(aoi_names)}: {aoi_name}")
+        print(f"Processing ranch {idx}/{len(aoi_names)}: {aoi_name}")
 
         try:
             aoi = df[df[aoi_column] == aoi_name].copy()
 
             if aoi.empty:
-                logger.warning(f"No data found for ranch: {aoi_name}")
+                print(f"No data found for ranch: {aoi_name}")
                 continue
 
             if not aoi.geometry.is_valid.all():
-                logger.warning(f"Invalid geometries found for ranch: {aoi_name}, attempting repair")
+                print(f"Invalid geometries found for ranch: {aoi_name}, attempting repair")
                 aoi["geometry"] = aoi.geometry.buffer(0)
 
                 if not aoi.geometry.is_valid.all():
-                    logger.error(f"Could not repair geometries for ranch: {aoi_name}")
+                    print(f"Could not repair geometries for ranch: {aoi_name}")
                     continue
 
             # Calculate NDVI range
@@ -135,10 +131,10 @@ def process_aoi_ndvi_charts(
             file_path = persist_text(ndvi_chart, str(output_dir), f"{safe_name}.html")
 
             file_paths.append(file_path)
-            logger.info(f"Saved chart for {aoi_name} to {file_path}")
+            print(f"Saved chart for {aoi_name} to {file_path}")
 
         except Exception as e:
-            logger.error(f"Failed to process ranch {aoi_name}: {e}")
+            print(f"Failed to process ranch {aoi_name}: {e}")
             continue
 
     return file_paths

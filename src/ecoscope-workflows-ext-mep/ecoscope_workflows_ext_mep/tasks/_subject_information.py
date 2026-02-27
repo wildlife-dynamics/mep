@@ -1,7 +1,6 @@
 import os
 import hashlib
 import ecoscope
-import logging
 import pandas as pd
 from pydantic import Field
 from pathlib import Path
@@ -11,8 +10,6 @@ from typing import Union, Annotated, cast, Optional, Dict
 from ecoscope_workflows_ext_ecoscope.connections import EarthRangerClient
 from ecoscope_workflows_core.annotations import AdvancedField, AnyDataFrame
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
-
-logger = logging.getLogger(__name__)
 
 
 @task
@@ -83,6 +80,22 @@ def persist_subject_photo(
     image_type: str = ".png",
     overwrite_existing: bool = True,
 ) -> Optional[str]:
+    def extract_url(value) -> Optional[str]:
+        """Safely extract a URL string from str, dict, or other types."""
+        if isinstance(value, str):
+            return value.strip() or None
+        if isinstance(value, dict):
+            for key in ("url", "href", "link", "value", "src"):
+                if key in value:
+                    candidate = str(value[key]).strip()
+                    if candidate.startswith(("http://", "https://")):
+                        return candidate
+            # Fallback: scan all values in the dict
+            for v in value.values():
+                if isinstance(v, str) and v.startswith(("http://", "https://")):
+                    return v.strip()
+        return None
+
     if output_path is None or str(output_path).strip() == "":
         output_path = os.getcwd()
     else:
@@ -97,15 +110,17 @@ def persist_subject_photo(
         return None
 
     last_file_path: Optional[Path] = None
-    for idx, url in subject_df[column].dropna().items():
-        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
-            logger.warning(f"Skipping invalid URL at index {idx}: {url}")
-            print(f"Skipping invalid URL at index {idx}: {url}")
+
+    for idx, raw in subject_df[column].dropna().items():
+        url = extract_url(raw)
+
+        if not url or not url.startswith(("http://", "https://")):
+            print(f"Skipping invalid URL at index {idx}: {raw!r}")
             continue
 
         try:
-            df_subset = subject_df.loc[[idx]]
-            row_hash = hashlib.sha256(pd.util.hash_pandas_object(df_subset, index=True).values).hexdigest()
+            # Hash the URL string directly — avoids unhashable type errors from mixed-type cells
+            row_hash = hashlib.sha256(url.encode()).hexdigest()
             filename = f"profile_photo_{row_hash[:3]}"
 
             if not image_type.startswith("."):
@@ -114,9 +129,9 @@ def persist_subject_photo(
             file_path = output_path / f"{filename}{image_type}"
             processed_url = url.replace("dl=0", "dl=1") if "dropbox.com" in url else url
             ecoscope.io.utils.download_file(processed_url, str(file_path), overwrite_existing)
-            logger.info(f"Downloaded profile photo for index {idx} to {file_path}")
             print(f"Downloaded profile photo for index {idx} to {file_path}")
             last_file_path = file_path
+
         except Exception as e:
             print(f"Error processing URL at index {idx} ({url}): {e}")
             continue

@@ -1,9 +1,6 @@
-import logging
 from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_ext_custom.tasks.results._map import ViewState
 from ecoscope_workflows_ext_ste.tasks._mapdeck_utils import _zoom_from_bbox
-
-logger = logging.getLogger(__name__)
 
 
 @task

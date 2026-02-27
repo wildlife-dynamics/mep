@@ -1,5 +1,4 @@
 import os
-import logging
 import pandas as pd
 from pathlib import Path
 from pydantic import Field
@@ -9,8 +8,6 @@ from ecoscope_workflows_ext_ecoscope.tasks import analysis
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.tasks.analysis._summary import SummaryParam
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
-
-logger = logging.getLogger(__name__)
 
 
 @task
@@ -106,18 +103,18 @@ def compute_subject_stats(
     etd_km2 = 0.0
 
     if etd_df is None:
-        logger.info("ETD DataFrame is None")
+        print("ETD DataFrame is None")
     elif etd_df.empty:
-        logger.info("ETD DataFrame is empty")
+        print("ETD DataFrame is empty")
     else:
-        logger.info("ETD DataFrame provided")
-        logger.info(f" - Shape: {etd_df.shape}")
-        logger.info(f" - Columns: {etd_df.columns.tolist()}")
-        logger.info(f" - CRS: {etd_df.crs}")
+        print("ETD DataFrame provided")
+        print(f" - Shape: {etd_df.shape}")
+        print(f" - Columns: {etd_df.columns.tolist()}")
+        print(f" - CRS: {etd_df.crs}")
 
         etd_km2 = round(float(etd_df[etd_df["percentile"] >= 99.9]["area_sqkm"].sum()), 1)
 
-    logger.info(f"Final ETD value: {etd_km2} km²")
+    print(f"Final ETD value: {etd_km2} km²")
 
     # Calculate time tracked
     tmin = traj_gdf["segment_start"].min()

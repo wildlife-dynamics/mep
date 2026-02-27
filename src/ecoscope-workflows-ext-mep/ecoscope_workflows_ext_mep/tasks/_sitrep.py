@@ -1,4 +1,3 @@
-import logging
 import pandas as pd
 from datetime import datetime
 import geopandas as gpd
@@ -8,9 +7,6 @@ from ecoscope_workflows_core.tasks.filter._filter import TimeRange
 from ecoscope_workflows_core.annotations import AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.connections import EarthRangerClient
 from ecoscope_workflows_ext_ecoscope.tasks.transformation._normalize import normalize_json_column
-
-
-logger = logging.getLogger(__name__)
 
 
 # Sitrep formatting functions
@@ -181,7 +177,7 @@ def _download_events(er_io, params, since_filter, until_filter):
     except AssertionError:
         return gpd.GeoDataFrame()
     if "event_details" not in df.columns:
-        logger.error("event_details column not found in DataFrame. Ending execution.")
+        print("event_details column not found in DataFrame. Ending execution.")
         return gpd.GeoDataFrame()
     else:
         for column in ["event_details", "reported_by"]:
@@ -223,7 +219,7 @@ def _download_all_events(
     since_str = _format_timestamp(time_range.since)
     until_str = _format_timestamp(time_range.until)
 
-    logger.info(f"Downloading events from {since_str} to {until_str}")
+    print(f"Downloading events from {since_str} to {until_str}")
 
     for event_key, event_config in event_details.items():
         try:
@@ -236,12 +232,12 @@ def _download_all_events(
 
             if not df.empty:
                 downloaded_events.append(df)
-                logger.info(f"Downloaded {len(df)} events for {event_key}")
+                print(f"Downloaded {len(df)} events for {event_key}")
             else:
-                logger.info(f"No events found for {event_key}")
+                print(f"No events found for {event_key}")
 
         except Exception as e:
-            logger.error(f"Failed to download events for {event_key}: {e}", exc_info=True)
+            print(f"Failed to download events for {event_key}: {e}", exc_info=True)
             continue
 
     return downloaded_events
@@ -277,7 +273,7 @@ def _clean_event_dataframes(
         cols_to_keep = [col for col in selected_cols if col in df.columns]
 
         if not cols_to_keep:
-            logger.warning("No valid columns found in dataframe. Skipping.")
+            print("No valid columns found in dataframe. Skipping.")
             continue
 
         df = df[cols_to_keep]
@@ -295,7 +291,7 @@ def _compile_and_format_sitrep(
     sitrep_df.sort_values("time", inplace=True, ascending=False)
     sitrep_df["time"] = sitrep_df["time"].dt.strftime("%d-%b-%Y")
     sitrep_df.rename(columns=df_cols, inplace=True)
-    logger.info(f"Compiled sitrep with {len(sitrep_df)} total events")
+    print(f"Compiled sitrep with {len(sitrep_df)} total events")
     return sitrep_df
 
 
@@ -329,7 +325,7 @@ def compile_sitrep(
     downloaded_events = _download_all_events(er_io, event_details, time_range)
 
     if not downloaded_events:
-        logger.warning("No events to compile. Returning empty DataFrame.")
+        print("No events to compile. Returning empty DataFrame.")
         return pd.DataFrame()
     cleaned_events = _clean_event_dataframes(downloaded_events, selected_cols)
     sitrep_df = _compile_and_format_sitrep(cleaned_events, df_cols)
