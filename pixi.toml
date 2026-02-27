@@ -16,7 +16,7 @@ rattler-build = "*"
 yq = "*"
 hatch = "*"
 pip="*"
-hatch-vcs="*"
+hatch-vcs = "*"
 
 [feature.compile.dependencies]
 ecoscope-workflows-ext-mep = "*"
