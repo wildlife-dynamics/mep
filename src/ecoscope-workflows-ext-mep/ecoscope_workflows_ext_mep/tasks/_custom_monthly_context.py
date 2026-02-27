@@ -1,6 +1,5 @@
 import os
 import uuid
-import logging
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -12,8 +11,6 @@ from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_core.tasks.filter._filter import TimeRange
 from ecoscope_workflows_core.skip import SKIP_SENTINEL, SkipSentinel
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
-
-logger = logging.getLogger(__name__)
 
 
 def validate_image_path(field_name: str, path: str) -> None:
@@ -30,7 +27,7 @@ def validate_image_path(field_name: str, path: str) -> None:
             f"Expected one of {valid_extensions}"
         )
 
-    logger.info(f" Validated image for '{field_name}': {normalized_path}")
+    print(f" Validated image for '{field_name}': {normalized_path}")
 
 
 def _unwrap_and_validate_list(
@@ -84,28 +81,27 @@ def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         DataFrame with data, or empty DataFrame if file is invalid
     """
     if file_path is None:
-        logger.warning("CSV file path is None")
+        print("CSV file path is None")
         return pd.DataFrame()
 
     if not file_path.strip():
-        logger.warning("CSV file path is empty string")
+        print("CSV file path is empty string")
         return pd.DataFrame()
 
     try:
         df = pd.read_csv(file_path)
         if df.empty:
-            logger.warning(f"CSV file is empty: {file_path}")
+            print(f"CSV file is empty: {file_path}")
         return df
     except FileNotFoundError:
-        logger.error(f"CSV file not found: {file_path}")
+        print(f"CSV file not found: {file_path}")
         return pd.DataFrame()
     except pd.errors.EmptyDataError:
-        logger.error(f"CSV file is empty or corrupted: {file_path}")
+        print(f"CSV file is empty or corrupted: {file_path}")
         return pd.DataFrame()
     except Exception as e:
-        logger.error(f"Error reading CSV file {file_path}: {e}")
+        print(f"Error reading CSV file {file_path}: {e}")
         return pd.DataFrame()
-
 
 @task
 def create_monthly_ctx_cover(
@@ -169,7 +165,7 @@ def create_mep_monthly_context(
 
     try:
         tpl = DocxTemplate(template_path)
-        logger.info(f"Loaded template: {template_path}")
+        print(f"Loaded template: {template_path}")
     except Exception as e:
         raise ValueError(f"Failed to load template: {e}")
 
@@ -206,7 +202,7 @@ def create_mep_monthly_context(
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         tpl.render(context)
         tpl.save(output_path)
-        logger.info(f"Saved document to: {output_path}")
+        print(f"Saved document to: {output_path}")
         return str(output_path)
     except Exception as e:
         raise ValueError(f"Failed to render or save document: {e}")

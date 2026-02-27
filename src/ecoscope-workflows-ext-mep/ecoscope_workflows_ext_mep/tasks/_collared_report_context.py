@@ -1,23 +1,20 @@
 import os
 import uuid
-import logging
 import warnings
 import pandas as pd
 from pathlib import Path
 from pydantic import Field
 from datetime import datetime
+from docxtpl import InlineImage
+from docx.shared import Inches
 from docxtpl import DocxTemplate
 from ecoscope_workflows_core.decorators import task
 from typing import Annotated, Optional, Dict, Any
 from ecoscope_workflows_core.tasks.filter._filter import TimeRange
-from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
-from docxtpl import InlineImage
-from docx.shared import Inches
 from ecoscope_workflows_core.skip import SKIP_SENTINEL, SkipSentinel
+from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
-logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore")
-
 
 @task
 def create__mep_context_page(
@@ -89,7 +86,6 @@ def create__mep_context_page(
     doc.save(output_path)
     return str(output_path)
 
-
 @task
 def create_mep_ctx_cover(
     count: int,
@@ -136,7 +132,6 @@ def create_mep_ctx_cover(
 # 10. subject stats table -- persist_subject_stats
 # 11. subject occupancy table -- persist_subject_occupancy
 
-
 def validate_image_path(field_name: str, path: str) -> None:
     """Validate that an image file exists and has valid extension."""
     normalized_path = remove_file_scheme(path)
@@ -151,8 +146,7 @@ def validate_image_path(field_name: str, path: str) -> None:
             f"Expected one of {valid_extensions}"
         )
 
-    logger.info(f" Validated image for '{field_name}': {normalized_path}")
-
+    print(f" Validated image for '{field_name}': {normalized_path}")
 
 @task
 def create_mep_subject_context(
@@ -221,26 +215,26 @@ def create_mep_subject_context(
             DataFrame with data, or empty DataFrame if file is invalid
         """
         if file_path is None:
-            logger.warning("CSV file path is None")
+            print("CSV file path is None")
             return pd.DataFrame()
 
         if not file_path.strip():
-            logger.warning("CSV file path is empty string")
+            print("CSV file path is empty string")
             return pd.DataFrame()
 
         try:
             df = pd.read_csv(file_path)
             if df.empty:
-                logger.warning(f"CSV file is empty: {file_path}")
+                print(f"CSV file is empty: {file_path}")
             return df
         except FileNotFoundError:
-            logger.error(f"CSV file not found: {file_path}")
+            print(f"CSV file not found: {file_path}")
             return pd.DataFrame()
         except pd.errors.EmptyDataError:
-            logger.error(f"CSV file is empty or corrupted: {file_path}")
+            print(f"CSV file is empty or corrupted: {file_path}")
             return pd.DataFrame()
         except Exception as e:
-            logger.error(f"Error reading CSV file {file_path}: {e}")
+            print(f"Error reading CSV file {file_path}: {e}")
             return pd.DataFrame()
 
     def safe_get_value(df: pd.DataFrame, column: str, default: Any = None, row: int = 0) -> Any:
@@ -274,17 +268,17 @@ def create_mep_subject_context(
             Original path if valid, None otherwise
         """
         if path is None:
-            logger.warning(f"{path_name} is None")
+            print(f"{path_name} is None")
             return None
 
         if not path.strip():
-            logger.warning(f"{path_name} is empty string")
+            print(f"{path_name} is empty string")
             return None
 
         from pathlib import Path
 
         if not Path(path).exists():
-            logger.warning(f"{path_name} does not exist: {path}")
+            print(f"{path_name} does not exist: {path}")
             return None
 
         return path
@@ -374,9 +368,9 @@ def create_mep_subject_context(
     none_paths = sum(1 for k, v in ctx.items() if k.endswith(("_photo", "_map", "_plot", "_timeline")) and v is None)
     total_paths = 8
 
-    logger.info(f"Created context for subject: {name}")
-    logger.info(f"Media files available: {total_paths - none_paths}/{total_paths}")
-    logger.debug(f"Full context: {ctx}")
+    print(f"Created context for subject: {name}")
+    print(f"Media files available: {total_paths - none_paths}/{total_paths}")
+    print(f"Full context: {ctx}")
     return ctx
 
 
@@ -448,12 +442,12 @@ def prepare_mep_context_for_template(
 
             # Skip if path is None or empty
             if not image_path:
-                logger.warning(f"Empty image path for field: {field_name}")
+                print(f"Empty image path for field: {field_name}")
                 continue
 
             # Verify file exists
             if not Path(image_path).exists():
-                logger.error(f"Image file not found for {field_name}: {image_path}")
+                print(f"Image file not found for {field_name}: {image_path}")
                 continue
 
             try:
@@ -463,9 +457,9 @@ def prepare_mep_context_for_template(
                     width_cm=dimensions["width"],
                     height_cm=dimensions["height"],
                 )
-                logger.debug(f"Created InlineImage for {field_name}: {dimensions['width']}x{dimensions['height']} cm")
+                print(f"Created InlineImage for {field_name}: {dimensions['width']}x{dimensions['height']} cm")
             except Exception as e:
-                logger.error(f"Failed to create InlineImage for {field_name}: {e}")
+                print(f"Failed to create InlineImage for {field_name}: {e}")
                 continue
 
     return rendered_context
@@ -531,11 +525,11 @@ def create_mep_grouper_page(
                 path = Path(value)
                 if path.suffix.lower() in (".png", ".jpg", ".jpeg", ".html"):
                     if not path.exists():
-                        logger.warning(f"Image file not found for {field_name}: {value}")
+                        print(f"Image file not found for {field_name}: {value}")
 
     try:
         tpl = DocxTemplate(template_path)
-        logger.info(f"Loaded template: {template_path}")
+        print(f"Loaded template: {template_path}")
     except Exception as e:
         raise ValueError(f"Failed to load templxate: {e}")
 
@@ -544,14 +538,14 @@ def create_mep_grouper_page(
             context=context,
             template=tpl,
         )
-        logger.info(f"Prepared context with {len(rendered_context)} fields")
+        print(f"Prepared context with {len(rendered_context)} fields")
     except Exception as e:
         raise ValueError(f"Failed to prepare context: {e}")
 
     try:
         tpl.render(rendered_context)
         tpl.save(output_path)
-        logger.info(f"Saved document to: {output_path}")
+        print(f"Saved document to: {output_path}")
         return str(output_path)
     except Exception as e:
         raise ValueError(f"Failed to render or save document: {e}")

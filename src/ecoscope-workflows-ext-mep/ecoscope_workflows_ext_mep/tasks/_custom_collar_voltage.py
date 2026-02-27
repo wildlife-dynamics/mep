@@ -1,5 +1,4 @@
 import os
-import logging
 import pandas as pd
 from pydantic import Field
 from typing import Annotated, List
@@ -26,9 +25,6 @@ from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import (
     PlotStyle,
     draw_historic_timeseries,
 )
-
-logger = logging.getLogger(__name__)
-
 
 @task
 def process_collar_voltage_charts(
@@ -91,7 +87,7 @@ def process_collar_voltage_charts(
 
     groups = relocs.groupby(by=["extra__subject__name", "extra__subjectsource__id"])
 
-    logger.info(f"Processing voltage charts for {len(groups)} subjects")
+    print(f"Processing voltage charts for {len(groups)} subjects")
 
     # Process each group
     file_paths = []
@@ -99,7 +95,7 @@ def process_collar_voltage_charts(
     processed_count = 0
 
     for (subject_name, subjectsource_id), dataframe in groups:
-        logger.info(f"Processing subject: {subject_name} (ID: {subjectsource_id})")
+        print(f"Processing subject: {subject_name} (ID: {subjectsource_id})")
 
         try:
             subjectsource_upperbound = dataframe_column_first_unique(
@@ -107,7 +103,7 @@ def process_collar_voltage_charts(
             )
 
             if not pd.isna(subjectsource_upperbound) and subjectsource_upperbound < pd.to_datetime(time_range.since):
-                logger.info(f"Skipping {subject_name}: collar deactivated before time range")
+                print(f"Skipping {subject_name}: collar deactivated before time range")
                 skipped_count += 1
                 continue
 
@@ -141,23 +137,23 @@ def process_collar_voltage_charts(
                         FieldType.FLOAT,
                         "voltage",
                     )
-                    logger.info(f"Using previous period data for {subject_name} baseline ({len(hist_df)} records)")
+                    print(f"Using previous period data for {subject_name} baseline ({len(hist_df)} records)")
                 else:
                     hist_df = pd.DataFrame()
-                    logger.warning(f"No previous period data found for {subject_name}")
+                    print(f"No previous period data found for {subject_name}")
             else:
                 # Use historical data from before time_range.since (original behavior)
                 hist_df = transformation.filter_df(dataframe, "fixtime", ComparisonOperator.LT, time_range.since)
-                logger.info(f"Using historical data before {time_range.since} for {subject_name} baseline")
+                print(f"Using historical data before {time_range.since} for {subject_name} baseline")
 
             if curr_df.empty and hist_df.empty:
-                logger.warning(f"Skipping {subject_name}: no data in current or historic range")
+                print(f"Skipping {subject_name}: no data in current or historic range")
                 skipped_count += 1
                 continue
 
             if hist_df.empty:
-                logger.info(f"WARNING: No historical data for {subject_name}")
-                logger.info("FALLBACK: Using current period data for baseline calculations")
+                print(f"WARNING: No historical data for {subject_name}")
+                print("FALLBACK: Using current period data for baseline calculations")
                 hist_df = curr_df.copy()
 
             volt_upper = dataframe_column_percentile(hist_df, "voltage", 97.5)
@@ -214,13 +210,13 @@ def process_collar_voltage_charts(
             file_paths.append(file_path)
             processed_count += 1
 
-            logger.info(f"Saved chart for {subject_name} to {file_path}")
+            print(f"Saved chart for {subject_name} to {file_path}")
 
         except Exception as e:
-            logger.error(f"Failed to process {subject_name}: {e}", exc_info=True)
+            print(f"Failed to process {subject_name}: {e}", exc_info=True)
             skipped_count += 1
             continue
 
     # Log summary
-    logger.info(f"Processing complete: {processed_count} charts generated, {skipped_count} subjects skipped")
+    print(f"Processing complete: {processed_count} charts generated, {skipped_count} subjects skipped")
     return file_paths

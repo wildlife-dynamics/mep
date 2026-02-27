@@ -1,4 +1,3 @@
-import logging
 import ecoscope
 import numpy as np
 import pandas as pd
@@ -15,8 +14,6 @@ from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AnyDataFrame
 from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import ExportArgs
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
-
-logger = logging.getLogger(__name__)
 
 
 def add_seasons_square(fig: Figure, dataframe: AnyDataFrame) -> Figure:
@@ -254,14 +251,14 @@ def draw_season_collared_plot(
     subject_name = relocations_gdf["subject_name"].unique()[0]
 
     if events_gdf is None or events_gdf.empty:
-        logger.warning(f"No events data for subject '{subject_name}'.")
+        print(f"No events data for subject '{subject_name}'.")
         events_gdf = None
     elif filter_col not in events_gdf.columns:
         raise ValueError(f"Column '{filter_col}' not found. Available: {', '.join(events_gdf.columns)}")
     else:
         events_gdf = events_gdf[events_gdf[filter_col] == subject_name]
         if events_gdf.empty:
-            logger.warning(f"No events found for subject '{subject_name}'.")
+            print(f"No events found for subject '{subject_name}'.")
             events_gdf = None
     fig = collar_event_timeline_plot(relocations_gdf, events_gdf)
     figure = add_seasons_square(fig, seasons_df)

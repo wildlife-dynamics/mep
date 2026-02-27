@@ -1,5 +1,4 @@
 import os
-import logging
 import pandas as pd
 from pathlib import Path
 from shapely.geometry import Polygon, MultiPolygon
@@ -7,9 +6,6 @@ from ecoscope_workflows_core.decorators import task
 from typing import Union, cast, Optional, Dict, List
 from ecoscope_workflows_core.annotations import AnyGeoDataFrame, AnyDataFrame
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
-
-logger = logging.getLogger(__name__)
-
 
 @task
 def build_template_region_lookup(
@@ -112,7 +108,7 @@ def compute_subject_occupancy(
             intersection_area = region_geom.intersection(subject_range).area
             occupancy[region_name] = 100 * (intersection_area / total_area)
         except Exception as e:
-            logger.error(f"Warning: Failed to compute intersection for region '{region_name}': {e}")
+            print(f"Warning: Failed to compute intersection for region '{region_name}': {e}")
             occupancy[region_name] = 0.0
 
     # Calculate unprotected area
