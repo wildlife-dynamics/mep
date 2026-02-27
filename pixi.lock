@@ -2,7 +2,6 @@ version: 6
 environments:
   compile:
     channels:
-    - url: file:///tmp/ecoscope-workflows-custom/release/artifacts/
     - url: https://repo.prefix.dev/ecoscope-workflows/
     - url: https://repo.prefix.dev/ecoscope-workflows-custom/
     - url: https://conda.anaconda.org/conda-forge/
@@ -109,6 +108,7 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-core-0.22.9-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.28-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-ext-ecoscope-0.22.9-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.12.0-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.7-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-ste-0.0.16-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/epoxy-1.5.10-hb03c661_2.conda
@@ -511,7 +511,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-1.3.1-hb9d3cd8_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.10.1.dev2+g26a4b10c0.d20260227-pyh4616a5c_0.conda
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/_openmp_mutex-4.5-7_kmp_llvm.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_2.conda
@@ -612,6 +611,7 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-core-0.22.9-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.28-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-ext-ecoscope-0.22.9-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.12.0-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.7-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-ste-0.0.16-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/epoxy-1.5.10-hc919400_2.conda
@@ -981,7 +981,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.1-h8359307_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-hed4e4f5_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.10.1.dev2+g26a4b10c0.d20260227-pyh4616a5c_0.conda
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/win-64/_libavif_api-1.3.0-h57928b3_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/_openmp_mutex-4.5-20_gnu.conda
@@ -1078,6 +1077,7 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-core-0.22.9-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-custom-0.0.28-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/ecoscope-workflows-ext-ecoscope-0.22.9-pyh4616a5c_0.conda
+      - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.12.0-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.7-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-ste-0.0.16-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.1-pyhd8ed1ab_0.conda
@@ -1441,10 +1441,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.1-h2466b09_2.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.10.1.dev2+g26a4b10c0.d20260227-pyh4616a5c_0.conda
   default:
     channels:
-    - url: file:///tmp/ecoscope-workflows-custom/release/artifacts/
     - url: https://repo.prefix.dev/ecoscope-workflows/
     - url: https://repo.prefix.dev/ecoscope-workflows-custom/
     - url: https://conda.anaconda.org/conda-forge/
@@ -4336,10 +4334,9 @@ packages:
   license: BSD-3-Clause
   size: 3137076
   timestamp: 1771243782968
-- conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.10.1.dev2+g26a4b10c0.d20260227-pyh4616a5c_0.conda
-  subdir: noarch
-  sha256: cc20ca4d2befea244aac0c4b8dc2c094a868f0cc92853b9eb794351d416c9c82
-  md5: 4cf3507828311b8b9d92143fabbd873d
+- conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mep-0.12.0-pyh4616a5c_0.conda
+  sha256: d920a0a56ceaefe5573c9ad3cba76773415299d7f1d48c718043e202d40af134
+  md5: 3b59a07d14819a87a09b9d42310b0778
   depends:
   - python
   - ecoscope
@@ -4353,10 +4350,9 @@ packages:
   - numpy
   - setuptools <=81.0.0
   - docxcompose
-  channel: file:///tmp/ecoscope-workflows-custom/release/artifacts
   license: BSD-3-Clause
-  size: 30495
-  timestamp: 1772183509335
+  size: 31178
+  timestamp: 1772185091295
 - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.7-pyh4616a5c_0.conda
   sha256: 3b6e0ae2e304e92365ebb829c01c2e18df7dc9054729760ac79702214aedf204
   md5: b4c52de9b045cc4c1650d6669cbd0cd7
