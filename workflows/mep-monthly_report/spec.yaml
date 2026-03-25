@@ -13,16 +13,31 @@ requirements:
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.16.*"
+    version: "0.0.18.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mnc
     version: "0.0.7.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
-  - name: ecoscope-workflows-ext-mep
-    version: "0.12.0.*"
+  - name: ecoscope-workflows-ext-big-life
+    version: "0.0.8.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-mep
+    version: "*"
+    channel: "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
+
+rjsf-overrides:
+  properties:
+    ndvi_method.properties.var.title: " "
+    ndvi_method.properties.var.description: "Method to obtain NDVI values. 'MODIS MYD13A1 16-Day Composite': Uses pre-calculated NDVI from 16-day composites. Provides quality-filtered 'best pixel' values at 500m resolution with ~0.025 accuracy. Better for phenology studies but may saturate in dense canopies. 'MODIS MCD43A4 Daily NBAR': Uses daily nadir BRDF-adjusted reflectance. Computes NDVI from NIR/Red bands with view-angle correction for consistent measurements. Higher temporal resolution but more susceptible to cloud gaps."
+    ndvi_method.properties.var.enum: [
+      "MODIS MYD13A1 16-Day Composite",
+      "MODIS MCD43A4 Daily NBAR",
+    ]
+    ndvi_method.properties.var.default: "MODIS MYD13A1 16-Day Composite"
+    ndvi_method.required: []
 
 task-instance-defaults:
   skipif:
@@ -46,7 +61,8 @@ workflow:
     id: groupers 
     task: set_groupers
     partial:
-      groupers: []
+      groupers: 
+        - index_name: "name"
   
   # set basemaps
   - name: Configure base map layers 
@@ -749,6 +765,110 @@ workflow:
       gdf: ${{ workflow.load_roi.return }}
       crs: "EPSG:4326"
 
+  - name: Split values by ranch name 
+    id: split_roi_groups 
+    task: split_groups
+    partial: 
+      df: ${{ workflow.transform_roi.return }}
+      groupers: ${{ workflow.groupers.return }}
+      
+  - name: NDVI Method
+    id: ndvi_method
+    task: set_string_var
+    
+  - name: "NDVI Trend"
+    id: calculate_ndvi
+    task: calculate_ndvi_range
+    partial:
+      client: ${{ workflow.gee_client.return }}
+      time_range: ${{ workflow.time_range.return }}
+      ndvi_method: ${{ workflow.ndvi_method.return }}
+      baseline_time_range: null # todo: add baseline time range when supported by web
+      image_size: 1000000000 # todo: use baseline time range when supported by web
+    mapvalues:
+      argnames: roi
+      argvalues: ${{ workflow.split_roi_groups.return}}
+
+  - name: Persist NDVI Data
+    id: persist_ndvi_data
+    task: persist_df_wrapper
+    skipif:
+      conditions:
+        - never
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      sanitize: true
+      filename_prefix: ndvi
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.calculate_ndvi.return }}
+
+  - name: Draw NDVI
+    id: draw_ndvi
+    task: draw_historic_timeseries
+    partial:
+      current_value_column: "NDVI"
+      current_value_title: "NDVI"
+      historic_min_column: "min"
+      historic_max_column: "max"
+      historic_mean_column: "mean"
+      historic_band_title: "Historic Min-Max"
+      historic_mean_title: "Historic Mean"
+      layout_style: null
+      upper_lower_band_style:
+        mode: lines
+        line:
+          color: "rgba(144, 238, 144, 0.8)"
+        fillcolor: "rgba(144, 238, 144, 0.3)"
+      historic_mean_style: null
+      current_value_style: null
+      time_column: img_date
+    mapvalues:
+      argnames: dataframe
+      argvalues: ${{ workflow.calculate_ndvi.return}}
+
+  - name: Get unique area name
+    id: get_area_name
+    task: dataframe_column_first_unique_str
+    partial:
+      column_name: "name"
+    mapvalues:
+      argnames: df 
+      argvalues: ${{ workflow.split_roi_groups.return }}
+
+  - name: Combine area names and ndvi charts  
+    id: zip_area_ndvi
+    task: zip_groupbykey
+    partial:
+      sequences:
+        - ${{ workflow.draw_ndvi.return }}
+        - ${{ workflow.get_area_name.return }}
+
+  - name: Persist NDVI Chart as Text
+    id: persist_ndvi
+    task: persist_text
+    partial:
+      root_path:  ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: 
+        - text
+        - filename_suffix
+      argvalues: ${{ workflow.zip_area_ndvi.return }}
+
+  - name: Convert ndvi ranch chart to png 
+    id: convrt_ranch_png 
+    task: html_to_png 
+    partial: 
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0 
+        wait_for_timeout: 10 
+        max_concurrent_pages: 3
+    mapvalues:
+      argnames: html_path
+      argvalues: ${{ workflow.persist_ndvi.return }}
+
   - name: Process ndvi charts 
     id: process_ndvi_charts 
     task: process_aoi_ndvi_charts 
@@ -760,6 +880,20 @@ workflow:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
 
   # html to png 
+  - name: Convert ndvi plot html to png 
+    id: convert_ndvi_png 
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path
+      argvalues: ${{ workflow.process_ndvi_charts.return }}
+
   - name: Convert elephant sighting events html to png 
     id: convert_sightings_png 
     task: html_to_png
@@ -806,18 +940,6 @@ workflow:
         full_page: false
         device_scale_factor: 2.0
         wait_for_timeout: 40000
-        max_concurrent_pages: 1
-
-  - name: Convert NDVI html to png 
-    id: convert_ndvi_png
-    task: html_to_png
-    partial:
-      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      html_path: ${{ workflow.process_ndvi_charts.return }}
-      config:
-        full_page: false
-        device_scale_factor: 2.0
-        wait_for_timeout: 10
         max_concurrent_pages: 1
 
   - name: Convert collared plot html to png 
@@ -882,10 +1004,10 @@ workflow:
       vehicle_patrol_map_path: ${{ workflow.convert_vehicle_png.return }}
 
       collared_elephant_plot_paths: ${{ workflow.convert_collared_png.return }}
-      regional_ndvi_plot_paths: ${{ workflow.convert_ndvi_png.return }}
-
       sitrep_df_path: ${{ workflow.persist_sitrep_csv.return }}
-
+    mapvalues:
+      argnames: regional_ndvi_plot_paths
+      argvalues: ${{ workflow.convert_ndvi_png.return }}
 
   - name: Merge mep word docs
     id: merge_mep_docx
