@@ -76,7 +76,7 @@ workflow:
   
   # connect to earthengine 
   - name: Connect to earth engine 
-    id: gee_project_name
+    id: gee_client
     task: set_gee_connection 
   
 # get events -- elephant sighting and persist file 
@@ -856,7 +856,7 @@ workflow:
       argvalues: ${{ workflow.zip_area_ndvi.return }}
 
   - name: Convert ndvi ranch chart to png 
-    id: convrt_ranch_png 
+    id: convert_ndvi_png 
     task: html_to_png 
     partial: 
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
@@ -869,31 +869,7 @@ workflow:
       argnames: html_path
       argvalues: ${{ workflow.persist_ndvi.return }}
 
-  - name: Process ndvi charts 
-    id: process_ndvi_charts 
-    task: process_aoi_ndvi_charts 
-    partial: 
-      df: ${{ workflow.transform_roi.return }}
-      er_client: ${{ workflow.gee_project_name.return }}
-      aoi_column: name 
-      time_range: ${{ workflow.time_range.return }}
-      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-
   # html to png 
-  - name: Convert ndvi plot html to png 
-    id: convert_ndvi_png 
-    task: html_to_png
-    partial:
-      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      config:
-        full_page: false
-        device_scale_factor: 2.0
-        wait_for_timeout: 10
-        max_concurrent_pages: 1
-    mapvalues:
-      argnames: html_path
-      argvalues: ${{ workflow.process_ndvi_charts.return }}
-
   - name: Convert elephant sighting events html to png 
     id: convert_sightings_png 
     task: html_to_png

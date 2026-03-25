@@ -44,6 +44,7 @@ IO_TASKS_IMPORTABLE_REFERENCES = [
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_subjectgroup_observations",
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_patrol_observations",
     "ecoscope_workflows_ext_ecoscope.tasks.io.get_patrol_observations",
+    "ecoscope_workflows_ext_ecoscope.tasks.io.calculate_ndvi_range",
 ]
 
 yaml = ruamel.yaml.YAML(typ="safe")

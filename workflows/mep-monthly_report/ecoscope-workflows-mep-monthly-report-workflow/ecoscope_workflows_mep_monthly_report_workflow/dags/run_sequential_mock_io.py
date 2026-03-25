@@ -38,7 +38,7 @@ from ecoscope_workflows_ext_custom.tasks.results import (
 )
 from ecoscope_workflows_ext_custom.tasks.results import draw_map as draw_map
 from ecoscope_workflows_ext_custom.tasks.transformation import (
-    drop_null_geometry as drop_null_geometry_1,
+    drop_null_geometry as drop_null_geometry,
 )
 from ecoscope_workflows_ext_mnc.tasks import (
     exclude_geom_outliers as exclude_geom_outliers,
@@ -93,9 +93,26 @@ get_patrol_observations = create_task_magicmock(  # 🧪
     anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
     func_name="get_patrol_observations",  # 🧪
 )  # 🧪
-from ecoscope_workflows_core.tasks.results import gather_dashboard as gather_dashboard
-from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
+from ecoscope_workflows_core.tasks.groupby import split_groups as split_groups
 from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
+from ecoscope_workflows_ext_ste.tasks import (
+    fetch_and_persist_file as fetch_and_persist_file,
+)
+from ecoscope_workflows_ext_ste.tasks import transform_gdf_crs as transform_gdf_crs
+
+calculate_ndvi_range = create_task_magicmock(  # 🧪
+    anchor="ecoscope_workflows_ext_ecoscope.tasks.io",  # 🧪
+    func_name="calculate_ndvi_range",  # 🧪
+)  # 🧪
+from ecoscope_workflows_core.tasks.results import gather_dashboard as gather_dashboard
+from ecoscope_workflows_core.tasks.skip import never as never
+from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
+from ecoscope_workflows_ext_custom.tasks.io import (
+    persist_df_wrapper as persist_df_wrapper,
+)
+from ecoscope_workflows_ext_ecoscope.tasks.results import (
+    draw_historic_timeseries as draw_historic_timeseries,
+)
 from ecoscope_workflows_ext_mep.tasks import (
     create__mep_context_page as create__mep_context_page,
 )
@@ -105,14 +122,11 @@ from ecoscope_workflows_ext_mep.tasks import (
 from ecoscope_workflows_ext_mep.tasks import (
     create_monthly_ctx_cover as create_monthly_ctx_cover,
 )
-from ecoscope_workflows_ext_mep.tasks import (
-    process_aoi_ndvi_charts as process_aoi_ndvi_charts,
-)
 from ecoscope_workflows_ext_ste.tasks import (
-    fetch_and_persist_file as fetch_and_persist_file,
+    dataframe_column_first_unique_str as dataframe_column_first_unique_str,
 )
 from ecoscope_workflows_ext_ste.tasks import merge_mapbook_files as merge_mapbook_files
-from ecoscope_workflows_ext_ste.tasks import transform_gdf_crs as transform_gdf_crs
+from ecoscope_workflows_ext_ste.tasks import zip_groupbykey as zip_groupbykey
 
 from ..params import Params
 
@@ -166,7 +180,9 @@ def main(params: Params):
             ],
             unpack_depth=1,
         )
-        .partial(groupers=[], **(params_dict.get("groupers") or {}))
+        .partial(
+            groupers=[{"index_name": "name"}], **(params_dict.get("groupers") or {})
+        )
         .call()
     )
 
@@ -202,9 +218,9 @@ def main(params: Params):
         .call()
     )
 
-    gee_project_name = (
+    gee_client = (
         set_gee_connection.validate()
-        .set_task_instance_id("gee_project_name")
+        .set_task_instance_id("gee_client")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -214,7 +230,7 @@ def main(params: Params):
             ],
             unpack_depth=1,
         )
-        .partial(**(params_dict.get("gee_project_name") or {}))
+        .partial(**(params_dict.get("gee_client") or {}))
         .call()
     )
 
@@ -277,7 +293,7 @@ def main(params: Params):
     )
 
     remove_mep_invalid_geoms = (
-        drop_null_geometry_1.validate()
+        drop_null_geometry.validate()
         .set_task_instance_id("remove_mep_invalid_geoms")
         .handle_errors()
         .with_tracing()
@@ -1455,9 +1471,9 @@ def main(params: Params):
         .call()
     )
 
-    process_ndvi_charts = (
-        process_aoi_ndvi_charts.validate()
-        .set_task_instance_id("process_ndvi_charts")
+    split_roi_groups = (
+        split_groups.validate()
+        .set_task_instance_id("split_roi_groups")
         .handle_errors()
         .with_tracing()
         .skipif(
@@ -1469,13 +1485,182 @@ def main(params: Params):
         )
         .partial(
             df=transform_roi,
-            er_client=gee_project_name,
-            aoi_column="name",
-            time_range=time_range,
-            output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            **(params_dict.get("process_ndvi_charts") or {}),
+            groupers=groupers,
+            **(params_dict.get("split_roi_groups") or {}),
         )
         .call()
+    )
+
+    ndvi_method = (
+        set_string_var.validate()
+        .set_task_instance_id("ndvi_method")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(**(params_dict.get("ndvi_method") or {}))
+        .call()
+    )
+
+    calculate_ndvi = (
+        calculate_ndvi_range.validate()
+        .set_task_instance_id("calculate_ndvi")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            client=gee_client,
+            time_range=time_range,
+            ndvi_method=ndvi_method,
+            baseline_time_range=None,
+            image_size=1000000000,
+            **(params_dict.get("calculate_ndvi") or {}),
+        )
+        .mapvalues(argnames=["roi"], argvalues=split_roi_groups)
+    )
+
+    persist_ndvi_data = (
+        persist_df_wrapper.validate()
+        .set_task_instance_id("persist_ndvi_data")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                never,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            sanitize=True,
+            filename_prefix="ndvi",
+            **(params_dict.get("persist_ndvi_data") or {}),
+        )
+        .mapvalues(argnames=["df"], argvalues=calculate_ndvi)
+    )
+
+    draw_ndvi = (
+        draw_historic_timeseries.validate()
+        .set_task_instance_id("draw_ndvi")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            current_value_column="NDVI",
+            current_value_title="NDVI",
+            historic_min_column="min",
+            historic_max_column="max",
+            historic_mean_column="mean",
+            historic_band_title="Historic Min-Max",
+            historic_mean_title="Historic Mean",
+            layout_style=None,
+            upper_lower_band_style={
+                "mode": "lines",
+                "line": {"color": "rgba(144, 238, 144, 0.8)"},
+                "fillcolor": "rgba(144, 238, 144, 0.3)",
+            },
+            historic_mean_style=None,
+            current_value_style=None,
+            time_column="img_date",
+            **(params_dict.get("draw_ndvi") or {}),
+        )
+        .mapvalues(argnames=["dataframe"], argvalues=calculate_ndvi)
+    )
+
+    get_area_name = (
+        dataframe_column_first_unique_str.validate()
+        .set_task_instance_id("get_area_name")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(column_name="name", **(params_dict.get("get_area_name") or {}))
+        .mapvalues(argnames=["df"], argvalues=split_roi_groups)
+    )
+
+    zip_area_ndvi = (
+        zip_groupbykey.validate()
+        .set_task_instance_id("zip_area_ndvi")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            sequences=[draw_ndvi, get_area_name],
+            **(params_dict.get("zip_area_ndvi") or {}),
+        )
+        .call()
+    )
+
+    persist_ndvi = (
+        persist_text.validate()
+        .set_task_instance_id("persist_ndvi")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            **(params_dict.get("persist_ndvi") or {}),
+        )
+        .mapvalues(argnames=["text", "filename_suffix"], argvalues=zip_area_ndvi)
+    )
+
+    convert_ndvi_png = (
+        html_to_png.validate()
+        .set_task_instance_id("convert_ndvi_png")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            config={
+                "full_page": False,
+                "device_scale_factor": 2.0,
+                "wait_for_timeout": 10,
+                "max_concurrent_pages": 3,
+            },
+            **(params_dict.get("convert_ndvi_png") or {}),
+        )
+        .mapvalues(argnames=["html_path"], argvalues=persist_ndvi)
     )
 
     convert_sightings_png = (
@@ -1578,32 +1763,6 @@ def main(params: Params):
                 "max_concurrent_pages": 1,
             },
             **(params_dict.get("convert_foot_png") or {}),
-        )
-        .call()
-    )
-
-    convert_ndvi_png = (
-        html_to_png.validate()
-        .set_task_instance_id("convert_ndvi_png")
-        .handle_errors()
-        .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
-        .partial(
-            output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            html_path=process_ndvi_charts,
-            config={
-                "full_page": False,
-                "device_scale_factor": 2.0,
-                "wait_for_timeout": 10,
-                "max_concurrent_pages": 1,
-            },
-            **(params_dict.get("convert_ndvi_png") or {}),
         )
         .call()
     )
@@ -1743,11 +1902,10 @@ def main(params: Params):
             foot_patrols_map_path=convert_foot_png,
             vehicle_patrol_map_path=convert_vehicle_png,
             collared_elephant_plot_paths=convert_collared_png,
-            regional_ndvi_plot_paths=convert_ndvi_png,
             sitrep_df_path=persist_sitrep_csv,
             **(params_dict.get("create_monthly_ctx") or {}),
         )
-        .call()
+        .mapvalues(argnames=["regional_ndvi_plot_paths"], argvalues=convert_ndvi_png)
     )
 
     merge_mep_docx = (
