@@ -67,6 +67,7 @@ from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     apply_color_map as apply_color_map,
 )
+from ecoscope_workflows_ext_mep.tasks import clean_string as clean_string
 from ecoscope_workflows_ext_mep.tasks import compile_sitrep as compile_sitrep
 from ecoscope_workflows_ext_mep.tasks import (
     create__mep_context_page as create__mep_context_page,
@@ -195,7 +196,8 @@ def main(params: Params):
         "persist_ndvi_data": ["calculate_ndvi"],
         "draw_ndvi": ["calculate_ndvi"],
         "get_area_name": ["split_roi_groups"],
-        "zip_area_ndvi": ["draw_ndvi", "get_area_name"],
+        "format_area_name": ["get_area_name"],
+        "zip_area_ndvi": ["draw_ndvi", "format_area_name"],
         "persist_ndvi": ["zip_area_ndvi"],
         "convert_ndvi_png": ["persist_ndvi"],
         "convert_sightings_png": ["persist_sightings_urls"],
@@ -1066,6 +1068,7 @@ def main(params: Params):
                 "include_patrol_details": True,
                 "raise_on_empty": True,
                 "sub_page_size": 100,
+                "patrols_overlap_daterange": True,
                 "patrol_types": [
                     "MEP_routine_vehicle_patrol_bravo_team",
                     "MEP_routine_vehicle_patrol_foxtrot_team",
@@ -1329,6 +1332,7 @@ def main(params: Params):
                 "include_patrol_details": True,
                 "raise_on_empty": True,
                 "sub_page_size": 100,
+                "patrols_overlap_daterange": True,
                 "patrol_types": [
                     "MEP_routine_foot_patrol_bravo_team",
                     "MEP_routine_foot_patrol_foxtrot_team",
@@ -1787,6 +1791,26 @@ def main(params: Params):
                 "argvalues": DependsOn("split_roi_groups"),
             },
         ),
+        "format_area_name": Node(
+            async_task=clean_string.validate()
+            .set_task_instance_id("format_area_name")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial=(params_dict.get("format_area_name") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["s"],
+                "argvalues": DependsOn("get_area_name"),
+            },
+        ),
         "zip_area_ndvi": Node(
             async_task=zip_groupbykey.validate()
             .set_task_instance_id("zip_area_ndvi")
@@ -1803,7 +1827,7 @@ def main(params: Params):
             partial={
                 "sequences": [
                     DependsOn("draw_ndvi"),
-                    DependsOn("get_area_name"),
+                    DependsOn("format_area_name"),
                 ],
             }
             | (params_dict.get("zip_area_ndvi") or {}),

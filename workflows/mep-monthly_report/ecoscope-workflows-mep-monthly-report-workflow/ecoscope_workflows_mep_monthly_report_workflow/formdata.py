@@ -213,11 +213,6 @@ class VehiclePatrols(BaseModel):
         description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
         title="Patrol Status",
     )
-    patrols_overlap_daterange: Optional[bool] = Field(
-        True,
-        description="Whether or not to include patrols that start or end outside of the time range",
-        title="Patrols Overlap Daterange",
-    )
 
 
 class FootPatrols(BaseModel):
@@ -228,11 +223,6 @@ class FootPatrols(BaseModel):
         ["done"],
         description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
         title="Patrol Status",
-    )
-    patrols_overlap_daterange: Optional[bool] = Field(
-        True,
-        description="Whether or not to include patrols that start or end outside of the time range",
-        title="Patrols Overlap Daterange",
     )
 
 

@@ -334,13 +334,6 @@
           "description": "Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
           "uniqueItems": true,
           "ecoscope:advanced": true
-        },
-        "patrols_overlap_daterange": {
-          "default": true,
-          "title": "Patrols Overlap Daterange",
-          "type": "boolean",
-          "description": "Whether or not to include patrols that start or end outside of the time range",
-          "ecoscope:advanced": true
         }
       },
       "required": [],
@@ -367,13 +360,6 @@
           "type": "array",
           "description": "Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
           "uniqueItems": true,
-          "ecoscope:advanced": true
-        },
-        "patrols_overlap_daterange": {
-          "default": true,
-          "title": "Patrols Overlap Daterange",
-          "type": "boolean",
-          "description": "Whether or not to include patrols that start or end outside of the time range",
           "ecoscope:advanced": true
         }
       },
@@ -511,18 +497,6 @@
         "until",
         "timezone",
         "time_format"
-      ]
-    },
-    "vehicle_patrols": {
-      "ui:order": [
-        "status",
-        "patrols_overlap_daterange"
-      ]
-    },
-    "foot_patrols": {
-      "ui:order": [
-        "status",
-        "patrols_overlap_daterange"
       ]
     },
     "ui:order": [

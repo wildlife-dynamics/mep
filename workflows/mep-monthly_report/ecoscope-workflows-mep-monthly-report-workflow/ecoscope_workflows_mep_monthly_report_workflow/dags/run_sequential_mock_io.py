@@ -113,6 +113,7 @@ from ecoscope_workflows_ext_custom.tasks.io import (
 from ecoscope_workflows_ext_ecoscope.tasks.results import (
     draw_historic_timeseries as draw_historic_timeseries,
 )
+from ecoscope_workflows_ext_mep.tasks import clean_string as clean_string
 from ecoscope_workflows_ext_mep.tasks import (
     create__mep_context_page as create__mep_context_page,
 )
@@ -923,6 +924,7 @@ def main(params: Params):
             include_patrol_details=True,
             raise_on_empty=True,
             sub_page_size=100,
+            patrols_overlap_daterange=True,
             patrol_types=[
                 "MEP_routine_vehicle_patrol_bravo_team",
                 "MEP_routine_vehicle_patrol_foxtrot_team",
@@ -1175,6 +1177,7 @@ def main(params: Params):
             include_patrol_details=True,
             raise_on_empty=True,
             sub_page_size=100,
+            patrols_overlap_daterange=True,
             patrol_types=[
                 "MEP_routine_foot_patrol_bravo_team",
                 "MEP_routine_foot_patrol_foxtrot_team",
@@ -1600,6 +1603,22 @@ def main(params: Params):
         .mapvalues(argnames=["df"], argvalues=split_roi_groups)
     )
 
+    format_area_name = (
+        clean_string.validate()
+        .set_task_instance_id("format_area_name")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(**(params_dict.get("format_area_name") or {}))
+        .mapvalues(argnames=["s"], argvalues=get_area_name)
+    )
+
     zip_area_ndvi = (
         zip_groupbykey.validate()
         .set_task_instance_id("zip_area_ndvi")
@@ -1613,7 +1632,7 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            sequences=[draw_ndvi, get_area_name],
+            sequences=[draw_ndvi, format_area_name],
             **(params_dict.get("zip_area_ndvi") or {}),
         )
         .call()

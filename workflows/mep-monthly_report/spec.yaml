@@ -1,15 +1,15 @@
 id: mep_monthly_report
 requirements:
   - name: ecoscope-workflows-core
-    version: "0.22.9.*"
+    version: "0.22.17.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-ecoscope
-    version: "0.22.9.*"
+    version: "0.22.17.*"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.28.*"
+    version: "0.0.39.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
     
   - name: ecoscope-workflows-ext-ste
@@ -463,6 +463,7 @@ workflow:
       include_patrol_details: true 
       raise_on_empty: true
       sub_page_size: 100 
+      patrols_overlap_daterange: true
       patrol_types: 
       - "MEP_routine_vehicle_patrol_bravo_team"
       - "MEP_routine_vehicle_patrol_foxtrot_team"
@@ -606,6 +607,7 @@ workflow:
       include_patrol_details: true 
       raise_on_empty: true
       sub_page_size: 100 
+      patrols_overlap_daterange: true
       patrol_types: 
         - "MEP_routine_foot_patrol_bravo_team"
         - "MEP_routine_foot_patrol_foxtrot_team"
@@ -836,13 +838,20 @@ workflow:
       argnames: df 
       argvalues: ${{ workflow.split_roi_groups.return }}
 
+  - name: Format strings extracted from roi 
+    id: format_area_name 
+    task: clean_string 
+    mapvalues: 
+      argnames: s
+      argvalues: ${{ workflow.get_area_name.return }}
+
   - name: Combine area names and ndvi charts  
     id: zip_area_ndvi
     task: zip_groupbykey
     partial:
       sequences:
         - ${{ workflow.draw_ndvi.return }}
-        - ${{ workflow.get_area_name.return }}
+        - ${{ workflow.format_area_name.return }}
 
   - name: Persist NDVI Chart as Text
     id: persist_ndvi
@@ -983,7 +992,8 @@ workflow:
       sitrep_df_path: ${{ workflow.persist_sitrep_csv.return }}
     mapvalues:
       argnames: regional_ndvi_plot_paths
-      argvalues: ${{ workflow.convert_ndvi_png.return }}
+      argvalues: 
+        - ${{ workflow.convert_ndvi_png.return }}
 
   - name: Merge mep word docs
     id: merge_mep_docx

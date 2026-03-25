@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import warnings
 import pandas as pd
@@ -16,6 +17,10 @@ from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_schem
 
 warnings.filterwarnings("ignore")
 
+@task
+def clean_string(s: str) -> str:
+    s = re.sub(r"[ /\-]", "_", s.lower())
+    return re.sub(r"_+", "_", s)
 
 @task
 def create__mep_context_page(
