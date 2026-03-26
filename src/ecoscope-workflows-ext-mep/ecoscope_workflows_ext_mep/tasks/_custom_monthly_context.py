@@ -69,11 +69,13 @@ def _stem_to_label(path: str) -> str:
     stem = Path(path).stem
     return stem.replace("_", " ").replace("-", " ").title()
 
+
 def _stem_custom_label(path: str) -> str:
     stem = Path(path).stem  # e.g. "ab89nd_loita_forest"
     parts = stem.split("_", 1)  # split on first _ only → ["ab89nd", "loita_forest"]
     label = parts[1] if len(parts) > 1 else parts[0]  # take "loita_forest"
     return label.replace("_", " ").replace("-", " ").title()  # → "Loita Forest"
+
 
 def safe_read_csv(file_path: str | None) -> pd.DataFrame:
     """
@@ -138,6 +140,7 @@ def create_monthly_ctx_cover(
         "report_period": formatted_time_range,
         "prepared_by": prepared_by,
     }
+
 
 NDVI_AREA_KEYWORDS = [
     "nyakweri",
