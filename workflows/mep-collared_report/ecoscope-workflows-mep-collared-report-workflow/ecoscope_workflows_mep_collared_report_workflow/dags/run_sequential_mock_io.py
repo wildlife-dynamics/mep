@@ -1804,7 +1804,7 @@ def main(params: Params):
                 "line_width_min_pixels": 1,
                 "line_width_max_pixels": 5,
             },
-            legend={"title": "", "values": [{"label": "MCP", "color": "#ff1493"}]},
+            legend={"title": "MCP", "values": [{"label": "MCP", "color": "#ff1493"}]},
             **(params_dict.get("create_mcp_polygon_layer") or {}),
         )
         .mapvalues(argnames=["geodataframe"], argvalues=generate_mcp)

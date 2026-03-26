@@ -2301,7 +2301,7 @@ def main(params: Params):
                     "line_width_max_pixels": 5,
                 },
                 "legend": {
-                    "title": "",
+                    "title": "MCP",
                     "values": [
                         {
                             "label": "MCP",

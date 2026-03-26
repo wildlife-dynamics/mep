@@ -70,6 +70,13 @@ def _stem_to_label(path: str) -> str:
     return stem.replace("_", " ").replace("-", " ").title()
 
 
+def _stem_custom_label(path: str) -> str:
+    stem = Path(path).stem  # e.g. "ab89nd_loita_forest"
+    parts = stem.split("_", 1)  # split on first _ only → ["ab89nd", "loita_forest"]
+    label = parts[1] if len(parts) > 1 else parts[0]  # take "loita_forest"
+    return label.replace("_", " ").replace("-", " ").title()  # → "Loita Forest"
+
+
 def safe_read_csv(file_path: str | None) -> pd.DataFrame:
     """
     Safely read CSV file and return DataFrame.
@@ -135,6 +142,36 @@ def create_monthly_ctx_cover(
     }
 
 
+NDVI_AREA_KEYWORDS = [
+    "nyakweri",
+    "mau_forest",
+    "marmanet",
+    "mara_serengeti",
+    "elgon",
+    "loita_forest",
+    "rift_mosiro",
+    "samburu_reserve",
+]
+
+
+def _discover_ndvi_paths(output_dir: str) -> List[str]:
+    dir_path = Path(output_dir)
+    if not dir_path.exists():
+        return []
+
+    png_files = list(dir_path.glob("*.png"))
+
+    keyword_map: Dict[str, Path] = {}
+    for f in png_files:
+        stem = f.stem.lower()
+        for keyword in NDVI_AREA_KEYWORDS:
+            if keyword in stem:
+                keyword_map[keyword] = f
+                break
+
+    return [str(keyword_map[k]) for k in NDVI_AREA_KEYWORDS if k in keyword_map]
+
+
 @task
 def create_mep_monthly_context(
     elephant_sightings_map_path: str | SkipSentinel | None,
@@ -142,7 +179,6 @@ def create_mep_monthly_context(
     foot_patrols_map_path: str | SkipSentinel | None,
     vehicle_patrol_map_path: str | SkipSentinel | None,
     collared_elephant_plot_paths: List[str | SkipSentinel | None] | None,
-    regional_ndvi_plot_paths: List[str | SkipSentinel | None] | None,
     sitrep_df_path: str | SkipSentinel | None,
     template_path: str,
     output_dir: str,
@@ -155,10 +191,10 @@ def create_mep_monthly_context(
     elephant_sightings_map_path = _unwrap_skip(elephant_sightings_map_path)
     foot_patrols_map_path = _unwrap_skip(foot_patrols_map_path)
     vehicle_patrol_map_path = _unwrap_skip(vehicle_patrol_map_path)
-    sitrep_df_path = _unwrap_skip(sitrep_df_path)  # fix: was sitrep_df_path
+    sitrep_df_path = _unwrap_skip(sitrep_df_path)
 
     collared_paths = _unwrap_and_validate_list(collared_elephant_plot_paths)
-    ndvi_paths = _unwrap_and_validate_list(regional_ndvi_plot_paths)
+    ndvi_paths = _discover_ndvi_paths(output_dir)
 
     if not filename:
         filename = f"mep_report_{uuid.uuid4().hex[:4]}.docx"
@@ -181,7 +217,7 @@ def create_mep_monthly_context(
     ndvi_list: List[Dict[str, Any]] = [
         {
             "ndvi_image": InlineImage(tpl, path, width=Inches(6.58), height=Inches(3.85)),
-            "area": _stem_to_label(path),
+            "area": _stem_custom_label(path),
         }
         for path in ndvi_paths
     ]

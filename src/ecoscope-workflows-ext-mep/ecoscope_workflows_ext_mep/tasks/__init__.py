@@ -8,6 +8,7 @@ from ._collared_report_context import (
     create_mep_ctx_cover,
     create_mep_subject_context,
     create_mep_grouper_page,
+    clean_string,
 )
 from ._custom_pydeck import custom_view_state_deck_gdf
 from ._custom_ndvi_groups import process_aoi_ndvi_charts
@@ -45,4 +46,5 @@ __all__ = [
     "get_sitrep_event_config",
     "compile_sitrep",
     "get_previous_period",
+    "clean_string",
 ]

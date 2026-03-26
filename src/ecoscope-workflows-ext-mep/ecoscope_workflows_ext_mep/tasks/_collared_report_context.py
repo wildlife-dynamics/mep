@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import warnings
 import pandas as pd
@@ -15,6 +16,12 @@ from ecoscope_workflows_core.skip import SKIP_SENTINEL, SkipSentinel
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
 warnings.filterwarnings("ignore")
+
+
+@task
+def clean_string(s: str) -> str:
+    s = re.sub(r"[ /\-]", "_", s.lower())
+    return re.sub(r"_+", "_", s)
 
 
 @task
