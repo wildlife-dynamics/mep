@@ -1924,7 +1924,7 @@ def main(params: Params):
             sitrep_df_path=persist_sitrep_csv,
             **(params_dict.get("create_monthly_ctx") or {}),
         )
-        .mapvalues(argnames=["regional_ndvi_plot_paths"], argvalues=convert_ndvi_png)
+        .call()
     )
 
     merge_mep_docx = (
@@ -1943,7 +1943,7 @@ def main(params: Params):
             cover_page_path=persist_cover_context,
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             context_page_items=[create_monthly_ctx],
-            filename=None,
+            filename="overall_mep_monthly_report.docx",
             **(params_dict.get("merge_mep_docx") or {}),
         )
         .call()

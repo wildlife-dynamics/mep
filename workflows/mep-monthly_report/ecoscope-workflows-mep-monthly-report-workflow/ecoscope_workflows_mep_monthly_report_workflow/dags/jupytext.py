@@ -2792,7 +2792,7 @@ create_monthly_ctx = (
         sitrep_df_path=persist_sitrep_csv,
         **create_monthly_ctx_params,
     )
-    .mapvalues(argnames=["regional_ndvi_plot_paths"], argvalues=convert_ndvi_png)
+    .call()
 )
 
 
@@ -2823,7 +2823,7 @@ merge_mep_docx = (
         cover_page_path=persist_cover_context,
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         context_page_items=[create_monthly_ctx],
-        filename=None,
+        filename="overall_mep_monthly_report.docx",
         **merge_mep_docx_params,
     )
     .call()

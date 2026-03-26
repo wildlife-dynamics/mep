@@ -217,7 +217,6 @@ def main(params: Params):
             "convert_vehicle_png",
             "convert_collared_png",
             "persist_sitrep_csv",
-            "convert_ndvi_png",
         ],
         "merge_mep_docx": ["persist_cover_context", "create_monthly_ctx"],
         "mep_monthly_dashboard": ["workflow_details", "time_range", "groupers"],
@@ -2128,11 +2127,7 @@ def main(params: Params):
                 "sitrep_df_path": DependsOn("persist_sitrep_csv"),
             }
             | (params_dict.get("create_monthly_ctx") or {}),
-            method="mapvalues",
-            kwargs={
-                "argnames": ["regional_ndvi_plot_paths"],
-                "argvalues": DependsOn("convert_ndvi_png"),
-            },
+            method="call",
         ),
         "merge_mep_docx": Node(
             async_task=merge_mapbook_files.validate()
@@ -2153,7 +2148,7 @@ def main(params: Params):
                 "context_page_items": [
                     DependsOn("create_monthly_ctx"),
                 ],
-                "filename": None,
+                "filename": "overall_mep_monthly_report.docx",
             }
             | (params_dict.get("merge_mep_docx") or {}),
             method="call",

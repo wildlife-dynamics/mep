@@ -990,10 +990,6 @@ workflow:
 
       collared_elephant_plot_paths: ${{ workflow.convert_collared_png.return }}
       sitrep_df_path: ${{ workflow.persist_sitrep_csv.return }}
-    mapvalues:
-      argnames: regional_ndvi_plot_paths
-      argvalues: 
-        - ${{ workflow.convert_ndvi_png.return }}
 
   - name: Merge mep word docs
     id: merge_mep_docx
@@ -1003,7 +999,7 @@ workflow:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       context_page_items: 
         - ${{ workflow.create_monthly_ctx.return }}
-      filename: null 
+      filename: "overall_mep_monthly_report.docx"
 
   - name: MEP monthly report  dashboard
     id: mep_monthly_dashboard
