@@ -407,6 +407,20 @@ IMAGE_DIMENSIONS = {
 }
 
 
+def is_valid_image(path: str) -> bool:
+    """Check image file has a valid PNG or JPEG header (magic bytes)."""
+    try:
+        with open(path, "rb") as f:
+            header = f.read(8)
+        if header[:8] == b"\x89PNG\r\n\x1a\n":
+            return True
+        if header[:3] == b"\xff\xd8\xff":
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def create_inline_image_inch(template: DocxTemplate, image_path: str, width_cm: float, height_cm: float) -> InlineImage:
     """
     Create an InlineImage object with specified dimensions.
@@ -465,9 +479,15 @@ def prepare_mep_context_for_template(
                 print(f"Empty image path for field: {field_name}")
                 continue
 
-            # Verify file exists
+            # Verify file exists and is a valid image
             if not Path(image_path).exists():
                 print(f"Image file not found for {field_name}: {image_path}")
+                rendered_context[field_name] = None
+                continue
+
+            if not is_valid_image(image_path):
+                print(f"Invalid or unrecognized image format for {field_name}: {image_path}")
+                rendered_context[field_name] = None
                 continue
 
             try:

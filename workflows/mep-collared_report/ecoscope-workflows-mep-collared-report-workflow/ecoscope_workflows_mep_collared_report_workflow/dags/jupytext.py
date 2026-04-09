@@ -4835,7 +4835,7 @@ convert_homerange_png = (
         screenshot_config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 40000,
+            "wait_for_timeout": 50,
             "max_concurrent_pages": 1,
             "width": 602,
             "height": 855,
@@ -4905,7 +4905,7 @@ convert_speedmap_png = (
         screenshot_config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 40000,
+            "wait_for_timeout": 50,
             "max_concurrent_pages": 1,
             "width": 1280,
             "height": 720,
@@ -4975,7 +4975,7 @@ convert_season_png = (
         screenshot_config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 40000,
+            "wait_for_timeout": 50,
             "max_concurrent_pages": 1,
             "width": 602,
             "height": 855,
