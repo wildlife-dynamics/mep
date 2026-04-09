@@ -330,6 +330,7 @@ def create_mep_subject_context(
         except (ValueError, TypeError):
             # Handle formats like "April 1997" or other date strings by extracting the year
             import re
+
             year_match = re.search(r"\b(19|20)\d{2}\b", str(dob_raw))
             dob = year_match.group(0) if year_match else str(dob_raw)
     else:
