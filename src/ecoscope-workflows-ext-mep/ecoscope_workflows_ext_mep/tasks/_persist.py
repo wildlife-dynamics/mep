@@ -34,7 +34,7 @@ def gdf_to_geojson(
             hash_input = content.encode()
         filename = hashlib.sha256(hash_input).hexdigest()[:7]
 
-    buffer = io.StringIO()
+    buffer = io.BytesIO()
     gdf = gpd.GeoDataFrame(df)
     gdf.to_file(buffer, driver="GeoJSON")
-    return _persist_text(buffer.getvalue(), root_path, f"{filename}.geojson")
+    return _persist_text(buffer.getvalue().decode("utf-8"), root_path, f"{filename}.geojson")
