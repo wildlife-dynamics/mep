@@ -324,7 +324,16 @@ def create_mep_subject_context(
 
     # Extract subject info with defaults
     dob_raw = safe_get_value(subject_info_df, "dob", None)
-    dob = str(int(dob_raw)) if dob_raw is not None and pd.notna(dob_raw) else "-"
+    if dob_raw is not None and pd.notna(dob_raw):
+        try:
+            dob = str(int(dob_raw))
+        except (ValueError, TypeError):
+            # Handle formats like "April 1997" or other date strings by extracting the year
+            import re
+            year_match = re.search(r"\b(19|20)\d{2}\b", str(dob_raw))
+            dob = year_match.group(0) if year_match else str(dob_raw)
+    else:
+        dob = "-"
     sex = safe_get_value(subject_info_df, "sex", "-")
     country = safe_get_value(subject_info_df, "country", "-")
     notes = safe_get_value(subject_info_df, "notes", "None")
