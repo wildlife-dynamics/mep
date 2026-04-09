@@ -6,7 +6,7 @@
 ```yaml
 # fingerprint:
 artifacts_sha256_basic: a322b1896375774cba0c2ce8511f148e935992ad196c3cb126c1e1a8b5a1a8ed
-artifacts_sha256_strict: ffc324142b7512ea091dd6ca2028a40ff25accd5dc70c271408f5745bbc563a6
+artifacts_sha256_strict: 226ceef6b24fe803ac4f8e26e02f47ebd92a6f786c356dce17941d59620271d0
 installed_requirements:
 - channel: https://repo.prefix.dev/ecoscope-workflows/
   name: ecoscope-workflows-core
@@ -26,9 +26,9 @@ installed_requirements:
 - channel: https://repo.prefix.dev/ecoscope-workflows-custom/
   name: ecoscope-workflows-ext-big-life
   version: {version: ==0.0.8}
-- channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
+- channel: https://repo.prefix.dev/ecoscope-workflows-custom/
   name: ecoscope-workflows-ext-mep
-  version: {version: ==0.0.11.dev4+g459041d24.d20260409}
+  version: {version: ==0.13.0}
 params_sha256: f911408ed16a7d281a721f6440ab1d8fd0347738a570da12ad1bf9c5a0f5d23e
 spec_sha256: 1d6c04b3b988779a0516fbe4ed47bb8b9a6d6bf92158324ec06be235bf28ea80
 
