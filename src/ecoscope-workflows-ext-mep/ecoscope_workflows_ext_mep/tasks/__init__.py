@@ -17,6 +17,7 @@ from ._sitrep import get_sitrep_event_config, compile_sitrep
 from ._custom_map_png import zoom_map_and_screenshot
 from ._custom_period import get_previous_period
 from ._custom_monthly_context import create_mep_monthly_context, create_monthly_ctx_cover
+from ._persist import gdf_to_geojson
 
 __all__ = [
     "create_monthly_ctx_cover",
@@ -47,4 +48,5 @@ __all__ = [
     "compile_sitrep",
     "get_previous_period",
     "clean_string",
+    "gdf_to_geojson",
 ]

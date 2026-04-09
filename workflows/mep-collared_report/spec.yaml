@@ -25,8 +25,8 @@ requirements:
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mep
-    version: "0.0.10.*"
-    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+    version: "*"
+    channel: "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
 
 rjsf-overrides:
   properties: 
@@ -1708,7 +1708,7 @@ workflow:
       screenshot_config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 40000
+        wait_for_timeout: 50
         max_concurrent_pages: 1
         width: 602
         height: 855
@@ -1734,7 +1734,7 @@ workflow:
       screenshot_config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 40000
+        wait_for_timeout: 50
         max_concurrent_pages: 1
         width: 1280
         height: 720
@@ -1760,7 +1760,7 @@ workflow:
       screenshot_config: 
         full_page: false
         device_scale_factor: 2.0 
-        wait_for_timeout: 40000
+        wait_for_timeout: 50
         max_concurrent_pages: 1
         width: 602
         height: 855

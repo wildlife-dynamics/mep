@@ -324,7 +324,17 @@ def create_mep_subject_context(
 
     # Extract subject info with defaults
     dob_raw = safe_get_value(subject_info_df, "dob", None)
-    dob = str(int(dob_raw)) if dob_raw is not None and pd.notna(dob_raw) else "-"
+    if dob_raw is not None and pd.notna(dob_raw):
+        try:
+            dob = str(int(dob_raw))
+        except (ValueError, TypeError):
+            # Handle formats like "April 1997" or other date strings by extracting the year
+            import re
+
+            year_match = re.search(r"\b(19|20)\d{2}\b", str(dob_raw))
+            dob = year_match.group(0) if year_match else str(dob_raw)
+    else:
+        dob = "-"
     sex = safe_get_value(subject_info_df, "sex", "-")
     country = safe_get_value(subject_info_df, "country", "-")
     notes = safe_get_value(subject_info_df, "notes", "None")
@@ -398,6 +408,20 @@ IMAGE_DIMENSIONS = {
 }
 
 
+def is_valid_image(path: str) -> bool:
+    """Check image file has a valid PNG or JPEG header (magic bytes)."""
+    try:
+        with open(path, "rb") as f:
+            header = f.read(8)
+        if header[:8] == b"\x89PNG\r\n\x1a\n":
+            return True
+        if header[:3] == b"\xff\xd8\xff":
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def create_inline_image_inch(template: DocxTemplate, image_path: str, width_cm: float, height_cm: float) -> InlineImage:
     """
     Create an InlineImage object with specified dimensions.
@@ -456,9 +480,15 @@ def prepare_mep_context_for_template(
                 print(f"Empty image path for field: {field_name}")
                 continue
 
-            # Verify file exists
+            # Verify file exists and is a valid image
             if not Path(image_path).exists():
                 print(f"Image file not found for {field_name}: {image_path}")
+                rendered_context[field_name] = None
+                continue
+
+            if not is_valid_image(image_path):
+                print(f"Invalid or unrecognized image format for {field_name}: {image_path}")
+                rendered_context[field_name] = None
                 continue
 
             try:
