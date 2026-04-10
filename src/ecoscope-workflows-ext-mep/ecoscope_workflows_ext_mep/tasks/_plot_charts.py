@@ -92,9 +92,12 @@ def draw_season_nsd_plot(
         raise ValueError("Relocations gdf is empty.")
 
     seasons_df = _load_seasons_df(seasons_df)
+    x_min = relocations_gdf["fixtime"].min()
+    x_max = relocations_gdf["fixtime"].max()
     relocations_gdf = Relocations.from_gdf(relocations_gdf)
     figure = nsd(relocations_gdf)
     figure = add_seasons_square(figure, seasons_df)
+    figure.update_xaxes(range=[x_min, x_max])
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
 
@@ -117,10 +120,13 @@ def draw_season_speed_plot(
         raise ValueError("Relocations gdf is empty.")
 
     seasons_df = _load_seasons_df(seasons_df)
+    x_min = relocations_gdf["fixtime"].min()
+    x_max = relocations_gdf["fixtime"].max()
     relocations_gdf = Relocations.from_gdf(relocations_gdf)
     trajs_gdf = Trajectory.from_relocations(relocations_gdf)
     figure = ecoscope.plotting.speed(trajs_gdf)
     figure = add_seasons_square(figure, seasons_df)
+    figure.update_xaxes(range=[x_min, x_max])
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
 
@@ -143,9 +149,12 @@ def draw_season_mcp_plot(
         raise ValueError("Relocations gdf is empty.")
 
     seasons_df = _load_seasons_df(seasons_df)
+    x_min = relocations_gdf["fixtime"].min()
+    x_max = relocations_gdf["fixtime"].max()
     relocations_gdf = Relocations.from_gdf(relocations_gdf)
     figure = ecoscope.plotting.mcp(relocations_gdf)
     figure = add_seasons_square(figure, seasons_df)
+    figure.update_xaxes(range=[x_min, x_max])
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
 
 
@@ -260,6 +269,9 @@ def draw_season_collared_plot(
         if events_gdf.empty:
             print(f"No events found for subject '{subject_name}'.")
             events_gdf = None
+    x_min = relocations_gdf["fixtime"].min()
+    x_max = relocations_gdf["fixtime"].max()
     fig = collar_event_timeline_plot(relocations_gdf, events_gdf)
     figure = add_seasons_square(fig, seasons_df)
+    figure.update_xaxes(range=[x_min, x_max])
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
