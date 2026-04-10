@@ -18,6 +18,7 @@ from ._custom_map_png import zoom_map_and_screenshot
 from ._custom_period import get_previous_period
 from ._custom_monthly_context import create_mep_monthly_context, create_monthly_ctx_cover
 from ._persist import gdf_to_geojson
+from ._cors import start_cors_server
 
 __all__ = [
     "create_monthly_ctx_cover",
@@ -49,4 +50,5 @@ __all__ = [
     "get_previous_period",
     "clean_string",
     "gdf_to_geojson",
+    "start_cors_server"
 ]
