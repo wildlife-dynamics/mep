@@ -61,7 +61,7 @@ def test_tuple_column_with_nan_values(tmp_path):
         data = json.load(f)
     colors = [f["properties"]["color"] for f in data["features"]]
     labels = [f["properties"]["label"] for f in data["features"]]
-    assert colors[0] == [[255, 0, 0], None, [0, 0, 255]]
+    assert colors == [[255, 0, 0], None, [0, 0, 255]]
     assert labels == ["a", "b", "c"]
 
 
