@@ -13,14 +13,15 @@ from ._collared_report_context import (
 from ._custom_pydeck import custom_view_state_deck_gdf
 from ._custom_ndvi_groups import process_aoi_ndvi_charts
 from ._custom_collar_voltage import (
-    process_collar_voltage_charts, extract_voltage_columns, generate_subject_voltage_chart
+    process_collar_voltage_charts,
+    extract_voltage_columns,
+    generate_subject_voltage_chart,
 )
 from ._sitrep import get_sitrep_event_config, compile_sitrep
 from ._custom_map_png import zoom_map_and_screenshot
 from ._custom_period import get_previous_period
 from ._custom_monthly_context import create_mep_monthly_context, create_monthly_ctx_cover
 from ._persist import gdf_to_geojson
-from ._cors import start_cors_server
 
 __all__ = [
     "create_monthly_ctx_cover",
@@ -52,7 +53,6 @@ __all__ = [
     "get_previous_period",
     "clean_string",
     "gdf_to_geojson",
-    "start_cors_server",
-    "extract_voltage_columns", 
-    "generate_subject_voltage_chart"
+    "extract_voltage_columns",
+    "generate_subject_voltage_chart",
 ]

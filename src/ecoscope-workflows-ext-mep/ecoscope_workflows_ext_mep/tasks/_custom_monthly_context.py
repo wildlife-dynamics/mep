@@ -180,7 +180,7 @@ def create_mep_monthly_context(
     vehicle_patrol_map_path: str | SkipSentinel | None,
     collared_elephant_plot_paths: List[str | SkipSentinel | None] | None,
     sitrep_df_path: str | SkipSentinel | None,
-    subject_group: str ,
+    subject_group: str,
     template_path: str,
     output_dir: str,
     filename: Optional[str] = None,
@@ -223,7 +223,7 @@ def create_mep_monthly_context(
         "foot_patrol_tracks": InlineImage(tpl, foot_patrols_map_path, width=Inches(6.58), height=Inches(3.85)),
         "sitrep": sitrep,
         "collar_voltage_list": collar_voltage_list,
-        "subject_group": subject_group
+        "subject_group": subject_group,
     }
 
     try:

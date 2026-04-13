@@ -144,6 +144,7 @@ def generate_subject_voltage_chart(
         ),
     )
 
+
 @task
 def process_collar_voltage_charts(
     relocs: Annotated[
@@ -189,9 +190,7 @@ def process_collar_voltage_charts(
 
     for (subject_name, subjectsource_id), subject_df in groups:
         try:
-            upperbound = dataframe_column_first_unique(
-                subject_df, "extra.extra.subjectsource__assigned_range.upper"
-            )
+            upperbound = dataframe_column_first_unique(subject_df, "extra.extra.subjectsource__assigned_range.upper")
             if not pd.isna(upperbound) and upperbound < pd.to_datetime(time_range.since):
                 print(f"Skipping {subject_name}: collar deactivated before time range")
                 skipped_count += 1
@@ -199,9 +198,8 @@ def process_collar_voltage_charts(
 
             previous_subject_df = None
             if previous_relocs is not None:
-                mask = (
-                    (previous_relocs["extra__subject__name"] == subject_name)
-                    & (previous_relocs["extra__subjectsource__id"] == subjectsource_id)
+                mask = (previous_relocs["extra__subject__name"] == subject_name) & (
+                    previous_relocs["extra__subjectsource__id"] == subjectsource_id
                 )
                 filtered = previous_relocs[mask].copy()
                 previous_subject_df = filtered if not filtered.empty else None
