@@ -36,7 +36,7 @@ def gdf_to_geojson(
 
     buffer = io.BytesIO()
     gdf = gpd.GeoDataFrame(df.copy())
- 
+
     # Handle tuple columns - in practice these are only our color columns and should serialize as lists
     def _is_tuple_column(series: pd.Series) -> bool:
         values = series.dropna()
