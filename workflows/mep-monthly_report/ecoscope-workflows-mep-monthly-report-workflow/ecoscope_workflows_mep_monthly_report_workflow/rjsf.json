@@ -284,20 +284,23 @@
       "type": "object",
       "title": "Connect to earth ranger"
     },
-    "gee_client": {
+    "get_events_data": {
       "additionalProperties": false,
       "properties": {
-        "data_source": {
-          "$ref": "#/$defs/GoogleEarthEngineConnection",
-          "title": "",
-          "description": "Select one of your configured data sources."
+        "event_types": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Event Types",
+          "type": "array",
+          "description": "Specify the event type(s) to analyze (optional). Leave this section empty to analyze all event types."
         }
       },
       "required": [
-        "data_source"
+        "event_types"
       ],
       "type": "object",
-      "title": "Connect to earth engine"
+      "title": "Retrieve all events"
     },
     "Subject Group": {
       "type": "object",
@@ -308,8 +311,9 @@
           "additionalProperties": false,
           "properties": {
             "var": {
-              "title": "",
-              "type": "string"
+              "title": "Subject Group Name",
+              "type": "string",
+              "default": "Elephants"
             }
           },
           "required": [
@@ -323,6 +327,14 @@
     "vehicle_patrols": {
       "additionalProperties": false,
       "properties": {
+        "patrol_types": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Patrol Types",
+          "type": "array",
+          "description": "Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
+        },
         "status": {
           "default": [
             "done"
@@ -343,13 +355,23 @@
           "ecoscope:advanced": true
         }
       },
-      "required": [],
+      "required": [
+        "patrol_types"
+      ],
       "type": "object",
       "title": "Retrieve vehicle patrols"
     },
     "foot_patrols": {
       "additionalProperties": false,
       "properties": {
+        "patrol_types": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Patrol Types",
+          "type": "array",
+          "description": "Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
+        },
         "status": {
           "default": [
             "done"
@@ -370,73 +392,11 @@
           "ecoscope:advanced": true
         }
       },
-      "required": [],
+      "required": [
+        "patrol_types"
+      ],
       "type": "object",
       "title": "Retrieve foot patrols"
-    },
-    "ndvi_method": {
-      "additionalProperties": false,
-      "properties": {
-        "var": {
-          "title": " ",
-          "type": "string",
-          "description": "Method to obtain NDVI values. 'MODIS MYD13A1 16-Day Composite': Uses pre-calculated NDVI from 16-day composites. Provides quality-filtered 'best pixel' values at 500m resolution with ~0.025 accuracy. Better for phenology studies but may saturate in dense canopies. 'MODIS MCD43A4 Daily NBAR': Uses daily nadir BRDF-adjusted reflectance. Computes NDVI from NIR/Red bands with view-angle correction for consistent measurements. Higher temporal resolution but more susceptible to cloud gaps.",
-          "enum": [
-            "MODIS MYD13A1 16-Day Composite",
-            "MODIS MCD43A4 Daily NBAR"
-          ],
-          "default": "MODIS MYD13A1 16-Day Composite"
-        }
-      },
-      "required": [],
-      "type": "object",
-      "title": "NDVI Method"
-    },
-    "calculate_ndvi": {
-      "additionalProperties": false,
-      "properties": {
-        "grouping_unit": {
-          "default": "month",
-          "enum": [
-            "month",
-            "week",
-            "day_of_year",
-            "modis_16_day"
-          ],
-          "title": "Grouping Unit",
-          "type": "string",
-          "description": "Temporal unit for grouping historical data when calculating statistics. 'month': Compare against same calendar month (1-12). 'week': Compare against same ISO week number (1-53). 'day_of_year': Compare against same day of year (1-366). 'modis_16_day': Compare against same MODIS 16-day composite period (0-22)."
-        }
-      },
-      "required": [],
-      "type": "object",
-      "title": "NDVI Trend"
-    },
-    "persist_ndvi_data": {
-      "additionalProperties": false,
-      "properties": {
-        "filetypes": {
-          "default": [
-            "csv"
-          ],
-          "items": {
-            "enum": [
-              "csv",
-              "gpkg",
-              "geoparquet",
-              "parquet"
-            ],
-            "type": "string"
-          },
-          "title": "Filetypes",
-          "type": "array",
-          "description": "The output format",
-          "uniqueItems": true
-        }
-      },
-      "required": [],
-      "type": "object",
-      "title": "Persist NDVI Data"
     }
   },
   "$defs": {
@@ -480,19 +440,6 @@
       ],
       "title": "EarthRangerConnection",
       "type": "object"
-    },
-    "GoogleEarthEngineConnection": {
-      "properties": {
-        "name": {
-          "title": "Data Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "title": "GoogleEarthEngineConnection",
-      "type": "object"
     }
   },
   "uiSchema": {
@@ -510,18 +457,27 @@
         "time_format"
       ]
     },
+    "vehicle_patrols": {
+      "ui:order": [
+        "patrol_types",
+        "status"
+      ]
+    },
+    "foot_patrols": {
+      "ui:order": [
+        "patrol_types",
+        "status"
+      ]
+    },
     "ui:order": [
       "workflow_details",
       "time_range",
       "configure_base_maps",
       "er_client_name",
-      "gee_client",
+      "get_events_data",
       "Subject Group",
       "vehicle_patrols",
-      "foot_patrols",
-      "ndvi_method",
-      "calculate_ndvi",
-      "persist_ndvi_data"
+      "foot_patrols"
     ]
   },
   "additionalProperties": false

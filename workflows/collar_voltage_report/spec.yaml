@@ -1,0 +1,267 @@
+id: collar_voltage_report
+requirements:
+  - name: ecoscope-workflows-core
+    version: "0.22.17.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows/
+
+  - name: ecoscope-workflows-ext-ecoscope
+    version: "0.22.17.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows/
+
+  - name: ecoscope-workflows-ext-custom
+    version: "0.0.40.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-ste
+    version: "0.0.18.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-mnc
+    version: "0.0.7.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-big-life
+    version: "0.0.8.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-mep
+    version: "*"
+    channel: "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
+
+rjsf-overrides:
+  properties:
+    Subject Group.properties.subject_group_var.properties.var.title: Subject Group Name
+    Subject Group.properties.subject_group_var.properties.var.default: Elephants
+    
+task-instance-defaults:
+  skipif:
+    conditions:
+      - any_is_empty_df
+      - any_dependency_skipped
+
+workflow:
+  # set workflow details
+  - name: Set workflow details
+    id: workflow_details
+    task: set_workflow_details
+
+  # define time range
+  - name: Define analysis time range
+    id: time_range
+    task: set_time_range
+
+  # set groupers -- limiting this to subject_name
+  - name: Configure grouping strategy
+    id: groupers
+    task: set_groupers
+    partial:
+      groupers:
+        - index_name: "extra__subject__name"
+
+  # set basemaps
+  - name: Configure base map layers
+    id: configure_base_maps
+    task: set_base_maps_pydeck
+
+  # connect to earthranger
+  - name: Connect to earth ranger
+    id: er_client_name
+    task: set_er_connection
+
+  # get relocations:collar voltages for subjects and persist file
+  - title: Subject Group
+    type: task-group
+    description: Choose subject group to generate collar voltage charts and overall speedmap
+    tasks:
+      - name: null
+        id: subject_group_var
+        task: set_string_var
+
+  - name: Get subject group observations
+    id: subject_observations
+    task: get_subjectgroup_observations
+    partial:
+      filter: clean
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.time_range.return }}
+      subject_group_name: ${{ workflow.subject_group_var.return }} # pass this to word doc
+      raise_on_empty: false
+      include_details: true
+      include_subjectsource_details: true
+
+  - name: Transform observations to relocations
+    id: subject_reloc
+    task: process_relocations
+    partial:
+      observations: ${{ workflow.subject_observations.return }}
+      relocs_columns:
+        - groupby_col
+        - fixtime
+        - junk_status
+        - geometry
+        - extra__subject__name
+        - extra__subject__hex
+        - extra__subject__sex
+        - extra__created_at
+        - extra__subject__subject_subtype
+        - extra__subjectsource__id
+        - extra__subjectsource__assigned_range
+        - extra__observation_details
+
+      filter_point_coords:
+        - x: 180.000000
+          y: 90.000000
+        - x: 0.000000
+          y: 0.000000
+        - x: 1.000000
+          y: 1.000000
+
+  - name: Get previous period
+    id: get_custom_previous_period
+    task: get_previous_period
+    partial:
+      time_range: ${{ workflow.time_range.return }}
+
+  - name: Get subject group observations for previous relocs
+    id: previous_subject_observations
+    task: get_subjectgroup_observations
+    partial:
+      filter: clean
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.get_custom_previous_period.return }}
+      subject_group_name: ${{ workflow.subject_group_var.return }}
+      raise_on_empty: false
+      include_details: true
+      include_subjectsource_details: true
+
+  - name: Transform previous observations to relocations
+    id: previous_subject_reloc
+    task: process_relocations
+    partial:
+      observations: ${{ workflow.previous_subject_observations.return }}
+      relocs_columns:
+        - groupby_col
+        - fixtime
+        - junk_status
+        - geometry
+        - extra__subject__name
+        - extra__subject__hex
+        - extra__subject__sex
+        - extra__created_at
+        - extra__subject__subject_subtype
+        - extra__subjectsource__id
+        - extra__subjectsource__assigned_range
+        - extra__observation_details
+
+      filter_point_coords:
+        - x: 180.000000
+          y: 90.000000
+        - x: 0.000000
+          y: 0.000000
+        - x: 1.000000
+          y: 1.000000
+
+  - name: Extract current voltage columns 
+    id: extract_current_voltage
+    task: extract_voltage_columns 
+    partial: 
+      relocs: ${{ workflow.subject_observations.return }}
+      
+  - name: Extract previous voltage columns 
+    id: extract_previous_voltage
+    task: extract_voltage_columns 
+    partial: 
+      relocs: ${{ workflow.previous_subject_observations.return }}
+  
+  - name: Split current reloc groups 
+    id: split_current_relocs 
+    task: split_groups 
+    partial: 
+      df: ${{ workflow.extract_current_voltage.return }}
+      groupers: ${{ workflow.groupers.return }}
+
+  - name: Split previous reloc groups 
+    id: split_previous_relocs 
+    task: split_groups 
+    partial: 
+      df: ${{ workflow.extract_previous_voltage.return }}
+      groupers: ${{ workflow.groupers.return }}
+
+  - name: Get unique subject name 
+    id: get_unique_subject_name 
+    task: dataframe_column_first_unique_str
+    partial:
+      column_name: "extra__subject__name"
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.split_current_relocs.return }}
+
+  - name: Zip values 
+    id: zip_current_prev_name
+    task: zip_groupbykey 
+    partial: 
+      sequences: 
+        - ${{ workflow.split_current_relocs.return }}
+        - ${{ workflow.split_previous_relocs.return }}
+        - ${{ workflow.get_unique_subject_name.return }}
+
+  - name: Generate subject collar voltage 
+    id: generate_subject_voltage 
+    task: generate_subject_voltage_chart 
+    partial: 
+      time_range: ${{ workflow.time_range.return }}
+    mapvalues: 
+      argnames:
+        - subject_df 
+        - previous_subject_df 
+        - subject_name 
+      argvalues: ${{ workflow.zip_current_prev_name.return }}
+  
+  - name: Zip html with unique subject
+    id: zip_html_unique
+    task: zip_groupbykey 
+    partial: 
+      sequences: 
+        - ${{ workflow.generate_subject_voltage.return }}
+        - ${{ workflow.get_unique_subject_name.return }}
+
+  - name: Persist collar voltage text as html 
+    id: persist_collar_html
+    task: persist_text 
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+    mapvalues:
+      argnames: 
+        - text
+        - filename_suffix 
+      argvalues: ${{ workflow.zip_html_unique.return }}
+  
+  - name: Create widget for collar voltage plot
+    id: collared_voltage_widget
+    task: create_map_widget_single_view
+    skipif:
+      conditions: 
+        - never
+    partial:
+      title: Collar Voltage
+    map:
+      argnames:
+        - view 
+        - data
+      argvalues: ${{ workflow.persist_collar_html.return }}
+
+  - name: Merge collar voltage plot widgets 
+    id: grouped_collared_widget
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.collared_voltage_widget.return }}
+
+  - name: Collar Voltage widget
+    id: collar_voltage_dashboard
+    task: gather_dashboard
+    partial:
+      details: ${{ workflow.workflow_details.return}}
+      widgets: 
+        - ${{ workflow.grouped_collared_widget.return }}
+      time_range: ${{ workflow.time_range.return}}
+      groupers: ${{ workflow.groupers.return }}

@@ -54,3 +54,9 @@ cmd = './dev/recompile.sh mep-monthly_report --install'
 
 [feature.compile.tasks.recompile-mep-monthly_report]
 cmd = './dev/recompile.sh mep-monthly_report --update'
+
+[feature.compile.tasks.compile-collar_voltage_report]
+cmd = './dev/recompile.sh collar_voltage_report --install'
+
+[feature.compile.tasks.recompile-collar_voltage_report]
+cmd = './dev/recompile.sh collar_voltage_report --update'

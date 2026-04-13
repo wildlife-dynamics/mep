@@ -186,6 +186,17 @@ class ConfigureBaseMaps(BaseModel):
     )
 
 
+class GetEventsData(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    event_types: List[str] = Field(
+        ...,
+        description="Specify the event type(s) to analyze (optional). Leave this section empty to analyze all event types.",
+        title="Event Types",
+    )
+
+
 class SubjectGroupVar(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -204,6 +215,11 @@ class VehiclePatrols(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+    patrol_types: List[str] = Field(
+        ...,
+        description="Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
+        title="Patrol Types",
+    )
     status: Optional[List[StatusEnum]] = Field(
         ["done"],
         description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
@@ -215,51 +231,15 @@ class FootPatrols(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+    patrol_types: List[str] = Field(
+        ...,
+        description="Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
+        title="Patrol Types",
+    )
     status: Optional[List[StatusEnum]] = Field(
         ["done"],
         description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
         title="Patrol Status",
-    )
-
-
-class NdviMethod(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    var: str = Field(..., title="")
-
-
-class GroupingUnit(str, Enum):
-    month = "month"
-    week = "week"
-    day_of_year = "day_of_year"
-    modis_16_day = "modis_16_day"
-
-
-class CalculateNdvi(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    grouping_unit: Optional[GroupingUnit] = Field(
-        "month",
-        description="Temporal unit for grouping historical data when calculating statistics. 'month': Compare against same calendar month (1-12). 'week': Compare against same ISO week number (1-53). 'day_of_year': Compare against same day of year (1-366). 'modis_16_day': Compare against same MODIS 16-day composite period (0-22).",
-        title="Grouping Unit",
-    )
-
-
-class Filetype(str, Enum):
-    csv = "csv"
-    gpkg = "gpkg"
-    geoparquet = "geoparquet"
-    parquet = "parquet"
-
-
-class PersistNdviData(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    filetypes: Optional[List[Filetype]] = Field(
-        ["csv"], description="The output format", title="Filetypes"
     )
 
 
@@ -271,10 +251,6 @@ class TimezoneInfo(BaseModel):
 
 
 class EarthRangerConnection(BaseModel):
-    name: str = Field(..., title="Data Source")
-
-
-class GoogleEarthEngineConnection(BaseModel):
     name: str = Field(..., title="Data Source")
 
 
@@ -299,15 +275,6 @@ class ErClientName(BaseModel):
     )
 
 
-class GeeClient(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    data_source: GoogleEarthEngineConnection = Field(
-        ..., description="Select one of your configured data sources.", title=""
-    )
-
-
 class Params(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -328,14 +295,9 @@ class Params(BaseModel):
     er_client_name: Optional[ErClientName] = Field(
         None, title="Connect to earth ranger"
     )
-    gee_client: Optional[GeeClient] = Field(None, title="Connect to earth engine")
+    get_events_data: Optional[GetEventsData] = Field(None, title="Retrieve all events")
     subject_group_var: Optional[SubjectGroupVar] = Field(None, title="")
     vehicle_patrols: Optional[VehiclePatrols] = Field(
         None, title="Retrieve vehicle patrols"
     )
     foot_patrols: Optional[FootPatrols] = Field(None, title="Retrieve foot patrols")
-    ndvi_method: Optional[NdviMethod] = Field(None, title="NDVI Method")
-    calculate_ndvi: Optional[CalculateNdvi] = Field(None, title="NDVI Trend")
-    persist_ndvi_data: Optional[PersistNdviData] = Field(
-        None, title="Persist NDVI Data"
-    )

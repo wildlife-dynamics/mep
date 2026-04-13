@@ -18,25 +18,18 @@ from ecoscope_workflows_core.tasks.config import (
 )
 from ecoscope_workflows_core.tasks.filter import set_time_range as set_time_range
 from ecoscope_workflows_core.tasks.groupby import set_groupers as set_groupers
-from ecoscope_workflows_core.tasks.groupby import split_groups as split_groups
 from ecoscope_workflows_core.tasks.io import persist_text as persist_text
 from ecoscope_workflows_core.tasks.io import set_er_connection as set_er_connection
-from ecoscope_workflows_core.tasks.io import set_gee_connection as set_gee_connection
 from ecoscope_workflows_core.tasks.results import gather_dashboard as gather_dashboard
 from ecoscope_workflows_core.tasks.skip import (
     any_dependency_skipped as any_dependency_skipped,
 )
 from ecoscope_workflows_core.tasks.skip import any_is_empty_df as any_is_empty_df
-from ecoscope_workflows_core.tasks.skip import never as never
 from ecoscope_workflows_core.tasks.transformation import (
     add_temporal_index as add_temporal_index,
 )
 from ecoscope_workflows_core.tasks.transformation import sort_values as sort_values
 from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
-from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
-from ecoscope_workflows_ext_custom.tasks.io import (
-    persist_df_wrapper as persist_df_wrapper,
-)
 from ecoscope_workflows_ext_custom.tasks.results import (
     create_path_layer as create_path_layer,
 )
@@ -49,9 +42,6 @@ from ecoscope_workflows_ext_custom.tasks.results import (
 )
 from ecoscope_workflows_ext_custom.tasks.transformation import (
     drop_null_geometry as drop_null_geometry,
-)
-from ecoscope_workflows_ext_ecoscope.tasks.io import (
-    calculate_ndvi_range as calculate_ndvi_range,
 )
 from ecoscope_workflows_ext_ecoscope.tasks.io import get_events as get_events
 from ecoscope_workflows_ext_ecoscope.tasks.io import (
@@ -67,16 +57,12 @@ from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
 from ecoscope_workflows_ext_ecoscope.tasks.preprocessing import (
     relocations_to_trajectory as relocations_to_trajectory,
 )
-from ecoscope_workflows_ext_ecoscope.tasks.results import (
-    draw_historic_timeseries as draw_historic_timeseries,
-)
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     apply_classification as apply_classification,
 )
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     apply_color_map as apply_color_map,
 )
-from ecoscope_workflows_ext_mep.tasks import clean_string as clean_string
 from ecoscope_workflows_ext_mep.tasks import compile_sitrep as compile_sitrep
 from ecoscope_workflows_ext_mep.tasks import (
     create__mep_context_page as create__mep_context_page,
@@ -98,16 +84,11 @@ from ecoscope_workflows_ext_mnc.tasks import (
     exclude_geom_outliers as exclude_geom_outliers,
 )
 from ecoscope_workflows_ext_ste.tasks import (
-    dataframe_column_first_unique_str as dataframe_column_first_unique_str,
-)
-from ecoscope_workflows_ext_ste.tasks import (
     fetch_and_persist_file as fetch_and_persist_file,
 )
 from ecoscope_workflows_ext_ste.tasks import filter_df_cols as filter_df_cols
 from ecoscope_workflows_ext_ste.tasks import merge_mapbook_files as merge_mapbook_files
-from ecoscope_workflows_ext_ste.tasks import transform_gdf_crs as transform_gdf_crs
 from ecoscope_workflows_ext_ste.tasks import view_state_deck_gdf as view_state_deck_gdf
-from ecoscope_workflows_ext_ste.tasks import zip_groupbykey as zip_groupbykey
 
 # %% [markdown]
 # ## Set workflow details
@@ -263,42 +244,14 @@ er_client_name = (
 
 
 # %% [markdown]
-# ## Connect to earth engine
-
-# %%
-# parameters
-
-gee_client_params = dict(
-    data_source=...,
-)
-
-# %%
-# call the task
-
-
-gee_client = (
-    set_gee_connection.set_task_instance_id("gee_client")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(**gee_client_params)
-    .call()
-)
-
-
-# %% [markdown]
 # ## Retrieve all events
 
 # %%
 # parameters
 
-get_events_data_params = dict()
+get_events_data_params = dict(
+    event_types=...,
+)
 
 # %%
 # call the task
@@ -329,7 +282,6 @@ get_events_data = (
             "created_at",
             "event_details",
         ],
-        event_types=["mep_elephant_sighting"],
         raise_on_empty=True,
         include_details=True,
         include_updates=False,
@@ -343,7 +295,7 @@ get_events_data = (
 
 
 # %% [markdown]
-# ## Exclude geom outliers from mep elephant sighting events
+# ## Exclude geom outliers from events
 
 # %%
 # parameters
@@ -371,7 +323,7 @@ exclude_mep_outliers = (
 
 
 # %% [markdown]
-# ## Remove elephant sighting invalid points
+# ## Remove invalid event  points
 
 # %%
 # parameters
@@ -403,7 +355,41 @@ remove_mep_invalid_geoms = (
 
 
 # %% [markdown]
-# ## Generate elephant sighting point layers
+# ## Apply colormap to events
+
+# %%
+# parameters
+
+apply_event_colormap_params = dict()
+
+# %%
+# call the task
+
+
+apply_event_colormap = (
+    apply_color_map.set_task_instance_id("apply_event_colormap")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        df=remove_mep_invalid_geoms,
+        input_column_name="event_type",
+        output_column_name="event_type_colors",
+        colormap="tab20",
+        **apply_event_colormap_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Generate events point layers
 
 # %%
 # parameters
@@ -427,8 +413,8 @@ generate_mb_layers = (
     )
     .partial(
         layer_style={
-            "get_fill_color": [85, 107, 47],
-            "get_line_color": [0, 0, 0, 200],
+            "get_fill_color": "event_type_colors",
+            "get_line_color": "event_type_colors",
             "get_line_width": 0.55,
             "get_radius": 3.55,
             "opacity": 0.75,
@@ -436,9 +422,12 @@ generate_mb_layers = (
         },
         legend={
             "title": "Legend",
-            "values": [{"label": "Elephant sightings", "color": "#556b2f"}],
+            "label_column": "event_type",
+            "color_column": "event_type_colors",
+            "sort": None,
+            "label_suffix": None,
         },
-        geodataframe=remove_mep_invalid_geoms,
+        geodataframe=apply_event_colormap,
         **generate_mb_layers_params,
     )
     .call()
@@ -446,7 +435,7 @@ generate_mb_layers = (
 
 
 # %% [markdown]
-# ## Elephant sightings zoom value
+# ## Events zoom value
 
 # %%
 # parameters
@@ -1289,6 +1278,7 @@ persist_sitrep_csv = (
 # parameters
 
 vehicle_patrols_params = dict(
+    patrol_types=...,
     status=...,
 )
 
@@ -1314,19 +1304,6 @@ vehicle_patrols = (
         raise_on_empty=True,
         sub_page_size=100,
         patrols_overlap_daterange=True,
-        patrol_types=[
-            "MEP_routine_vehicle_patrol_bravo_team",
-            "MEP_routine_vehicle_patrol_foxtrot_team",
-            "MEP_Routine_Vehicle_Patrol - Mwaluganje Team",
-            "MEP_routine_vehicle_patrol_hq_team",
-            "MEP_routine_vehicle_patrol_delta_team",
-            "MEP_routine_vehicle_patrol_echo_team",
-            "MEP_routine_vehicle_patrol_kilo_team",
-            "MEP_routine_vehicle_patrol_mobile_team",
-            "MEP_routine_vehicle_patrol_alpha_team",
-            "MEP_routine_vehicle_patrol_charlie_team",
-            "MEP_routine_vehicle_patrol_golf_team",
-        ],
         **vehicle_patrols_params,
     )
     .call()
@@ -1651,6 +1628,7 @@ vehicle_patrol_map = (
 # parameters
 
 foot_patrols_params = dict(
+    patrol_types=...,
     status=...,
 )
 
@@ -1676,19 +1654,6 @@ foot_patrols = (
         raise_on_empty=True,
         sub_page_size=100,
         patrols_overlap_daterange=True,
-        patrol_types=[
-            "MEP_routine_foot_patrol_bravo_team",
-            "MEP_routine_foot_patrol_foxtrot_team",
-            "MEP_routine_foot_patrol_HQ_team",
-            "MEP_routine_foot_patrol_ Delta_Team",
-            "MEP_routine_foot_patrol_echo_team",
-            "MEP_routine_foot_patrol_kilo_team",
-            "mwaluganje_routine_foot_patrol_alpha_team",
-            "MEP_routine_foot_patrol_alpha_team",
-            "MEP_routine_foot_patrol_charlie_team",
-            "MEP_routine_foot_patrol_golf_team",
-            "MEP_routine_foot_patrol_marmanet",
-        ],
         **foot_patrols_params,
     )
     .call()
@@ -2007,431 +1972,6 @@ foot_patrol_map = (
 
 
 # %% [markdown]
-# ## Download ROI file and persist
-
-# %%
-# parameters
-
-download_roi_file_params = dict()
-
-# %%
-# call the task
-
-
-download_roi_file = (
-    fetch_and_persist_file.set_task_instance_id("download_roi_file")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(
-        url="https://www.dropbox.com/scl/fi/2bpktq45zns9igryl6q9l/ROIs.gpkg?rlkey=sojch2njmvsa3i5a3f3pt11xq&st=9x70z6z1&dl=0",
-        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        overwrite_existing=False,
-        retries=3,
-        unzip=False,
-        **download_roi_file_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## Load roi
-
-# %%
-# parameters
-
-load_roi_params = dict()
-
-# %%
-# call the task
-
-
-load_roi = (
-    load_df.set_task_instance_id("load_roi")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(
-        file_path=download_roi_file,
-        layer=None,
-        deserialize_json=False,
-        **load_roi_params,
-    )
-    .call()
-)
-
-
-# %% [markdown]
-# ## Transform gdf to epsg 4326
-
-# %%
-# parameters
-
-transform_roi_params = dict()
-
-# %%
-# call the task
-
-
-transform_roi = (
-    transform_gdf_crs.set_task_instance_id("transform_roi")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(gdf=load_roi, crs="EPSG:4326", **transform_roi_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## Split values by ranch name
-
-# %%
-# parameters
-
-split_roi_groups_params = dict()
-
-# %%
-# call the task
-
-
-split_roi_groups = (
-    split_groups.set_task_instance_id("split_roi_groups")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(df=transform_roi, groupers=groupers, **split_roi_groups_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## NDVI Method
-
-# %%
-# parameters
-
-ndvi_method_params = dict(
-    var=...,
-)
-
-# %%
-# call the task
-
-
-ndvi_method = (
-    set_string_var.set_task_instance_id("ndvi_method")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(**ndvi_method_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## NDVI Trend
-
-# %%
-# parameters
-
-calculate_ndvi_params = dict(
-    grouping_unit=...,
-)
-
-# %%
-# call the task
-
-
-calculate_ndvi = (
-    calculate_ndvi_range.set_task_instance_id("calculate_ndvi")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(
-        client=gee_client,
-        time_range=time_range,
-        ndvi_method=ndvi_method,
-        baseline_time_range=None,
-        image_size=1000000000,
-        **calculate_ndvi_params,
-    )
-    .mapvalues(argnames=["roi"], argvalues=split_roi_groups)
-)
-
-
-# %% [markdown]
-# ## Persist NDVI Data
-
-# %%
-# parameters
-
-persist_ndvi_data_params = dict(
-    filename=...,
-    filetypes=...,
-)
-
-# %%
-# call the task
-
-
-persist_ndvi_data = (
-    persist_df_wrapper.set_task_instance_id("persist_ndvi_data")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            never,
-        ],
-        unpack_depth=1,
-    )
-    .partial(
-        root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        sanitize=True,
-        filename_prefix="ndvi",
-        **persist_ndvi_data_params,
-    )
-    .mapvalues(argnames=["df"], argvalues=calculate_ndvi)
-)
-
-
-# %% [markdown]
-# ## Draw NDVI
-
-# %%
-# parameters
-
-draw_ndvi_params = dict(
-    widget_id=...,
-)
-
-# %%
-# call the task
-
-
-draw_ndvi = (
-    draw_historic_timeseries.set_task_instance_id("draw_ndvi")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(
-        current_value_column="NDVI",
-        current_value_title="NDVI",
-        historic_min_column="min",
-        historic_max_column="max",
-        historic_mean_column="mean",
-        historic_band_title="Historic Min-Max",
-        historic_mean_title="Historic Mean",
-        layout_style=None,
-        upper_lower_band_style={
-            "mode": "lines",
-            "line": {"color": "rgba(144, 238, 144, 0.8)"},
-            "fillcolor": "rgba(144, 238, 144, 0.3)",
-        },
-        historic_mean_style=None,
-        current_value_style=None,
-        time_column="img_date",
-        **draw_ndvi_params,
-    )
-    .mapvalues(argnames=["dataframe"], argvalues=calculate_ndvi)
-)
-
-
-# %% [markdown]
-# ## Get unique area name
-
-# %%
-# parameters
-
-get_area_name_params = dict()
-
-# %%
-# call the task
-
-
-get_area_name = (
-    dataframe_column_first_unique_str.set_task_instance_id("get_area_name")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(column_name="name", **get_area_name_params)
-    .mapvalues(argnames=["df"], argvalues=split_roi_groups)
-)
-
-
-# %% [markdown]
-# ## Format strings extracted from roi
-
-# %%
-# parameters
-
-format_area_name_params = dict()
-
-# %%
-# call the task
-
-
-format_area_name = (
-    clean_string.set_task_instance_id("format_area_name")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(**format_area_name_params)
-    .mapvalues(argnames=["s"], argvalues=get_area_name)
-)
-
-
-# %% [markdown]
-# ## Combine area names and ndvi charts
-
-# %%
-# parameters
-
-zip_area_ndvi_params = dict()
-
-# %%
-# call the task
-
-
-zip_area_ndvi = (
-    zip_groupbykey.set_task_instance_id("zip_area_ndvi")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(sequences=[draw_ndvi, format_area_name], **zip_area_ndvi_params)
-    .call()
-)
-
-
-# %% [markdown]
-# ## Persist NDVI Chart as Text
-
-# %%
-# parameters
-
-persist_ndvi_params = dict(
-    filename=...,
-)
-
-# %%
-# call the task
-
-
-persist_ndvi = (
-    persist_text.set_task_instance_id("persist_ndvi")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"], **persist_ndvi_params)
-    .mapvalues(argnames=["text", "filename_suffix"], argvalues=zip_area_ndvi)
-)
-
-
-# %% [markdown]
-# ## Convert ndvi ranch chart to png
-
-# %%
-# parameters
-
-convert_ndvi_png_params = dict()
-
-# %%
-# call the task
-
-
-convert_ndvi_png = (
-    html_to_png.set_task_instance_id("convert_ndvi_png")
-    .handle_errors()
-    .with_tracing()
-    .skipif(
-        conditions=[
-            any_is_empty_df,
-            any_dependency_skipped,
-        ],
-        unpack_depth=1,
-    )
-    .partial(
-        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-        config={
-            "full_page": False,
-            "device_scale_factor": 2.0,
-            "wait_for_timeout": 10,
-            "max_concurrent_pages": 3,
-        },
-        **convert_ndvi_png_params,
-    )
-    .mapvalues(argnames=["html_path"], argvalues=persist_ndvi)
-)
-
-
-# %% [markdown]
 # ## Convert elephant sighting events html to png
 
 # %%
@@ -2460,7 +2000,7 @@ convert_sightings_png = (
         config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 40000,
+            "wait_for_timeout": 10,
             "max_concurrent_pages": 1,
         },
         **convert_sightings_png_params,
@@ -2498,7 +2038,7 @@ convert_speedmap_png = (
         config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 40000,
+            "wait_for_timeout": 10,
             "max_concurrent_pages": 1,
         },
         **convert_speedmap_png_params,
@@ -2536,7 +2076,7 @@ convert_vehicle_png = (
         config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 40000,
+            "wait_for_timeout": 10,
             "max_concurrent_pages": 1,
         },
         **convert_vehicle_png_params,
@@ -2574,7 +2114,7 @@ convert_foot_png = (
         config={
             "full_page": False,
             "device_scale_factor": 2.0,
-            "wait_for_timeout": 40000,
+            "wait_for_timeout": 10,
             "max_concurrent_pages": 1,
         },
         **convert_foot_png_params,
@@ -2788,6 +2328,7 @@ create_monthly_ctx = (
         speedmap_path=convert_speedmap_png,
         foot_patrols_map_path=convert_foot_png,
         vehicle_patrol_map_path=convert_vehicle_png,
+        subject_group=subject_group_var,
         collared_elephant_plot_paths=convert_collared_png,
         sitrep_df_path=persist_sitrep_csv,
         **create_monthly_ctx_params,

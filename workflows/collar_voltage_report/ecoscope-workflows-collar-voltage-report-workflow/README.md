@@ -5,8 +5,8 @@
 
 ```yaml
 # fingerprint:
-artifacts_sha256_basic: e5ce4ac370478ad945cf20533315066fe75807b9d3d9ef47e983dc52af1ac037
-artifacts_sha256_strict: db169e17c5a6f9bb1d0a9042e1fd0a87cdf8a0f319228c26cc576817085c39b8
+artifacts_sha256_basic: 7c0c76a2821e8669f553821f0093f8fe2c1ac4353a88e9af8a7bcf58b39237d0
+artifacts_sha256_strict: 2f0f95c7c86ef1d6d8df22a8c653eea192c7378b15a54e336a0323827125855c
 installed_requirements:
 - channel: https://repo.prefix.dev/ecoscope-workflows/
   name: ecoscope-workflows-core
@@ -29,11 +29,11 @@ installed_requirements:
 - channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
   name: ecoscope-workflows-ext-mep
   version: {version: ==0.0.13.dev0+gfa96d6450.d20260413}
-params_sha256: 340262060c52d7ab7ad5b764226a0b32e732277580e9c662bacd6d773e8240f2
-spec_sha256: 3d100bb402b6f23e359a075ac3f4852bdd3e35bcdc6d1762e38e76d0f2e8e163
+params_sha256: 72d960473dae1b0b9d09b8976e987d22ea60ae7a295e079969db69248d2f84fb
+spec_sha256: c78ffa0d1d3f5bcc9a95e6d5aef381131301717c560505e0b216d27aa83137bd
 
 ```
 
-# ecoscope-workflows-mep-monthly-report-workflow
+# ecoscope-workflows-collar-voltage-report-workflow
 
 ![](graph.png)

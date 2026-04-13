@@ -284,24 +284,6 @@
       "type": "object",
       "title": "Connect to earth ranger"
     },
-    "get_events_data": {
-      "additionalProperties": false,
-      "properties": {
-        "event_types": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Event Types",
-          "type": "array",
-          "description": "Specify the event type(s) to analyze (optional). Leave this section empty to analyze all event types."
-        }
-      },
-      "required": [
-        "event_types"
-      ],
-      "type": "object",
-      "title": "Retrieve all events"
-    },
     "subject_group_var": {
       "additionalProperties": false,
       "properties": {
@@ -315,80 +297,6 @@
       ],
       "type": "object",
       "title": ""
-    },
-    "vehicle_patrols": {
-      "additionalProperties": false,
-      "properties": {
-        "patrol_types": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Patrol Types",
-          "type": "array",
-          "description": "Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
-        },
-        "status": {
-          "default": [
-            "done"
-          ],
-          "items": {
-            "enum": [
-              "active",
-              "overdue",
-              "done",
-              "cancelled"
-            ],
-            "type": "string"
-          },
-          "title": "Patrol Status",
-          "type": "array",
-          "description": "Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
-          "uniqueItems": true,
-          "ecoscope:advanced": true
-        }
-      },
-      "required": [
-        "patrol_types"
-      ],
-      "type": "object",
-      "title": "Retrieve vehicle patrols"
-    },
-    "foot_patrols": {
-      "additionalProperties": false,
-      "properties": {
-        "patrol_types": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Patrol Types",
-          "type": "array",
-          "description": "Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
-        },
-        "status": {
-          "default": [
-            "done"
-          ],
-          "items": {
-            "enum": [
-              "active",
-              "overdue",
-              "done",
-              "cancelled"
-            ],
-            "type": "string"
-          },
-          "title": "Patrol Status",
-          "type": "array",
-          "description": "Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
-          "uniqueItems": true,
-          "ecoscope:advanced": true
-        }
-      },
-      "required": [
-        "patrol_types"
-      ],
-      "type": "object",
-      "title": "Retrieve foot patrols"
     }
   },
   "$defs": {
@@ -449,27 +357,12 @@
         "time_format"
       ]
     },
-    "vehicle_patrols": {
-      "ui:order": [
-        "patrol_types",
-        "status"
-      ]
-    },
-    "foot_patrols": {
-      "ui:order": [
-        "patrol_types",
-        "status"
-      ]
-    },
     "ui:order": [
       "workflow_details",
       "time_range",
       "configure_base_maps",
       "er_client_name",
-      "get_events_data",
-      "subject_group_var",
-      "vehicle_patrols",
-      "foot_patrols"
+      "subject_group_var"
     ]
   },
   "additionalProperties": false
