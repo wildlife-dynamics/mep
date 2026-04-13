@@ -180,6 +180,7 @@ def create_mep_monthly_context(
     vehicle_patrol_map_path: str | SkipSentinel | None,
     collared_elephant_plot_paths: List[str | SkipSentinel | None] | None,
     sitrep_df_path: str | SkipSentinel | None,
+    subject_group: str,
     template_path: str,
     output_dir: str,
     filename: Optional[str] = None,
@@ -194,8 +195,6 @@ def create_mep_monthly_context(
     sitrep_df_path = _unwrap_skip(sitrep_df_path)
 
     collared_paths = _unwrap_and_validate_list(collared_elephant_plot_paths)
-    ndvi_paths = _discover_ndvi_paths(output_dir)
-
     if not filename:
         filename = f"mep_report_{uuid.uuid4().hex[:4]}.docx"
     output_path = Path(output_dir) / filename
@@ -214,14 +213,6 @@ def create_mep_monthly_context(
         for path in collared_paths
     ]
 
-    ndvi_list: List[Dict[str, Any]] = [
-        {
-            "ndvi_image": InlineImage(tpl, path, width=Inches(6.58), height=Inches(3.85)),
-            "area": _stem_custom_label(path),
-        }
-        for path in ndvi_paths
-    ]
-
     sitrep_df = safe_read_csv(sitrep_df_path)
     sitrep = sitrep_df.to_dict(orient="records")
 
@@ -232,7 +223,7 @@ def create_mep_monthly_context(
         "foot_patrol_tracks": InlineImage(tpl, foot_patrols_map_path, width=Inches(6.58), height=Inches(3.85)),
         "sitrep": sitrep,
         "collar_voltage_list": collar_voltage_list,
-        "ndvi_list": ndvi_list,
+        "subject_group": subject_group,
     }
 
     try:

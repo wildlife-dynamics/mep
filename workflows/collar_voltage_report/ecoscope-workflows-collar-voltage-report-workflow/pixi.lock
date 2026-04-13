@@ -8575,8 +8575,8 @@ packages:
   timestamp: 1773833340423
 - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-0.0.13.dev0+gfa96d6450.d20260413-pyh4616a5c_0.conda
   subdir: noarch
-  sha256: 2b6e047f6fab8eb4c3e843fea37bce2a59948a5c6b3a1dc7a3f6eec2fcf9af06
-  md5: 18469ca57984bb59035778214b7d5099
+  sha256: f067ff39625d856219eac6b59aae228b755f2e8425ecb0d4240b33b1a219f691
+  md5: 2973622a18f68fcae5c99361e8aa6f15
   depends:
   - python
   - ecoscope
@@ -8592,8 +8592,8 @@ packages:
   - docxcompose
   channel: file:///tmp/ecoscope-workflows-custom/release/artifacts
   license: BSD-3-Clause
-  size: 32100
-  timestamp: 1776064140859
+  size: 32133
+  timestamp: 1776066499809
 - conda: https://repo.prefix.dev/ecoscope-workflows-custom/noarch/ecoscope-workflows-ext-mnc-0.0.7-pyh4616a5c_0.conda
   sha256: 3b6e0ae2e304e92365ebb829c01c2e18df7dc9054729760ac79702214aedf204
   md5: b4c52de9b045cc4c1650d6669cbd0cd7

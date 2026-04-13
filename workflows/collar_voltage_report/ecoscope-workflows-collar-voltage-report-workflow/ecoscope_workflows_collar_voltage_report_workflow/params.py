@@ -186,65 +186,11 @@ class ConfigureBaseMaps(BaseModel):
     )
 
 
-class GetEventsData(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    event_types: List[str] = Field(
-        ...,
-        description="Specify the event type(s) to analyze (optional). Leave this section empty to analyze all event types.",
-        title="Event Types",
-    )
-
-
 class SubjectGroupVar(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    var: str = Field(..., title="Subject Group Name")
-
-
-class SubjectGroup(BaseModel):
-    subject_group_var: Optional[SubjectGroupVar] = Field(None, title="")
-
-
-class StatusEnum(str, Enum):
-    active = "active"
-    overdue = "overdue"
-    done = "done"
-    cancelled = "cancelled"
-
-
-class VehiclePatrols(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    patrol_types: List[str] = Field(
-        ...,
-        description="Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
-        title="Patrol Types",
-    )
-    status: Optional[List[StatusEnum]] = Field(
-        ["done"],
-        description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
-        title="Patrol Status",
-    )
-
-
-class FootPatrols(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    patrol_types: List[str] = Field(
-        ...,
-        description="Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types.",
-        title="Patrol Types",
-    )
-    status: Optional[List[StatusEnum]] = Field(
-        ["done"],
-        description="Choose to analyze patrols with a certain status. If left empty, patrols of all status will be analyzed",
-        title="Patrol Status",
-    )
+    var: str = Field(..., title="")
 
 
 class TimezoneInfo(BaseModel):
@@ -279,7 +225,7 @@ class ErClientName(BaseModel):
     )
 
 
-class FormData(BaseModel):
+class Params(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -299,13 +245,4 @@ class FormData(BaseModel):
     er_client_name: Optional[ErClientName] = Field(
         None, title="Connect to earth ranger"
     )
-    get_events_data: Optional[GetEventsData] = Field(None, title="Retrieve all events")
-    Subject_Group: Optional[SubjectGroup] = Field(
-        None,
-        alias="Subject Group",
-        description="Choose subject group to generate collar voltage charts and overall speedmap",
-    )
-    vehicle_patrols: Optional[VehiclePatrols] = Field(
-        None, title="Retrieve vehicle patrols"
-    )
-    foot_patrols: Optional[FootPatrols] = Field(None, title="Retrieve foot patrols")
+    subject_group_var: Optional[SubjectGroupVar] = Field(None, title="")
