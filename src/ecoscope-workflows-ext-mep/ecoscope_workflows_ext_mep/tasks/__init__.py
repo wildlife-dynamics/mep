@@ -22,7 +22,7 @@ from ._custom_map_png import zoom_map_and_screenshot
 from ._custom_period import get_previous_period
 from ._custom_monthly_context import create_mep_monthly_context, create_monthly_ctx_cover
 from ._persist import gdf_to_geojson
-
+from ._collared_voltage_context import generate_source_voltage_report
 __all__ = [
     "create_monthly_ctx_cover",
     "create_mep_monthly_context",
@@ -55,4 +55,5 @@ __all__ = [
     "gdf_to_geojson",
     "extract_voltage_columns",
     "generate_subject_voltage_chart",
+    "generate_source_voltage_report"
 ]
