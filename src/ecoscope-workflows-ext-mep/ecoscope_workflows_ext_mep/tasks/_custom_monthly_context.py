@@ -111,6 +111,12 @@ def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _maybe_image(tpl, path):
+    if not path:
+        return None  # template must guard with {% if %}
+    return InlineImage(tpl, path, width=Inches(6.58), height=Inches(3.85))
+
+
 @task
 def create_monthly_ctx_cover(
     report_period: TimeRange,
@@ -152,24 +158,6 @@ NDVI_AREA_KEYWORDS = [
     "rift_mosiro",
     "samburu_reserve",
 ]
-
-
-def _discover_ndvi_paths(output_dir: str) -> List[str]:
-    dir_path = Path(output_dir)
-    if not dir_path.exists():
-        return []
-
-    png_files = list(dir_path.glob("*.png"))
-
-    keyword_map: Dict[str, Path] = {}
-    for f in png_files:
-        stem = f.stem.lower()
-        for keyword in NDVI_AREA_KEYWORDS:
-            if keyword in stem:
-                keyword_map[keyword] = f
-                break
-
-    return [str(keyword_map[k]) for k in NDVI_AREA_KEYWORDS if k in keyword_map]
 
 
 @task
@@ -215,12 +203,11 @@ def create_mep_monthly_context(
 
     sitrep_df = safe_read_csv(sitrep_df_path)
     sitrep = sitrep_df.to_dict(orient="records")
-
     context = {
-        "elephant_speedmap": InlineImage(tpl, speedmap_path, width=Inches(6.58), height=Inches(3.85)),
-        "elephant_sighting_map": InlineImage(tpl, elephant_sightings_map_path, width=Inches(6.58), height=Inches(3.85)),
-        "vehicle_patrol_tracks": InlineImage(tpl, vehicle_patrol_map_path, width=Inches(6.58), height=Inches(3.85)),
-        "foot_patrol_tracks": InlineImage(tpl, foot_patrols_map_path, width=Inches(6.58), height=Inches(3.85)),
+        "elephant_speedmap": _maybe_image(tpl, speedmap_path),
+        "elephant_sighting_map": _maybe_image(tpl, elephant_sightings_map_path),
+        "vehicle_patrol_tracks": _maybe_image(tpl, vehicle_patrol_map_path),
+        "foot_patrol_tracks": _maybe_image(tpl, foot_patrols_map_path),
         "sitrep": sitrep,
         "collar_voltage_list": collar_voltage_list,
         "subject_group": subject_group,
