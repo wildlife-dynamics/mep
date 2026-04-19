@@ -192,13 +192,6 @@ def main(params: Params):
             .set_task_instance_id("workflow_details")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial=(params_dict.get("workflow_details") or {}),
             method="call",
@@ -208,13 +201,6 @@ def main(params: Params):
             .set_task_instance_id("time_range")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial=(params_dict.get("time_range") or {}),
             method="call",
@@ -224,13 +210,6 @@ def main(params: Params):
             .set_task_instance_id("groupers")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "groupers": [
@@ -247,13 +226,6 @@ def main(params: Params):
             .set_task_instance_id("configure_base_maps")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial=(params_dict.get("configure_base_maps") or {}),
             method="call",
@@ -263,13 +235,6 @@ def main(params: Params):
             .set_task_instance_id("er_client_name")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial=(params_dict.get("er_client_name") or {}),
             method="call",
@@ -481,13 +446,6 @@ def main(params: Params):
             .set_task_instance_id("subject_group_var")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial=(params_dict.get("subject_group_var") or {}),
             method="call",
@@ -522,13 +480,6 @@ def main(params: Params):
             .set_task_instance_id("subject_reloc")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "observations": DependsOn("subject_observations"),
@@ -569,13 +520,6 @@ def main(params: Params):
             .set_task_instance_id("get_custom_previous_period")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "time_range": DependsOn("time_range"),
@@ -1021,7 +965,7 @@ def main(params: Params):
                 "client": DependsOn("er_client_name"),
                 "time_range": DependsOn("time_range"),
                 "include_patrol_details": True,
-                "raise_on_empty": True,
+                "raise_on_empty": False,
                 "sub_page_size": 100,
                 "patrols_overlap_daterange": True,
             }
@@ -1272,7 +1216,7 @@ def main(params: Params):
                 "client": DependsOn("er_client_name"),
                 "time_range": DependsOn("time_range"),
                 "include_patrol_details": True,
-                "raise_on_empty": True,
+                "raise_on_empty": False,
                 "sub_page_size": 100,
                 "patrols_overlap_daterange": True,
             }
@@ -1641,13 +1585,6 @@ def main(params: Params):
             .set_task_instance_id("download_cover_page")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "url": "https://www.dropbox.com/scl/fi/95fux8w00h9u4wg2sufij/mep_monthly_report.docx?rlkey=nbibg8ulnlz0w4q53jw2db6y3&st=6own6h01&dl=0",
@@ -1664,13 +1601,6 @@ def main(params: Params):
             .set_task_instance_id("download_content_page")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "url": "https://www.dropbox.com/scl/fi/1u7d68pr8hvc27gf2ns85/mep_monthly_indv_report.docx?rlkey=wss0x8sa9i5fgl9yjco7paa03&st=b8fsdnxg&dl=0",
@@ -1687,13 +1617,6 @@ def main(params: Params):
             .set_task_instance_id("create_cover_tpl_context")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "report_period": DependsOn("time_range"),
@@ -1707,13 +1630,6 @@ def main(params: Params):
             .set_task_instance_id("persist_cover_context")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "template_path": DependsOn("download_cover_page"),
@@ -1729,13 +1645,6 @@ def main(params: Params):
             .set_task_instance_id("create_monthly_ctx")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "filename": "mep_context.docx",
@@ -1757,13 +1666,6 @@ def main(params: Params):
             .set_task_instance_id("merge_mep_docx")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "cover_page_path": DependsOn("persist_cover_context"),
@@ -1781,13 +1683,6 @@ def main(params: Params):
             .set_task_instance_id("mep_monthly_dashboard")
             .handle_errors()
             .with_tracing()
-            .skipif(
-                conditions=[
-                    any_is_empty_df,
-                    any_dependency_skipped,
-                ],
-                unpack_depth=1,
-            )
             .set_executor("lithops"),
             partial={
                 "details": DependsOn("workflow_details"),

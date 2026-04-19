@@ -91,13 +91,6 @@ def main(params: Params):
         .set_task_instance_id("workflow_details")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(**(params_dict.get("workflow_details") or {}))
         .call()
     )
@@ -107,13 +100,6 @@ def main(params: Params):
         .set_task_instance_id("time_range")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(**(params_dict.get("time_range") or {}))
         .call()
     )
@@ -123,13 +109,6 @@ def main(params: Params):
         .set_task_instance_id("groupers")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             groupers=[{"index_name": "name"}], **(params_dict.get("groupers") or {})
         )
@@ -141,13 +120,6 @@ def main(params: Params):
         .set_task_instance_id("configure_base_maps")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(**(params_dict.get("configure_base_maps") or {}))
         .call()
     )
@@ -157,13 +129,6 @@ def main(params: Params):
         .set_task_instance_id("er_client_name")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(**(params_dict.get("er_client_name") or {}))
         .call()
     )
@@ -373,13 +338,6 @@ def main(params: Params):
         .set_task_instance_id("subject_group_var")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(**(params_dict.get("subject_group_var") or {}))
         .call()
     )
@@ -414,13 +372,6 @@ def main(params: Params):
         .set_task_instance_id("subject_reloc")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             observations=subject_observations,
             relocs_columns=[
@@ -452,13 +403,6 @@ def main(params: Params):
         .set_task_instance_id("get_custom_previous_period")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             time_range=time_range,
             **(params_dict.get("get_custom_previous_period") or {}),
@@ -879,7 +823,7 @@ def main(params: Params):
             client=er_client_name,
             time_range=time_range,
             include_patrol_details=True,
-            raise_on_empty=True,
+            raise_on_empty=False,
             sub_page_size=100,
             patrols_overlap_daterange=True,
             **(params_dict.get("vehicle_patrols") or {}),
@@ -1119,7 +1063,7 @@ def main(params: Params):
             client=er_client_name,
             time_range=time_range,
             include_patrol_details=True,
-            raise_on_empty=True,
+            raise_on_empty=False,
             sub_page_size=100,
             patrols_overlap_daterange=True,
             **(params_dict.get("foot_patrols") or {}),
@@ -1478,13 +1422,6 @@ def main(params: Params):
         .set_task_instance_id("download_cover_page")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             url="https://www.dropbox.com/scl/fi/95fux8w00h9u4wg2sufij/mep_monthly_report.docx?rlkey=nbibg8ulnlz0w4q53jw2db6y3&st=6own6h01&dl=0",
             output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
@@ -1501,13 +1438,6 @@ def main(params: Params):
         .set_task_instance_id("download_content_page")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             url="https://www.dropbox.com/scl/fi/1u7d68pr8hvc27gf2ns85/mep_monthly_indv_report.docx?rlkey=wss0x8sa9i5fgl9yjco7paa03&st=b8fsdnxg&dl=0",
             output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
@@ -1524,13 +1454,6 @@ def main(params: Params):
         .set_task_instance_id("create_cover_tpl_context")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             report_period=time_range,
             prepared_by="Ecoscope",
@@ -1544,13 +1467,6 @@ def main(params: Params):
         .set_task_instance_id("persist_cover_context")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             template_path=download_cover_page,
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
@@ -1566,13 +1482,6 @@ def main(params: Params):
         .set_task_instance_id("create_monthly_ctx")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             filename="mep_context.docx",
             template_path=download_content_page,
@@ -1594,13 +1503,6 @@ def main(params: Params):
         .set_task_instance_id("merge_mep_docx")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             cover_page_path=persist_cover_context,
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
@@ -1616,13 +1518,6 @@ def main(params: Params):
         .set_task_instance_id("mep_monthly_dashboard")
         .handle_errors()
         .with_tracing()
-        .skipif(
-            conditions=[
-                any_is_empty_df,
-                any_dependency_skipped,
-            ],
-            unpack_depth=1,
-        )
         .partial(
             details=workflow_details,
             widgets=[],
