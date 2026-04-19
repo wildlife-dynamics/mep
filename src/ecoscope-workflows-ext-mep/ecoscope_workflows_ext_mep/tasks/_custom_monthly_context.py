@@ -110,6 +110,7 @@ def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         print(f"Error reading CSV file {file_path}: {e}")
         return pd.DataFrame()
 
+
 def _maybe_image(tpl, path):
     if not path:
         return None  # template must guard with {% if %}
@@ -159,7 +160,6 @@ NDVI_AREA_KEYWORDS = [
 ]
 
 
-
 @task
 def create_mep_monthly_context(
     elephant_sightings_map_path: str | SkipSentinel | None,
@@ -204,14 +204,14 @@ def create_mep_monthly_context(
     sitrep_df = safe_read_csv(sitrep_df_path)
     sitrep = sitrep_df.to_dict(orient="records")
     context = {
-    "elephant_speedmap": _maybe_image(tpl, speedmap_path),
-    "elephant_sighting_map": _maybe_image(tpl, elephant_sightings_map_path),
-    "vehicle_patrol_tracks": _maybe_image(tpl, vehicle_patrol_map_path),
-    "foot_patrol_tracks": _maybe_image(tpl, foot_patrols_map_path),
-    "sitrep": sitrep,
-    "collar_voltage_list": collar_voltage_list,
-    "subject_group": subject_group,
-}
+        "elephant_speedmap": _maybe_image(tpl, speedmap_path),
+        "elephant_sighting_map": _maybe_image(tpl, elephant_sightings_map_path),
+        "vehicle_patrol_tracks": _maybe_image(tpl, vehicle_patrol_map_path),
+        "foot_patrol_tracks": _maybe_image(tpl, foot_patrols_map_path),
+        "sitrep": sitrep,
+        "collar_voltage_list": collar_voltage_list,
+        "subject_group": subject_group,
+    }
 
     try:
         Path(output_dir).mkdir(parents=True, exist_ok=True)

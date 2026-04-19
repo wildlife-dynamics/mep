@@ -3,11 +3,12 @@ import pandas as pd
 from PIL import Image
 from pathlib import Path
 from docx.shared import Inches
-from typing import Optional,Union,Dict,Any
+from typing import Optional, Union, Dict, Any
 from docxtpl import DocxTemplate, InlineImage
 from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_core.tasks.filter._filter import TimeRange
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
+
 
 def get_image_dimensions_from_pixels(
     image_path: str,
@@ -39,6 +40,7 @@ def get_image_dimensions_from_pixels(
 
     return width_inches * scale_factor, height_inches * scale_factor
 
+
 @task
 def generate_source_voltage_report(
     org_logo_path: Union[str, Path, None],
@@ -67,7 +69,7 @@ def generate_source_voltage_report(
 
     # ── Resolve & validate paths ───────────────────────────────────────────
     template_path = remove_file_scheme(str(template_path))
-    output_dir    = remove_file_scheme(str(output_dir))
+    output_dir = remove_file_scheme(str(output_dir))
 
     if not template_path.strip():
         raise ValueError("template_path is empty after normalization")
@@ -109,9 +111,7 @@ def generate_source_voltage_report(
     # Per-collar voltage charts
     context["source_voltage_charts"] = [
         {
-            "source_voltage_image": InlineImage(
-                tpl, path, width=Inches(6.58), height=Inches(3.85)
-            ),
+            "source_voltage_image": InlineImage(tpl, path, width=Inches(6.58), height=Inches(3.85)),
             "subject": subject_name,
         }
         for subject_name, path in images_found.items()
@@ -124,7 +124,7 @@ def generate_source_voltage_report(
             dpi=125,
             max_dimension_inches=1.5,
         )
-        print(f"Logo dimensions: {logo_width:.2f}\" × {logo_height:.2f}\"")
+        print(f'Logo dimensions: {logo_width:.2f}" × {logo_height:.2f}"')
         context["org_logo"] = InlineImage(
             tpl,
             resolved_logo_path,
@@ -139,19 +139,14 @@ def generate_source_voltage_report(
 
     if report_period:
         fmt = getattr(report_period, "time_format", "%Y-%m-%d")
-        context["report_period"] = (
-            f"{report_period.since.strftime(fmt)} to {report_period.until.strftime(fmt)}"
-        )
+        context["report_period"] = f"{report_period.since.strftime(fmt)} to {report_period.until.strftime(fmt)}"
     else:
         context["report_period"] = None
 
     context["time_generated"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # ── Render & save ──────────────────────────────────────────────────────
-    output_filename = (
-        filename
-        or f"source_voltage_report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
-    )
+    output_filename = filename or f"source_voltage_report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
     output_path = os.path.join(output_dir, output_filename)
 
     tpl.render(context)
