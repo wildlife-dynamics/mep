@@ -395,19 +395,6 @@ def create_mep_subject_context(
     return ctx
 
 
-# Define image dimension configurations (in cm)
-IMAGE_DIMENSIONS = {
-    # Wide timeline/plot images (2238x450)
-    "timeline_plot": {"width": 15.0, "height": 3.0},  # Maintains aspect ratio ~5:1
-    # Tall range map (602x855)
-    "range_map": {"width": 8.0, "height": 11.4},  # Maintains aspect ratio ~0.7:1
-    # Medium landscape maps (765x525)
-    "landscape_map": {"width": 12.0, "height": 8.2},  # Maintains aspect ratio ~1.45:1
-    # Profile photo (square/portrait)
-    "profile_photo": {"width": 3.75, "height": 3.75},  # Adjust as needed
-}
-
-
 def is_valid_image(path: str) -> bool:
     """Check image file has a valid PNG or JPEG header (magic bytes)."""
     try:
@@ -422,7 +409,11 @@ def is_valid_image(path: str) -> bool:
         return False
 
 
-def create_inline_image_inch(template: DocxTemplate, image_path: str, width_cm: float, height_cm: float) -> InlineImage:
+def create_inline_image_inch(
+    template: DocxTemplate, 
+    image_path: str, 
+    width_cm: float, 
+    height_cm: float) -> InlineImage:
     """
     Create an InlineImage object with specified dimensions.
 
@@ -466,7 +457,7 @@ def prepare_mep_context_for_template(
         # overview map -- home range
         "overview_map": {"height": 7.06, "width": 5.4},
         # Profile photo
-        "profile_photo": {"height": 3.58, "width": 3.44},
+        "profile_photo": {"height": 3.69, "width": 3.54},
     }
 
     rendered_context = context.copy()
@@ -505,7 +496,6 @@ def prepare_mep_context_for_template(
 
     return rendered_context
 
-
 @task
 def create_mep_grouper_page(
     template_path: str,
@@ -513,9 +503,23 @@ def create_mep_grouper_page(
     context: Dict[str, Any],
     filename: Optional[str] = None,
     validate_images: bool = True,
-) -> str:
+    missing_threshold: int = 7,
+) -> Optional[str]:
     """
     Create a Word document from template and context.
+
+    If the subject is missing a number of media metrics greater than or equal to
+    `missing_threshold`, the subject is considered to not have sufficient data
+    for the reporting period and no document is generated (returns None).
+
+    The following 7 media fields are evaluated for presence:
+        - mov_map (speedmap)
+        - overview_map (homerange)
+        - range_map (seasonal homerange)
+        - nsd_plot
+        - speed_plot
+        - collar_event_timeline
+        - mcp_plot
 
     Args:
         template_path: Path to the .docx template file
@@ -523,9 +527,13 @@ def create_mep_grouper_page(
         context: Dictionary containing template variables and image paths
         filename: Optional output filename (auto-generated if None)
         validate_images: Whether to validate image paths before rendering
+        missing_threshold: Minimum number of missing media items that triggers
+            skipping the subject (default: 7, i.e. skip only when *all* media
+            items are missing).
 
     Returns:
-        Path to the generated document
+        Path to the generated document, or None if the subject was skipped
+        due to insufficient metrics.
     """
     template_path = remove_file_scheme(template_path)
     output_dir = remove_file_scheme(output_dir)
@@ -539,9 +547,48 @@ def create_mep_grouper_page(
         raise FileNotFoundError(f"Template file not found: {template_path}")
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
+    media_fields = [
+        "mov_map",
+        "overview_map",
+        "range_map",
+        "nsd_plot",
+        "speed_plot",
+        "collar_event_timeline",
+        "mcp_plot",
+    ]
 
+    missing_fields = []
+    for field_name in media_fields:
+        value = context.get(field_name)
+        # Treat as missing if: None, empty/whitespace string, or path doesn't exist on disk
+        if value is None:
+            missing_fields.append(field_name)
+            continue
+        if isinstance(value, str):
+            if not value.strip():
+                missing_fields.append(field_name)
+                continue
+            if not Path(value).exists():
+                missing_fields.append(field_name)
+                continue
+
+    subject_name = context.get("name", "unknown")
+    total_media = len(media_fields)
+    n_missing = len(missing_fields)
+
+    print(
+        f"Subject '{subject_name}' media availability: "
+        f"{total_media - n_missing}/{total_media} present, "
+        f"{n_missing} missing ({missing_fields})"
+    )
+
+    if n_missing >= missing_threshold:
+        print(
+            f"Skipping subject '{subject_name}': all {total_media} media items "
+            f"are missing. Subject did not generate metrics for this period."
+        )
+        return None
     if not filename:
-        subject_name = context.get("name", "unknown")
         safe_name = "".join(c for c in subject_name if c.isalnum() or c in (" ", "-", "_")).strip()
         safe_name = safe_name.replace(" ", "_")
         filename = f"{safe_name}_report_{uuid.uuid4().hex[:8]}.docx"
@@ -572,7 +619,7 @@ def create_mep_grouper_page(
         tpl = DocxTemplate(template_path)
         print(f"Loaded template: {template_path}")
     except Exception as e:
-        raise ValueError(f"Failed to load templxate: {e}")
+        raise ValueError(f"Failed to load template: {e}")
 
     try:
         rendered_context = prepare_mep_context_for_template(
