@@ -26,7 +26,7 @@ gee_project_name:
   data_source:
     name: ecoscope_poc
 subject_group_var:
-  var: Ecoscope-5-Subs
+  var: MEP_Elephants_Shimba_Hills
 retrieve_ldx_db:
   input_method:
     file_path: /Users/tevintemu/Desktop/Ecoscope/shapefiles/landDx.gpkg
