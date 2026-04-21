@@ -24,6 +24,15 @@ from ._custom_monthly_context import create_mep_monthly_context, create_monthly_
 from ._persist import gdf_to_geojson
 from ._collared_voltage_context import generate_source_voltage_report
 
+from ._heatmap import draw_custom_heatmap 
+from ._tabular_ops import (
+    custom_map_column,
+    herder_effectiveness,
+    species_by_ranch,
+    species_by_ranch_matrix,
+    utm_to_4326
+    )
+from ._tabular_file import get_local_tabular_path,load_local_tabular_file
 __all__ = [
     "create_monthly_ctx_cover",
     "create_mep_monthly_context",
@@ -57,4 +66,14 @@ __all__ = [
     "extract_voltage_columns",
     "generate_subject_voltage_chart",
     "generate_source_voltage_report",
+    
+    "draw_custom_heatmap",
+    "custom_map_column",
+    "herder_effectiveness",
+    "species_by_ranch",
+    "species_by_ranch_matrix",
+    
+    "get_local_tabular_path",
+    "load_local_tabular_file",
+    "utm_to_4326"
 ]

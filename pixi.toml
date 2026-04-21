@@ -21,9 +21,9 @@ virtualenv = "20.39.0.*"
 
 [feature.compile.dependencies]
 ecoscope-workflows-ext-mep = "*"
-ecoscope-workflows-ext-mnc = "0.0.7.*"
-ecoscope-workflows-ext-ste = "0.0.18.*"
-ecoscope-workflows-ext-big-life = "0.0.8.*"
+ecoscope-workflows-ext-mnc = "0.0.9.*"
+ecoscope-workflows-ext-ste = "0.0.20.*"
+ecoscope-workflows-ext-big-life = "0.0.11.*"
 ecoscope-workflows-core = "0.22.17.*"
 ecoscope-workflows-ext-custom = "0.0.39.*"
 
@@ -60,3 +60,9 @@ cmd = './dev/recompile.sh collar_voltage_report --install'
 
 [feature.compile.tasks.recompile-collar_voltage_report]
 cmd = './dev/recompile.sh collar_voltage_report --update'
+
+[feature.compile.tasks.compile-predation_report]
+cmd = './dev/recompile.sh predation_report --install'
+
+[feature.compile.tasks.recompile-predation_report]
+cmd = './dev/recompile.sh predation_report --update'
