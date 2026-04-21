@@ -1,4 +1,4 @@
-id: predation_report
+id: predation_report #/Users/tevintemu/Desktop/Ecoscope/notebooks/lion_guardians/prey_ecoscope.csv
 requirements:
   - name: ecoscope-workflows-core
     version: "0.22.17.*"
@@ -9,7 +9,7 @@ requirements:
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.39.*"
+    version: "0.0.46.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-ste
@@ -28,11 +28,21 @@ requirements:
     version: "*"
     channel: "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
 
+rjsf-overrides:
+  $defs:
+    ValueGrouper.properties.index_name.oneOf:
+      - const: species_killed
+        title: Livestock Species
+
+      - const: ranch
+        title: Ranch
+
 task-instance-defaults:
   skipif:
     conditions:
       - any_is_empty_df
       - any_dependency_skipped
+
 
 workflow:
   # set workflow details
@@ -49,7 +59,6 @@ workflow:
   - name: Configure grouping strategy
     id: groupers
     task: set_groupers
-    partial:
 
   - name: Select time frequency for temporal charts 
     id: time_frequency
@@ -148,19 +157,19 @@ workflow:
 
   - name: Annotate amboseli layers with geom type
     id: annotate_ambo_layers
-    task: get_gdf_geom_type
+    task: ecoscope_workflows_ext_ste.tasks.get_gdf_geom_type 
     partial:
       gdf: ${{ workflow.reproject_ambo_boundaries.return }}
 
   - name: Annotate hotspot layers with geom type
     id: annotate_hotspot_layers
-    task: get_gdf_geom_type
+    task: ecoscope_workflows_ext_ste.tasks.get_gdf_geom_type 
     partial:
       gdf: ${{ workflow.reproject_hotspot_areas.return }}
 
   - name: Annotate protected areas with geom type
     id: annotate_protected_layers
-    task: get_gdf_geom_type
+    task: ecoscope_workflows_ext_ste.tasks.get_gdf_geom_type 
     partial:
       gdf: ${{ workflow.reproject_protected_areas.return }}
 
@@ -265,8 +274,8 @@ workflow:
         "Month ", 
         "Year",
         "Verified by Biologist", 
-        "General Comments,
-        Observations",
+        "General Comments",
+        "Observations",
         "Unknown/ Other",
         "Specific Area"
       ]
@@ -287,6 +296,7 @@ workflow:
         "Mock hunt":"mock_hunt",
         "Scared by herders- not with spears":"scared_by_herders"
         }
+      raise_if_not_found: false
 
   - name: Add temporal index 
     id: add_temporal_index_to_df
@@ -295,6 +305,8 @@ workflow:
       df: ${{ workflow.map_predation_columns.return }}
       time_col: "date"
       groupers: ${{ workflow.groupers.return }}
+      cast_to_datetime: true 
+      format: mixed
 
   - name: Replace missing with label 
     id: replace_values_with_unknown 
@@ -352,6 +364,7 @@ workflow:
         'Wildebeest (calf)': 'Wildebeest',
         'Donkey (foal)': 'Donkey',
         }
+      inplace: true
 
   - name: Map prey value column 
     id: map_prey_column_value 
@@ -359,6 +372,7 @@ workflow:
     partial: 
       df: ${{ workflow.map_prey_column.return }}
       columns: ["species_injured"]
+      inplace: true 
       value_map: {
         'cow': 'Cow',
         'shoat': 'Shoat',
@@ -374,6 +388,7 @@ workflow:
     partial: 
       df: ${{ workflow.map_prey_column_value.return }}
       columns: ["is_livestock"]
+      inplace: true
       value_map: {
         'YES': 'Yes',
         'NO': 'No',
@@ -388,6 +403,7 @@ workflow:
     partial: 
       df: ${{ workflow.map_prey_consumed.return }}
       columns: ["boma_or_bush"]
+      inplace: true 
       value_map: {
         'bush': "Bush",
         'Unknown': 'Unknown',
@@ -404,6 +420,7 @@ workflow:
         "livestock_lost_in_bush",
         "livestock_not_lost_in_bush_herder_present"
         ]
+      inplace: true 
       value_map: {
         'yes':"Yes",
         'Unknown':"Unknown",
@@ -422,6 +439,7 @@ workflow:
     partial: 
       df: ${{ workflow.map_livestock_columns.return }}
       columns: ["ranch"]
+      inplace: true
       value_map: {
         'EGR': 'EGR',
         'MGR': 'MGR',
@@ -477,6 +495,7 @@ workflow:
         ]
       retain_columns: []
       rename_columns: {}
+      raise_if_not_found: false
 
   - name: Map is_livestock columns 
     id: map_is_livestock_cols 
@@ -500,8 +519,8 @@ workflow:
     task: filter_row_values 
     partial: 
       df: ${{ workflow.map_is_livestock_cols.return }}
-      column: "is_livestock"
-      values: [ True ]
+      column: "species_killed"
+      values: [ 'Cow', 'Goat', 'Shoat', 'Donkey', 'Sheep', 'Bull', 'Dog' ]
 
   - name: Exclude values from species_killed column 
     id: exclude_wild_species 
@@ -518,8 +537,8 @@ workflow:
         'Oryx', 
         'Ostrich', 
         'Porcupine',
-        "Thompson's Gazelle",
-        "Grant's Gazelle", 
+        "Thompson\\'s Gazelle",
+        "Grant\\'s Gazelle", 
         'Lesser kudu', 
         'Buffalo', 
         'Gazelle'
@@ -550,8 +569,8 @@ workflow:
 
         # Gazelles — purples (grouped as a family)
         "Gazelle":         "#ffd3a5"  ,  # pastel lavender
-        "Thompson's Gazelle":"#d8b8d7",  # pastel pink-purple
-        "Grant's Gazelle":   "#dec4de",  # pastel lilac
+        "Thompson\\'s Gazelle":"#d8b8d7",  # pastel pink-purple
+        "Grant\\'s Gazelle":   "#dec4de",  # pastel lilac
 
         # Other wild species
         "Ostrich":         "#a8e0d0",  # pastel teal
@@ -564,7 +583,7 @@ workflow:
     id: get_boma_or_bush_colors 
     task: get_color_map 
     partial: 
-      df: ${{ workflow.get_species_colors.return }}
+      df: ${{ workflow.exclude_wild_species.return }}
       col: "boma_or_bush"
       color_dict: {
         "Boma":    "#a8d0e6",  # pastel sky blue — enclosed/built structure
@@ -576,7 +595,7 @@ workflow:
     id: map_ranch_colors 
     task: get_color_map
     partial: 
-      df: ${{ workflow.get_boma_or_bush_colors.return }}
+      df: ${{ workflow.exclude_wild_species.return }}
       col: "ranch"
       color_dict: {
         "EGR":      "#fcb5ac",  # pastel coral
@@ -596,7 +615,7 @@ workflow:
     id: map_color_ranch 
     task: map_color_column_value 
     partial: 
-      df: ${{ workflow.map_ranch_colors.return }}
+      df: ${{ workflow.exclude_wild_species.return }}
       col: "ranch"
       mapping: {
         "EGR":      "#fcb5ac",  # pastel coral
@@ -651,8 +670,8 @@ workflow:
 
         # Gazelles — purples (grouped as a family)
         "Gazelle":         "#ffd3a5"  ,  # pastel lavender
-        "Thompson's Gazelle":"#d8b8d7",  # pastel pink-purple
-        "Grant's Gazelle":   "#dec4de",  # pastel lilac
+        "Thompson\\'s Gazelle":"#d8b8d7",  # pastel pink-purple
+        "Grant\\'s Gazelle":   "#dec4de",  # pastel lilac
 
         # Other wild species
         "Ostrich":         "#a8e0d0",  # pastel teal
@@ -679,8 +698,10 @@ workflow:
       value_col: "total_killed"
       aggfunc: "sum"
       reset_index: true 
+      margins: true 
+      margins_name: "Total"
     mapvalues: 
-      argnames: df 
+      argnames: data
       argvalues: ${{ workflow.split_events_by_group.return }}
 
   - name: Persist table as csv
@@ -704,6 +725,7 @@ workflow:
       group_col: "boma_or_bush"
       agg_func: count 
       agg_col_name: "Count"
+      agg_col: null
       sort: "asc"
       add_percent: true 
     mapvalues: 
@@ -887,7 +909,7 @@ workflow:
       value_column: "total_killed"
       agg_function: "sum"
       time_frequency: ${{ workflow.time_frequency.return }}
-      time_column: null
+      time_column:  "date"
       time_axis: x
       normalize: false 
       colorscale: "YlOrRd"
@@ -927,7 +949,7 @@ workflow:
       ncols: 2 
       shared_yaxes: false
       group_order: null
-      row_height: 350
+      row_height: 450
       ascending: true
       bar_color: "#6495ed"
       x_axis_style:
@@ -964,7 +986,7 @@ workflow:
       ncols: 2 
       shared_yaxes: false
       group_order: null
-      row_height: 350
+      row_height: 450
       ascending: true
       bar_color: "#6495ed"
       x_axis_style:
@@ -1079,7 +1101,7 @@ workflow:
       argvalues: ${{ workflow.split_events_by_group.return }}
 
   - name: Persist multi-line chart of total animals killed by ranch
-    id: persist_ranch_killed_multiline
+    id: persist_species_killed_multiline
     task: persist_text
     partial:
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
@@ -1110,11 +1132,8 @@ workflow:
   - name: Generate livestock predation event scatterplot layer
     id: generate_livestock_layer
     task: create_scatterplot_layer
-    skipif:
-      conditions: 
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
+      data_url: null
       layer_style:
         get_fill_color: "species_killed_colors"
         get_line_color: "species_killed_colors"
@@ -1137,9 +1156,7 @@ workflow:
     partial: 
       static_layers: 
         - ${{ workflow.custom_amboseli_layer.return }}
-        - ${{ workflow.custom_hotspot_layer.return }}
         - ${{ workflow.custom_protected_layer.return }}
-        - ${{ workflow.create_hotspot_text_layer.return }}
     mapvalues:
       argnames: grouped_layers
       argvalues: ${{ workflow.generate_livestock_layer.return }}
@@ -1193,10 +1210,10 @@ workflow:
     id: generate_predation_grids 
     task: generate_density_grid
     partial:
-      cell_size_meters: 2000 
+      cell_size_meters: 500
       geometry_type: "point"
     mapvalues: 
-      argnames: feature_gdf 
+      argnames: features_gdf 
       argvalues: ${{ workflow.remove_invalid_geoms.return }}
 
   - name: Sort density grid values in ascending order
@@ -1241,6 +1258,7 @@ workflow:
     id: generate_density_layers
     task: create_geojson_layer
     partial: 
+      data_url: null
       layer_style: 
         filled: true 
         stroked: true 
@@ -1273,9 +1291,7 @@ workflow:
     partial: 
       static_layers: 
         - ${{ workflow.custom_amboseli_layer.return }}
-        - ${{ workflow.custom_hotspot_layer.return }}
         - ${{ workflow.custom_protected_layer.return }}
-        - ${{ workflow.create_hotspot_text_layer.return }}
     mapvalues:
       argnames: grouped_layers
       argvalues: ${{ workflow.generate_density_layers.return }}
@@ -1314,11 +1330,188 @@ workflow:
       argnames: text
       argvalues: ${{ workflow.draw_grid_map.return }}
 
+  - name: Create predation density widgets 
+    id: create_predation_widgets 
+    task: create_map_widget_single_view 
+    skipif:
+      conditions:
+        - never
+    partial: 
+      title: Predation points
+    map: 
+      argnames: 
+        - view 
+        - data 
+      argvalues: ${{ workflow.persist_livestock_html.return }}
+
+  - name: Merge density map widgets 
+    id: merge_predation_map_widgets 
+    task: merge_widget_views 
+    partial: 
+      widgets: ${{ workflow.create_predation_widgets.return }}
+
+  - name: Create density widgets 
+    id: create_density_widgets 
+    task: create_map_widget_single_view 
+    skipif:
+      conditions:
+        - never
+    partial: 
+      title: Predation Density 
+    map: 
+      argnames: 
+        - view 
+        - data 
+      argvalues: ${{ workflow.persist_grid_html.return }}
+
+  - name: Merge density widgets 
+    id: merge_density_map_widgets 
+    task: merge_widget_views 
+    partial: 
+      widgets: ${{ workflow.create_density_widgets.return }}
+
+
+  - name: Create Plot Widget for total livestock killed pie chart
+    id: total_livestock_pie_chart_widget
+    task: create_plot_widget_single_view
+    skipif:
+      conditions:
+        - never
+    partial:
+      title: Total livestock killed by species
+    map:
+      argnames:
+        - view
+        - data
+      argvalues: ${{ workflow.persist_total_livestock_pie.return }}
+
+  - name: Merge Pie chart Widget Views
+    id: grouped_killed_pie_widget_merge
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.total_livestock_pie_chart_widget.return }}
+
+
+  - name: Create Plot Widget for ranch pie chart
+    id: ranch_pie_chart_widget
+    task: create_plot_widget_single_view
+    skipif:
+      conditions:
+        - never
+    partial:
+      title: Total livestock killed by ranch
+    map:
+      argnames:
+        - view
+        - data
+      argvalues: ${{ workflow.persist_ranch_livestock_pie.return }}
+
+  - name: Merge Pie chart Widget Views
+    id: grouped_ranch_pie_widget_merge
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.ranch_pie_chart_widget.return }}
+
+
+  - name: Create Plot Widget for species heatmap
+    id: species_heatmap_widget
+    task: create_plot_widget_single_view
+    skipif:
+      conditions:
+        - never
+    partial:
+      title: Livestock species killed by ranch
+    map:
+      argnames:
+        - view
+        - data
+      argvalues: ${{ workflow.persist_species_ranch_heatmap.return }}
+
+  - name: Merge species heatmap Widget Views
+    id: species_heat_widget_merge
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.species_heatmap_widget.return }}
+
+
+  - name: Create Plot Widget for species heatmap
+    id: time_heatmap_widget
+    task: create_plot_widget_single_view
+    skipif:
+      conditions:
+        - never
+    partial:
+      title: Livestock species killed by time
+    map:
+      argnames:
+        - view
+        - data
+      argvalues: ${{ workflow.persist_species_time_heatmap.return }}
+
+  - name: Merge species heatmap Widget Views
+    id: grouped_time_heat_widget_merge
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.time_heatmap_widget.return }}
+
+  - name: Create Plot Widget for multiline
+    id: ranch_line_widget
+    task: create_plot_widget_single_view
+    skipif:
+      conditions:
+        - never
+    partial:
+      title: Livestock species killed by ranch
+    map:
+      argnames:
+        - view
+        - data
+      argvalues: ${{ workflow.persist_ranch_killed_multiline.return }}
+
+  - name: Merge ranch multiline Widget Views
+    id: grouped_ranch_line_widget_merge
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.ranch_line_widget.return }}
+
+
+  - name: Create Plot Widget for multiline
+    id: species_line_widget
+    task: create_plot_widget_single_view
+    skipif:
+      conditions:
+        - never
+    partial:
+      title: Livestock species killed by species
+    map:
+      argnames:
+        - view
+        - data
+      argvalues: ${{ workflow.persist_species_killed_multiline.return }}
+
+  - name: Merge ranch multiline Widget Views
+    id: species_line_widget_merge
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.species_line_widget.return }}
+
   - name: MEP monthly report  dashboard
     id: mep_monthly_dashboard
     task: gather_dashboard
     partial:
       details: ${{ workflow.workflow_details.return}}
-      widgets: []
+      widgets: 
+        - ${{ workflow.merge_predation_map_widgets.return }}
+        - ${{ workflow.merge_density_map_widgets.return }}
+
+        - ${{ workflow.grouped_killed_pie_widget_merge.return }}
+        - ${{ workflow.grouped_ranch_pie_widget_merge.return }}
+
+        - ${{ workflow.species_heat_widget_merge.return }}
+        - ${{ workflow.grouped_time_heat_widget_merge.return }}
+
+        - ${{ workflow.grouped_ranch_line_widget_merge.return }}
+        - ${{ workflow.species_line_widget_merge.return }}
+        
       time_range: ${{ workflow.time_range.return}}
       groupers: ${{ workflow.groupers.return }}
