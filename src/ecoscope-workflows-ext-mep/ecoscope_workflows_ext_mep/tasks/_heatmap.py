@@ -1,9 +1,5 @@
 from ecoscope_workflows_ext_big_life.tasks._chart import TimeFrequency
-from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import (
-
-LayoutStyle,
-ExportArgs, LayoutStyle
-)
+from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import ExportArgs, LayoutStyle
 import pandas as pd
 from ecoscope_workflows_core.annotations import (
     AdvancedField,
@@ -17,10 +13,7 @@ from typing import Optional, List, Annotated
 from pydantic.json_schema import SkipJsonSchema
 from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_ext_ecoscope.tasks.analysis._summary import AggOperations
-from ecoscope_workflows_ext_ecoscope.tasks.results._ecoplot import (
-    ExportArgs,
-    LayoutStyle,
-)
+
 
 def _resolve_category_order(categories, group_order=None, ascending: bool = True) -> list:
     """Return a deterministic ordered list from *categories*."""
@@ -29,6 +22,7 @@ def _resolve_category_order(categories, group_order=None, ascending: bool = True
         ordered.extend(sorted(c for c in categories if c not in ordered))
         return ordered
     return sorted(categories, reverse=not ascending)
+
 
 def _build_layout_kwargs(layout_style: LayoutStyle) -> dict:
     raw = layout_style.model_dump(exclude_none=True)
@@ -53,9 +47,6 @@ def _build_layout_kwargs(layout_style: LayoutStyle) -> dict:
 
     layout_kws.update(raw)  # remaining flat fields (title, title_x, title_y, etc.)
     return layout_kws
-
-
-from ecoscope_workflows_ext_big_life.tasks._chart import TimeFrequency
 
 
 def custom_heatmap(
@@ -123,10 +114,10 @@ def custom_heatmap(
         for category, cat_df in df.groupby(group_col):
             rs = (
                 cat_df.set_index(time_column)
-                      .sort_index()[value_column]
-                      .resample(time_frequency)
-                      .agg(agg_function)
-                      .reset_index()
+                .sort_index()[value_column]
+                .resample(time_frequency)
+                .agg(agg_function)
+                .reset_index()
             )
             rs[group_col] = category
             frames.append(rs)
@@ -134,39 +125,35 @@ def custom_heatmap(
         agg_df = pd.concat(frames, ignore_index=True).fillna(0)
 
         # Human-readable period labels (Jan 2024, Q1 2024, 2024, etc.)
-        agg_df["_period_label"] = _format_period_labels(
-            agg_df[time_column], time_frequency
-        )
+        agg_df["_period_label"] = _format_period_labels(agg_df[time_column], time_frequency)
 
         period_col = "_period_label"
         if time_axis == "x":
             matrix = agg_df.pivot_table(
-                index=group_col, columns=period_col, values=value_column,
-                aggfunc="sum", fill_value=0,
+                index=group_col,
+                columns=period_col,
+                values=value_column,
+                aggfunc="sum",
+                fill_value=0,
             )
             # Preserve chronological order on x
-            period_order = (
-                agg_df.sort_values(time_column)[period_col].drop_duplicates().tolist()
-            )
+            period_order = agg_df.sort_values(time_column)[period_col].drop_duplicates().tolist()
             matrix = matrix.reindex(columns=period_order, fill_value=0)
             x_order = period_order  # time order wins
         else:
             matrix = agg_df.pivot_table(
-                index=period_col, columns=group_col, values=value_column,
-                aggfunc="sum", fill_value=0,
+                index=period_col,
+                columns=group_col,
+                values=value_column,
+                aggfunc="sum",
+                fill_value=0,
             )
-            period_order = (
-                agg_df.sort_values(time_column)[period_col].drop_duplicates().tolist()
-            )
+            period_order = agg_df.sort_values(time_column)[period_col].drop_duplicates().tolist()
             matrix = matrix.reindex(index=period_order, fill_value=0)
             y_order = period_order
 
     else:
-        matrix = (
-            df.groupby([y_axis, x_axis])[value_column]
-              .agg(agg_function)
-              .unstack(fill_value=0)
-        )
+        matrix = df.groupby([y_axis, x_axis])[value_column].agg(agg_function).unstack(fill_value=0)
     if normalize:
         row_totals = matrix.sum(axis=1).replace(0, pd.NA)
         matrix = matrix.div(row_totals, axis=0).mul(100).fillna(0).round(1)
@@ -198,9 +185,7 @@ def custom_heatmap(
         colorscale=colorscale,
         colorbar=dict(title=resolved_label),
         hovertemplate=(
-            f"{y_axis_label}: %{{y}}<br>"
-            f"{x_axis_label}: %{{x}}<br>"
-            f"{resolved_label}: {hover_fmt}<extra></extra>"
+            f"{y_axis_label}: %{{y}}<br>" f"{x_axis_label}: %{{x}}<br>" f"{resolved_label}: {hover_fmt}<extra></extra>"
         ),
     )
     if show_values:
@@ -229,6 +214,7 @@ def _format_period_labels(series: pd.Series, freq: str) -> pd.Series:
     if freq_base == "W":
         return series.dt.strftime("%d %b %Y")
     return series.dt.strftime("%d %b %Y")  # daily / fallback
+
 
 @task
 def draw_custom_heatmap(
@@ -308,10 +294,7 @@ def draw_custom_heatmap(
         List[str] | SkipJsonSchema[None],
         AdvancedField(
             default=None,
-            description=(
-                "Custom top-to-bottom order for y categories. Ignored when the y "
-                "axis represents time."
-            ),
+            description=("Custom top-to-bottom order for y categories. Ignored when the y " "axis represents time."),
         ),
     ] = None,
     value_label: Annotated[

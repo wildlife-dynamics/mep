@@ -409,11 +409,7 @@ def is_valid_image(path: str) -> bool:
         return False
 
 
-def create_inline_image_inch(
-    template: DocxTemplate, 
-    image_path: str, 
-    width_cm: float, 
-    height_cm: float) -> InlineImage:
+def create_inline_image_inch(template: DocxTemplate, image_path: str, width_cm: float, height_cm: float) -> InlineImage:
     """
     Create an InlineImage object with specified dimensions.
 
@@ -495,6 +491,7 @@ def prepare_mep_context_for_template(
                 continue
 
     return rendered_context
+
 
 @task
 def create_mep_grouper_page(

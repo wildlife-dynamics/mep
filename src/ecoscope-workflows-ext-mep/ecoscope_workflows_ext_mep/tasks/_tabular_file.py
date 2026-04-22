@@ -10,13 +10,13 @@ from ecoscope_workflows_core.annotations import (
 )
 from ecoscope_workflows_core.annotations import AdvancedField
 
+
 def validate_tabular_file(path: Path) -> Path:
     valid_formats = [".csv", ".parquet"]
     if path.suffix.lower() not in valid_formats:
-        raise ValueError(
-            f"Invalid file format '{path.suffix}'. Allowed formats are: {', '.join(valid_formats)}"
-        )
+        raise ValueError(f"Invalid file format '{path.suffix}'. Allowed formats are: {', '.join(valid_formats)}")
     return path
+
 
 @task
 def get_local_tabular_path(
@@ -35,6 +35,7 @@ def get_local_tabular_path(
     file_path_str = str(file_path)
     normalized_path = remove_file_scheme(file_path_str)
     return normalized_path
+
 
 @task
 def load_local_tabular_file(

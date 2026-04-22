@@ -176,8 +176,6 @@ def create_mep_subject_context(
     species_ranch_matrix: str | SkipSentinel | None,
     total_livestock_killed_by_ranch: str | SkipSentinel | None,
 ) -> Dict[str, Any]:
-
-
     def unwrap_skip(value):
         """
         Unwrap SkipSentinel values, converting them to None.
@@ -186,17 +184,7 @@ def create_mep_subject_context(
             return None
         return value
 
-    profile_photo_path = unwrap_skip(profile_photo_path)
-    subject_info_path = unwrap_skip(subject_info_path)
-    speedmap_path = unwrap_skip(speedmap_path)
-    homerange_map_path = unwrap_skip(homerange_map_path)
-    seasonal_homerange_map_path = unwrap_skip(seasonal_homerange_map_path)
-    nsd_plot_path = unwrap_skip(nsd_plot_path)
-    speed_plot_path = unwrap_skip(speed_plot_path)
-    collared_event_plot_path = unwrap_skip(collared_event_plot_path)
-    mcp_plot_path = unwrap_skip(mcp_plot_path)
-    subject_stats_table_path = unwrap_skip(subject_stats_table_path)
-    subject_occupancy_table_path = unwrap_skip(subject_occupancy_table_path)
+   
 
     def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         """
@@ -277,104 +265,7 @@ def create_mep_subject_context(
 
         return path
 
-    # Validate and log all image/file paths
-    profile_photo_path = validate_path(profile_photo_path, "Profile photo")
-    speedmap_path = validate_path(speedmap_path, "Speedmap")
-    homerange_map_path = validate_path(homerange_map_path, "Homerange map")
-    seasonal_homerange_map_path = validate_path(seasonal_homerange_map_path, "Seasonal homerange map")
-    nsd_plot_path = validate_path(nsd_plot_path, "NSD plot")
-    speed_plot_path = validate_path(speed_plot_path, "Speed plot")
-    collared_event_plot_path = validate_path(collared_event_plot_path, "Collared event plot")
-    mcp_plot_path = validate_path(mcp_plot_path, "MCP plot")
-
-    # Read data files
-    subject_stats_df = safe_read_csv(subject_stats_table_path)
-    subject_info_df = safe_read_csv(subject_info_path)
-    subject_occupancy_df = safe_read_csv(subject_occupancy_table_path)
-
-    # Extract subject stats with defaults
-    name = safe_get_value(subject_stats_df, "name", None)
-    if not name or name == "Unknown":  # Handles None, empty string, and "Unknown"
-        name = safe_get_value(subject_info_df, "subject_name", "Unknown")
-
-    mcp = safe_get_value(subject_stats_df, "MCP", 0.0)
-    etd = safe_get_value(subject_stats_df, "ETD", 0.0)
-    time_tracked_days = safe_get_value(subject_stats_df, "time_tracked_days", 0)
-    time_tracked_years = safe_get_value(subject_stats_df, "time_tracked_years", 0.0)
-    distance_travelled = safe_get_value(subject_stats_df, "distance_travelled", 0.0)
-    max_displacement = safe_get_value(subject_stats_df, "max_displacement", 0.0)
-    night_day_ratio = safe_get_value(subject_stats_df, "night_day_ratio", 0.0)
-
-    # Extract subject info with defaults
-    dob_raw = safe_get_value(subject_info_df, "dob", None)
-    if dob_raw is not None and pd.notna(dob_raw):
-        try:
-            dob = str(int(dob_raw))
-        except (ValueError, TypeError):
-            # Handle formats like "April 1997" or other date strings by extracting the year
-            import re
-
-            year_match = re.search(r"\b(19|20)\d{2}\b", str(dob_raw))
-            dob = year_match.group(0) if year_match else str(dob_raw)
-    else:
-        dob = "-"
-    sex = safe_get_value(subject_info_df, "sex", "-")
-    country = safe_get_value(subject_info_df, "country", "-")
-    notes = safe_get_value(subject_info_df, "notes", "None")
-    status = safe_get_value(subject_info_df, "status_raw", "-")
-    bio = safe_get_value(subject_info_df, "bio", "")
-    distribution = safe_get_value(subject_info_df, "distribution", "")
-
-    # Extract occupancy data with defaults
-    national_pa_use = safe_get_value(subject_occupancy_df, "national_pa_use", 0.0)
-    community_pa_use = safe_get_value(subject_occupancy_df, "community_pa_use", 0.0)
-    crop_raid_percent = safe_get_value(subject_occupancy_df, "crop_raid_percent", 0.0)
-    kenya_use = safe_get_value(subject_occupancy_df, "kenya_use", 0.0)
-    unprotected = safe_get_value(subject_occupancy_df, "unprotected", 0.0)
-
-    # Build context dictionary (None values are allowed and will be handled by template)
-    ctx = {
-        # Media paths
-        "profile_photo": profile_photo_path,
-        "mov_map": speedmap_path,
-        "overview_map": homerange_map_path,
-        "range_map": seasonal_homerange_map_path,
-        "nsd_plot": nsd_plot_path,
-        "speed_plot": speed_plot_path,
-        "collar_event_timeline": collared_event_plot_path,
-        "mcp_plot": mcp_plot_path,
-        # Subject statistics
-        "name": name,
-        "mcp": mcp,
-        "etd": etd,
-        "time_tracked_days": time_tracked_days,
-        "time_tracked_years": time_tracked_years,
-        "distance_travelled": distance_travelled,
-        "max_displacement": max_displacement,
-        "night_day_ratio": night_day_ratio,
-        "distribution": distribution,
-        # Subject information
-        "dob": dob,
-        "sex": sex,
-        "country": country,
-        "id_notes": notes,
-        "status": status,
-        "bio": bio,
-        # Occupancy data
-        "national_pa_use": national_pa_use,
-        "community_pa_use": community_pa_use,
-        "crop_raid_percent": crop_raid_percent,
-        "kenya_use": kenya_use,
-        "unprotected": unprotected,
-    }
-
-    # Count how many paths are None
-    none_paths = sum(1 for k, v in ctx.items() if k.endswith(("_photo", "_map", "_plot", "_timeline")) and v is None)
-    total_paths = 8
-
-    print(f"Created context for subject: {name}")
-    print(f"Media files available: {total_paths - none_paths}/{total_paths}")
-    print(f"Full context: {ctx}")
+    ctx={}
     return ctx
 
 
@@ -392,11 +283,7 @@ def is_valid_image(path: str) -> bool:
         return False
 
 
-def create_inline_image_inch(
-    template: DocxTemplate, 
-    image_path: str, 
-    width_cm: float, 
-    height_cm: float) -> InlineImage:
+def create_inline_image_inch(template: DocxTemplate, image_path: str, width_cm: float, height_cm: float) -> InlineImage:
     """
     Create an InlineImage object with specified dimensions.
 
@@ -410,7 +297,6 @@ def create_inline_image_inch(
         InlineImage object ready for template rendering
     """
     return InlineImage(template, image_path, width=Inches(width_cm), height=Inches(height_cm))
-
 
 
 @task
