@@ -184,8 +184,6 @@ def create_mep_subject_context(
             return None
         return value
 
-   
-
     def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         """
         Safely read CSV file and return DataFrame.
@@ -265,7 +263,7 @@ def create_mep_subject_context(
 
         return path
 
-    ctx={}
+    ctx = {}
     return ctx
 
 
