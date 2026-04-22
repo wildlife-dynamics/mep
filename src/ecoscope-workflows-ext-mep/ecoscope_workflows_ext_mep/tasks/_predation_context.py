@@ -161,40 +161,21 @@ def validate_image_path(field_name: str, path: str) -> None:
 
 @task
 def create_mep_subject_context(
-    profile_photo_path: str | SkipSentinel | None,
-    subject_info_path: str | SkipSentinel | None,
-    speedmap_path: str | SkipSentinel | None,
-    homerange_map_path: str | SkipSentinel | None,
-    seasonal_homerange_map_path: str | SkipSentinel | None,
-    nsd_plot_path: str | SkipSentinel | None,
-    speed_plot_path: str | SkipSentinel | None,
-    collared_event_plot_path: str | SkipSentinel | None,
-    mcp_plot_path: str | SkipSentinel | None,
-    subject_stats_table_path: str | SkipSentinel | None,
-    subject_occupancy_table_path: str | SkipSentinel | None,
+    livestock_killed_over_time_by_species: str | SkipSentinel | None,
+    livestock_killed_over_time_by_ranch: str | SkipSentinel | None,
+    livestock_killed_by_ranch_pie: str | SkipSentinel | None,
+    species_by_ranch_heatmap: str | SkipSentinel | None,
+    livestock_killed_pie_chart: str | SkipSentinel | None,
+    livestock_predation_map: str | SkipSentinel | None,
+    density_grid_map: str | SkipSentinel | None,
+    species_by_time_heatmap: str | SkipSentinel | None,
+    livestock_species_killed_multibar: str | SkipSentinel | None,
+    livestock_species_killed_ranch_multibar: str | SkipSentinel | None,
+    herder_effectiveness: str | SkipSentinel | None,
+    location_of_attack: str | SkipSentinel | None,
+    species_ranch_matrix: str | SkipSentinel | None,
+    total_livestock_killed_by_ranch: str | SkipSentinel | None,
 ) -> Dict[str, Any]:
-    """
-    Build a dictionary with the subject report template values.
-
-    Handles None and SkipSentinel values gracefully for all input parameters.
-
-    Args:
-        profile_photo_path: Path to the profile photo, SkipSentinel, or None.
-        subject_info_path: Path to the subject information CSV, SkipSentinel, or None.
-        speedmap_path: Path to the speedmap image, SkipSentinel, or None.
-        homerange_map_path: Path to the homerange map image, SkipSentinel, or None.
-        seasonal_homerange_map_path: Path to the seasonal homerange map image, SkipSentinel, or None.
-        nsd_plot_path: Path to the NSD plot image, SkipSentinel, or None.
-        speed_plot_path: Path to the speed plot image, SkipSentinel, or None.
-        collared_event_plot_path: Path to the collared event plot image, SkipSentinel, or None.
-        mcp_plot_path: Path to the MCP plot image, SkipSentinel, or None.
-        subject_stats_table_path: Path to the subject stats CSV, SkipSentinel, or None.
-        subject_occupancy_table_path: Path to the subject occupancy CSV, SkipSentinel, or None.
-
-    Returns:
-        Structured dictionary with subject report values. Missing values default to appropriate fallbacks.
-    """
-
     def unwrap_skip(value):
         """
         Unwrap SkipSentinel values, converting them to None.
@@ -202,18 +183,6 @@ def create_mep_subject_context(
         if value is None or value is SKIP_SENTINEL:
             return None
         return value
-
-    profile_photo_path = unwrap_skip(profile_photo_path)
-    subject_info_path = unwrap_skip(subject_info_path)
-    speedmap_path = unwrap_skip(speedmap_path)
-    homerange_map_path = unwrap_skip(homerange_map_path)
-    seasonal_homerange_map_path = unwrap_skip(seasonal_homerange_map_path)
-    nsd_plot_path = unwrap_skip(nsd_plot_path)
-    speed_plot_path = unwrap_skip(speed_plot_path)
-    collared_event_plot_path = unwrap_skip(collared_event_plot_path)
-    mcp_plot_path = unwrap_skip(mcp_plot_path)
-    subject_stats_table_path = unwrap_skip(subject_stats_table_path)
-    subject_occupancy_table_path = unwrap_skip(subject_occupancy_table_path)
 
     def safe_read_csv(file_path: str | None) -> pd.DataFrame:
         """
@@ -294,104 +263,7 @@ def create_mep_subject_context(
 
         return path
 
-    # Validate and log all image/file paths
-    profile_photo_path = validate_path(profile_photo_path, "Profile photo")
-    speedmap_path = validate_path(speedmap_path, "Speedmap")
-    homerange_map_path = validate_path(homerange_map_path, "Homerange map")
-    seasonal_homerange_map_path = validate_path(seasonal_homerange_map_path, "Seasonal homerange map")
-    nsd_plot_path = validate_path(nsd_plot_path, "NSD plot")
-    speed_plot_path = validate_path(speed_plot_path, "Speed plot")
-    collared_event_plot_path = validate_path(collared_event_plot_path, "Collared event plot")
-    mcp_plot_path = validate_path(mcp_plot_path, "MCP plot")
-
-    # Read data files
-    subject_stats_df = safe_read_csv(subject_stats_table_path)
-    subject_info_df = safe_read_csv(subject_info_path)
-    subject_occupancy_df = safe_read_csv(subject_occupancy_table_path)
-
-    # Extract subject stats with defaults
-    name = safe_get_value(subject_stats_df, "name", None)
-    if not name or name == "Unknown":  # Handles None, empty string, and "Unknown"
-        name = safe_get_value(subject_info_df, "subject_name", "Unknown")
-
-    mcp = safe_get_value(subject_stats_df, "MCP", 0.0)
-    etd = safe_get_value(subject_stats_df, "ETD", 0.0)
-    time_tracked_days = safe_get_value(subject_stats_df, "time_tracked_days", 0)
-    time_tracked_years = safe_get_value(subject_stats_df, "time_tracked_years", 0.0)
-    distance_travelled = safe_get_value(subject_stats_df, "distance_travelled", 0.0)
-    max_displacement = safe_get_value(subject_stats_df, "max_displacement", 0.0)
-    night_day_ratio = safe_get_value(subject_stats_df, "night_day_ratio", 0.0)
-
-    # Extract subject info with defaults
-    dob_raw = safe_get_value(subject_info_df, "dob", None)
-    if dob_raw is not None and pd.notna(dob_raw):
-        try:
-            dob = str(int(dob_raw))
-        except (ValueError, TypeError):
-            # Handle formats like "April 1997" or other date strings by extracting the year
-            import re
-
-            year_match = re.search(r"\b(19|20)\d{2}\b", str(dob_raw))
-            dob = year_match.group(0) if year_match else str(dob_raw)
-    else:
-        dob = "-"
-    sex = safe_get_value(subject_info_df, "sex", "-")
-    country = safe_get_value(subject_info_df, "country", "-")
-    notes = safe_get_value(subject_info_df, "notes", "None")
-    status = safe_get_value(subject_info_df, "status_raw", "-")
-    bio = safe_get_value(subject_info_df, "bio", "")
-    distribution = safe_get_value(subject_info_df, "distribution", "")
-
-    # Extract occupancy data with defaults
-    national_pa_use = safe_get_value(subject_occupancy_df, "national_pa_use", 0.0)
-    community_pa_use = safe_get_value(subject_occupancy_df, "community_pa_use", 0.0)
-    crop_raid_percent = safe_get_value(subject_occupancy_df, "crop_raid_percent", 0.0)
-    kenya_use = safe_get_value(subject_occupancy_df, "kenya_use", 0.0)
-    unprotected = safe_get_value(subject_occupancy_df, "unprotected", 0.0)
-
-    # Build context dictionary (None values are allowed and will be handled by template)
-    ctx = {
-        # Media paths
-        "profile_photo": profile_photo_path,
-        "mov_map": speedmap_path,
-        "overview_map": homerange_map_path,
-        "range_map": seasonal_homerange_map_path,
-        "nsd_plot": nsd_plot_path,
-        "speed_plot": speed_plot_path,
-        "collar_event_timeline": collared_event_plot_path,
-        "mcp_plot": mcp_plot_path,
-        # Subject statistics
-        "name": name,
-        "mcp": mcp,
-        "etd": etd,
-        "time_tracked_days": time_tracked_days,
-        "time_tracked_years": time_tracked_years,
-        "distance_travelled": distance_travelled,
-        "max_displacement": max_displacement,
-        "night_day_ratio": night_day_ratio,
-        "distribution": distribution,
-        # Subject information
-        "dob": dob,
-        "sex": sex,
-        "country": country,
-        "id_notes": notes,
-        "status": status,
-        "bio": bio,
-        # Occupancy data
-        "national_pa_use": national_pa_use,
-        "community_pa_use": community_pa_use,
-        "crop_raid_percent": crop_raid_percent,
-        "kenya_use": kenya_use,
-        "unprotected": unprotected,
-    }
-
-    # Count how many paths are None
-    none_paths = sum(1 for k, v in ctx.items() if k.endswith(("_photo", "_map", "_plot", "_timeline")) and v is None)
-    total_paths = 8
-
-    print(f"Created context for subject: {name}")
-    print(f"Media files available: {total_paths - none_paths}/{total_paths}")
-    print(f"Full context: {ctx}")
+    ctx = {}
     return ctx
 
 
@@ -423,74 +295,6 @@ def create_inline_image_inch(template: DocxTemplate, image_path: str, width_cm: 
         InlineImage object ready for template rendering
     """
     return InlineImage(template, image_path, width=Inches(width_cm), height=Inches(height_cm))
-
-
-def prepare_mep_context_for_template(
-    context: Dict[str, Any],
-    template: DocxTemplate,
-) -> Dict[str, Any]:
-    """
-    Prepare context by converting image paths to InlineImage objects.
-
-    Args:
-        context: Original context dictionary
-        template: DocxTemplate instance
-
-    Returns:
-        Updated context with InlineImage objects
-    """
-    # Define which fields map to which image dimensions
-    image_field_mapping = {
-        # Timeline/plot images (wide format)
-        "collar_event_timeline": {"height": 1.58, "width": 10.54},
-        "nsd_plot": {"height": 2.61, "width": 10.58},
-        "speed_plot": {"height": 2.61, "width": 10.58},
-        "mcp_plot": {"height": 2.61, "width": 10.58},
-        # Range map -- seasons
-        "range_map": {"height": 7.08, "width": 5.36},
-        # mov_map --speedmap
-        "mov_map": {"height": 4.42, "width": 7.47},
-        # overview map -- home range
-        "overview_map": {"height": 7.06, "width": 5.4},
-        # Profile photo
-        "profile_photo": {"height": 3.69, "width": 3.54},
-    }
-
-    rendered_context = context.copy()
-
-    for field_name, dimensions in image_field_mapping.items():
-        if field_name in rendered_context:
-            image_path = rendered_context[field_name]
-
-            # Skip if path is None or empty
-            if not image_path:
-                print(f"Empty image path for field: {field_name}")
-                continue
-
-            # Verify file exists and is a valid image
-            if not Path(image_path).exists():
-                print(f"Image file not found for {field_name}: {image_path}")
-                rendered_context[field_name] = None
-                continue
-
-            if not is_valid_image(image_path):
-                print(f"Invalid or unrecognized image format for {field_name}: {image_path}")
-                rendered_context[field_name] = None
-                continue
-
-            try:
-                rendered_context[field_name] = create_inline_image_inch(
-                    template=template,
-                    image_path=image_path,
-                    width_cm=dimensions["width"],
-                    height_cm=dimensions["height"],
-                )
-                print(f"Created InlineImage for {field_name}: {dimensions['width']}x{dimensions['height']} cm")
-            except Exception as e:
-                print(f"Failed to create InlineImage for {field_name}: {e}")
-                continue
-
-    return rendered_context
 
 
 @task
