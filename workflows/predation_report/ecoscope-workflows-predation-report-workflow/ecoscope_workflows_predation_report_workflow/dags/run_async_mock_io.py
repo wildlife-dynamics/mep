@@ -57,6 +57,7 @@ from ecoscope_workflows_ext_big_life.tasks import (
 from ecoscope_workflows_ext_big_life.tasks import (
     select_time_frequency as select_time_frequency,
 )
+from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
 from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
 from ecoscope_workflows_ext_custom.tasks.io import (
     persist_df_wrapper as persist_df_wrapper,
@@ -213,7 +214,7 @@ def main(params: Params):
             "custom_protected_layer",
             "generate_livestock_layer",
         ],
-        "global_zoom_value": ["remove_invalid_geoms"],
+        "global_zoom_value": ["reproject_ambo_boundaries"],
         "zip_predation_with_viewstate": [
             "combine_ambo_lvs_layers",
             "global_zoom_value",
@@ -249,6 +250,16 @@ def main(params: Params):
         "grouped_ranch_line_widget_merge": ["ranch_line_widget"],
         "species_line_widget": ["persist_species_killed_multiline"],
         "species_line_widget_merge": ["species_line_widget"],
+        "convert_livestock_pie_png": ["persist_total_livestock_pie"],
+        "convert_ranch_pie_png": ["persist_ranch_livestock_pie"],
+        "convert_species_heat_png": ["persist_species_ranch_heatmap"],
+        "convert_species_time_png": ["persist_species_time_heatmap"],
+        "convert_ranch_multi_png": ["persist_ranch_killed_multibar"],
+        "convert_species_multi_png": ["persist_species_killed_multibar"],
+        "convert_ranch_line_png": ["persist_ranch_killed_multiline"],
+        "convert_species_line_png": ["persist_species_killed_multiline"],
+        "convert_livestock_png": ["persist_livestock_html"],
+        "convert_grid_png": ["persist_grid_html"],
         "mep_monthly_dashboard": [
             "workflow_details",
             "merge_predation_map_widgets",
@@ -1991,7 +2002,7 @@ def main(params: Params):
                 "ncols": 2,
                 "shared_yaxes": False,
                 "group_order": None,
-                "row_height": 450,
+                "row_height": 400,
                 "ascending": True,
                 "bar_color": "#6495ed",
                 "x_axis_style": {
@@ -2058,7 +2069,7 @@ def main(params: Params):
                 "ncols": 2,
                 "shared_yaxes": False,
                 "group_order": None,
-                "row_height": 450,
+                "row_height": 400,
                 "ascending": True,
                 "bar_color": "#6495ed",
                 "x_axis_style": {
@@ -2392,13 +2403,10 @@ def main(params: Params):
             partial={
                 "pitch": 0,
                 "bearing": 0,
+                "gdf": DependsOn("reproject_ambo_boundaries"),
             }
             | (params_dict.get("global_zoom_value") or {}),
-            method="mapvalues",
-            kwargs={
-                "argnames": ["gdf"],
-                "argvalues": DependsOn("remove_invalid_geoms"),
-            },
+            method="call",
         ),
         "zip_predation_with_viewstate": Node(
             async_task=zip_groupbykey.validate()
@@ -2489,7 +2497,7 @@ def main(params: Params):
             )
             .set_executor("lithops"),
             partial={
-                "cell_size_meters": 500,
+                "cell_size_meters": 2000,
                 "geometry_type": "point",
             }
             | (params_dict.get("generate_predation_grids") or {}),
@@ -3066,6 +3074,300 @@ def main(params: Params):
             }
             | (params_dict.get("species_line_widget_merge") or {}),
             method="call",
+        ),
+        "convert_livestock_pie_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_livestock_pie_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_livestock_pie_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_total_livestock_pie"),
+            },
+        ),
+        "convert_ranch_pie_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_ranch_pie_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_ranch_pie_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_ranch_livestock_pie"),
+            },
+        ),
+        "convert_species_heat_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_species_heat_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_species_heat_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_species_ranch_heatmap"),
+            },
+        ),
+        "convert_species_time_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_species_time_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_species_time_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_species_time_heatmap"),
+            },
+        ),
+        "convert_ranch_multi_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_ranch_multi_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "width": 1280,
+                    "height": 2000,
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_ranch_multi_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_ranch_killed_multibar"),
+            },
+        ),
+        "convert_species_multi_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_species_multi_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "width": 1280,
+                    "height": 2000,
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_species_multi_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_species_killed_multibar"),
+            },
+        ),
+        "convert_ranch_line_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_ranch_line_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_ranch_line_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_ranch_killed_multiline"),
+            },
+        ),
+        "convert_species_line_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_species_line_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 10,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_species_line_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_species_killed_multiline"),
+            },
+        ),
+        "convert_livestock_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_livestock_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 40000,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_livestock_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_livestock_html"),
+            },
+        ),
+        "convert_grid_png": Node(
+            async_task=html_to_png.validate()
+            .set_task_instance_id("convert_grid_png")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "config": {
+                    "full_page": False,
+                    "device_scale_factor": 2.0,
+                    "wait_for_timeout": 40000,
+                    "max_concurrent_pages": 1,
+                },
+            }
+            | (params_dict.get("convert_grid_png") or {}),
+            method="mapvalues",
+            kwargs={
+                "argnames": ["html_path"],
+                "argvalues": DependsOn("persist_grid_html"),
+            },
         ),
         "mep_monthly_dashboard": Node(
             async_task=gather_dashboard.validate()

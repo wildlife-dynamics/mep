@@ -57,6 +57,7 @@ from ecoscope_workflows_ext_big_life.tasks import (
 from ecoscope_workflows_ext_big_life.tasks import (
     select_time_frequency as select_time_frequency,
 )
+from ecoscope_workflows_ext_custom.tasks.io import html_to_png as html_to_png
 from ecoscope_workflows_ext_custom.tasks.io import load_df as load_df
 from ecoscope_workflows_ext_custom.tasks.io import (
     persist_df_wrapper as persist_df_wrapper,
@@ -2432,7 +2433,7 @@ ranch_killed_multibar_chart = (
         ncols=2,
         shared_yaxes=False,
         group_order=None,
-        row_height=450,
+        row_height=400,
         ascending=True,
         bar_color="#6495ed",
         x_axis_style={"title": "Date"},
@@ -2515,7 +2516,7 @@ species_killed_multibar_chart = (
         ncols=2,
         shared_yaxes=False,
         group_order=None,
-        row_height=450,
+        row_height=400,
         ascending=True,
         bar_color="#6495ed",
         x_axis_style={"title": "Date"},
@@ -2915,8 +2916,10 @@ global_zoom_value = (
         ],
         unpack_depth=1,
     )
-    .partial(pitch=0, bearing=0, **global_zoom_value_params)
-    .mapvalues(argnames=["gdf"], argvalues=remove_invalid_geoms)
+    .partial(
+        pitch=0, bearing=0, gdf=reproject_ambo_boundaries, **global_zoom_value_params
+    )
+    .call()
 )
 
 
@@ -3048,7 +3051,7 @@ generate_predation_grids = (
         unpack_depth=1,
     )
     .partial(
-        cell_size_meters=500, geometry_type="point", **generate_predation_grids_params
+        cell_size_meters=2000, geometry_type="point", **generate_predation_grids_params
     )
     .mapvalues(argnames=["features_gdf"], argvalues=remove_invalid_geoms)
 )
@@ -3786,6 +3789,380 @@ species_line_widget_merge = (
     )
     .partial(widgets=species_line_widget, **species_line_widget_merge_params)
     .call()
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_livestock_pie_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_livestock_pie_png = (
+    html_to_png.set_task_instance_id("convert_livestock_pie_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_livestock_pie_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_total_livestock_pie)
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_ranch_pie_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_ranch_pie_png = (
+    html_to_png.set_task_instance_id("convert_ranch_pie_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_ranch_pie_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_ranch_livestock_pie)
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_species_heat_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_species_heat_png = (
+    html_to_png.set_task_instance_id("convert_species_heat_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_species_heat_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_species_ranch_heatmap)
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_species_time_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_species_time_png = (
+    html_to_png.set_task_instance_id("convert_species_time_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_species_time_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_species_time_heatmap)
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_ranch_multi_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_ranch_multi_png = (
+    html_to_png.set_task_instance_id("convert_ranch_multi_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "width": 1280,
+            "height": 2000,
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_ranch_multi_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_ranch_killed_multibar)
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_species_multi_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_species_multi_png = (
+    html_to_png.set_task_instance_id("convert_species_multi_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "width": 1280,
+            "height": 2000,
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_species_multi_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_species_killed_multibar)
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_ranch_line_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_ranch_line_png = (
+    html_to_png.set_task_instance_id("convert_ranch_line_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_ranch_line_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_ranch_killed_multiline)
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_species_line_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_species_line_png = (
+    html_to_png.set_task_instance_id("convert_species_line_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 10,
+            "max_concurrent_pages": 1,
+        },
+        **convert_species_line_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_species_killed_multiline)
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_livestock_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_livestock_png = (
+    html_to_png.set_task_instance_id("convert_livestock_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 40000,
+            "max_concurrent_pages": 1,
+        },
+        **convert_livestock_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_livestock_html)
+)
+
+
+# %% [markdown]
+# ## Convert html to png
+
+# %%
+# parameters
+
+convert_grid_png_params = dict()
+
+# %%
+# call the task
+
+
+convert_grid_png = (
+    html_to_png.set_task_instance_id("convert_grid_png")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        config={
+            "full_page": False,
+            "device_scale_factor": 2.0,
+            "wait_for_timeout": 40000,
+            "max_concurrent_pages": 1,
+        },
+        **convert_grid_png_params,
+    )
+    .mapvalues(argnames=["html_path"], argvalues=persist_grid_html)
 )
 
 

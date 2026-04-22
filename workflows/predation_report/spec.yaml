@@ -1,4 +1,4 @@
-id: predation_report #/Users/tevintemu/Desktop/Ecoscope/notebooks/lion_guardians/prey_ecoscope.csv
+id: predation_report # /Users/tevintemu/Desktop/Ecoscope/notebooks/lion_guardians/prey_ecoscope.csv
 requirements:
   - name: ecoscope-workflows-core
     version: "0.22.17.*"
@@ -42,7 +42,6 @@ task-instance-defaults:
     conditions:
       - any_is_empty_df
       - any_dependency_skipped
-
 
 workflow:
   # set workflow details
@@ -949,7 +948,7 @@ workflow:
       ncols: 2 
       shared_yaxes: false
       group_order: null
-      row_height: 450
+      row_height: 400
       ascending: true
       bar_color: "#6495ed"
       x_axis_style:
@@ -986,7 +985,7 @@ workflow:
       ncols: 2 
       shared_yaxes: false
       group_order: null
-      row_height: 450
+      row_height: 400
       ascending: true
       bar_color: "#6495ed"
       x_axis_style:
@@ -1167,9 +1166,8 @@ workflow:
     partial:
       pitch: 0
       bearing: 0
-    mapvalues: 
-      argnames: gdf 
-      argvalues: ${{ workflow.remove_invalid_geoms.return }}
+      gdf: ${{ workflow.reproject_ambo_boundaries.return }} 
+      #${{ workflow.remove_invalid_geoms.return }}
 
   - name: Combine livestock predation layers with view state
     id: zip_predation_with_viewstate
@@ -1210,7 +1208,7 @@ workflow:
     id: generate_predation_grids 
     task: generate_density_grid
     partial:
-      cell_size_meters: 500
+      cell_size_meters: 2000
       geometry_type: "point"
     mapvalues: 
       argnames: features_gdf 
@@ -1494,6 +1492,150 @@ workflow:
     task: merge_widget_views
     partial:
       widgets: ${{ workflow.species_line_widget.return }}
+
+  - name: Convert html to png
+    id: convert_livestock_pie_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_total_livestock_pie.return }}
+
+  - name: Convert html to png
+    id: convert_ranch_pie_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_ranch_livestock_pie.return }}
+
+  - name: Convert html to png
+    id: convert_species_heat_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_species_ranch_heatmap.return }}
+
+  - name: Convert html to png
+    id: convert_species_time_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_species_time_heatmap.return }}
+
+  - name: Convert html to png
+    id: convert_ranch_multi_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        width: 1280
+        height: 2000
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_ranch_killed_multibar.return }}
+
+  - name: Convert html to png
+    id: convert_species_multi_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        width: 1280
+        height: 2000
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_species_killed_multibar.return }}
+
+  - name: Convert html to png
+    id: convert_ranch_line_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_ranch_killed_multiline.return }}
+
+  - name: Convert html to png
+    id: convert_species_line_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_species_killed_multiline.return }}
+
+  - name: Convert html to png
+    id: convert_livestock_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 40000
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_livestock_html.return }}
+
+  - name: Convert html to png
+    id: convert_grid_png
+    task: html_to_png
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config:
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 40000
+        max_concurrent_pages: 1
+    mapvalues:
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_grid_html.return }}
 
   - name: MEP monthly report  dashboard
     id: mep_monthly_dashboard
