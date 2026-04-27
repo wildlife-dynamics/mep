@@ -33,6 +33,7 @@ from ._tabular_ops import (
     utm_to_4326,
 )
 from ._tabular_file import get_local_tabular_path, load_local_tabular_file
+from ._predation_context import generate_predation_report
 
 __all__ = [
     "create_monthly_ctx_cover",
@@ -75,4 +76,5 @@ __all__ = [
     "get_local_tabular_path",
     "load_local_tabular_file",
     "utm_to_4326",
+    "generate_predation_report",
 ]

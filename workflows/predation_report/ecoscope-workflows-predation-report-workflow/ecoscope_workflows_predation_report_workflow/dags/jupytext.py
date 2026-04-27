@@ -93,8 +93,18 @@ from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     apply_color_map as apply_color_map,
 )
+from ecoscope_workflows_ext_lion_guardians.tasks import (
+    create_context_page_lg as create_context_page_lg,
+)
+from ecoscope_workflows_ext_lion_guardians.tasks import (
+    create_guardians_ctx_cover as create_guardians_ctx_cover,
+)
+from ecoscope_workflows_ext_lion_guardians.tasks import merge_cl_files as merge_cl_files
 from ecoscope_workflows_ext_mep.tasks import custom_map_column as custom_map_column
 from ecoscope_workflows_ext_mep.tasks import draw_custom_heatmap as draw_custom_heatmap
+from ecoscope_workflows_ext_mep.tasks import (
+    generate_predation_report as generate_predation_report,
+)
 from ecoscope_workflows_ext_mep.tasks import (
     herder_effectiveness as herder_effectiveness,
 )
@@ -200,9 +210,7 @@ time_range = (
 # %%
 # parameters
 
-groupers_params = dict(
-    groupers=...,
-)
+groupers_params = dict()
 
 # %%
 # call the task
@@ -219,7 +227,7 @@ groupers = (
         ],
         unpack_depth=1,
     )
-    .partial(**groupers_params)
+    .partial(groupers=[], **groupers_params)
     .call()
 )
 
@@ -4163,6 +4171,207 @@ convert_grid_png = (
         **convert_grid_png_params,
     )
     .mapvalues(argnames=["html_path"], argvalues=persist_grid_html)
+)
+
+
+# %% [markdown]
+# ## Predation report cover page
+
+# %%
+# parameters
+
+persist_predation_cover_page_params = dict()
+
+# %%
+# call the task
+
+
+persist_predation_cover_page = (
+    fetch_and_persist_file.set_task_instance_id("persist_predation_cover_page")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        url="https://www.dropbox.com/scl/fi/nod9nriqch5y0mznpo7r3/predation_cover_page.docx?rlkey=wcqkglzrzb7ud1vqcimey5k6p&st=0o88qocj&dl=0",
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        overwrite_existing=False,
+        retries=3,
+        unzip=False,
+        **persist_predation_cover_page_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Predation report context page
+
+# %%
+# parameters
+
+context_cover_page_params = dict()
+
+# %%
+# call the task
+
+
+context_cover_page = (
+    create_guardians_ctx_cover.set_task_instance_id("context_cover_page")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        report_period=time_range, prepared_by="Ecoscope", **context_cover_page_params
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Persist context page for guardians report
+
+# %%
+# parameters
+
+persist_ctx_page_params = dict()
+
+# %%
+# call the task
+
+
+persist_ctx_page = (
+    create_context_page_lg.set_task_instance_id("persist_ctx_page")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        template_path=persist_predation_cover_page,
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        context=context_cover_page,
+        filename="context_page.docx",
+        **persist_ctx_page_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Predation predation report
+
+# %%
+# parameters
+
+persist_predation_report_params = dict()
+
+# %%
+# call the task
+
+
+persist_predation_report = (
+    fetch_and_persist_file.set_task_instance_id("persist_predation_report")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        url="https://www.dropbox.com/scl/fi/8tdddezxzued4r6njaad3/custom_patrol_template.docx?rlkey=1ybl69jdv1ewla3dljl33debj&st=78qcni5v&dl=0",
+        output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        overwrite_existing=False,
+        retries=3,
+        unzip=False,
+        **persist_predation_report_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Generate predation report
+
+# %%
+# parameters
+
+generate_overall_report_params = dict()
+
+# %%
+# call the task
+
+
+generate_overall_report = (
+    generate_predation_report.set_task_instance_id("generate_overall_report")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        template_path=persist_predation_report,
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        filename=None,
+        **generate_overall_report_params,
+    )
+    .call()
+)
+
+
+# %% [markdown]
+# ## Merge word docs
+
+# %%
+# parameters
+
+merge_docx_params = dict()
+
+# %%
+# call the task
+
+
+merge_docx = (
+    merge_cl_files.set_task_instance_id("merge_docx")
+    .handle_errors()
+    .with_tracing()
+    .skipif(
+        conditions=[
+            any_is_empty_df,
+            any_dependency_skipped,
+        ],
+        unpack_depth=1,
+    )
+    .partial(
+        cover_page_path=persist_ctx_page,
+        output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+        context_page_items=[generate_overall_report],
+        filename=None,
+        **merge_docx_params,
+    )
+    .call()
 )
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,18 +34,6 @@ class TimezoneInfo(BaseModel):
     utc: str = Field(..., title="Utc")
 
 
-class SpatialGrouper(BaseModel):
-    spatial_index_name: str = Field(..., title="Spatial Regions")
-
-
-class TemporalGrouper(BaseModel):
-    temporal_index: str = Field(..., title="Time")
-
-
-class ValueGrouper(BaseModel):
-    index_name: str = Field(..., title="Category")
-
-
 class TimeFrequency(str, Enum):
     Year = "Year"
     Quarter = "Quarter"
@@ -65,19 +53,6 @@ class TimeRange(BaseModel):
     timezone: Optional[TimezoneInfo] = Field(None, title="Timezone")
     time_format: Optional[str] = Field(
         "%d %b %Y %H:%M:%S", description="The time format", title="Time Format"
-    )
-
-
-class Groupers(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    groupers: Optional[List[Union[ValueGrouper, TemporalGrouper, SpatialGrouper]]] = (
-        Field(
-            None,
-            description="            Specify how the data should be grouped to create the views for your dashboard.\n            This field is optional; if left blank, all the data will appear in a single view.\n            ",
-            title=" ",
-        )
     )
 
 
@@ -106,7 +81,6 @@ class Params(BaseModel):
         description="Choose the period of time to analyze.",
         title="Define analysis time range",
     )
-    groupers: Optional[Groupers] = Field(None, title="Configure grouping strategy")
     time_frequency: Optional[TimeFrequencyModel] = Field(
         None, title="Select time frequency for temporal charts"
     )

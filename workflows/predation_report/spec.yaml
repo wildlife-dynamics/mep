@@ -1,4 +1,5 @@
-id: predation_report # /Users/tevintemu/Desktop/Ecoscope/notebooks/lion_guardians/prey_ecoscope.csv
+id: predation_report 
+# /Users/tevintemu/Desktop/Ecoscope/notebooks/lion_guardians/prey_ecoscope.csv
 requirements:
   - name: ecoscope-workflows-core
     version: "0.22.17.*"
@@ -22,6 +23,10 @@ requirements:
 
   - name: ecoscope-workflows-ext-big-life
     version: "0.0.11.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-lion-guardians
+    version: "0.0.6.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mep
@@ -58,6 +63,8 @@ workflow:
   - name: Configure grouping strategy
     id: groupers
     task: set_groupers
+    partial: 
+      groupers: []
 
   - name: Select time frequency for temporal charts 
     id: time_frequency
@@ -1636,6 +1643,60 @@ workflow:
     mapvalues:
       argnames: html_path 
       argvalues: ${{ workflow.persist_grid_html.return }}
+
+  - name: Predation report cover page 
+    id: persist_predation_cover_page
+    task: fetch_and_persist_file
+    partial:
+      url: https://www.dropbox.com/scl/fi/nod9nriqch5y0mznpo7r3/predation_cover_page.docx?rlkey=wcqkglzrzb7ud1vqcimey5k6p&st=0o88qocj&dl=0
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      overwrite_existing: false
+      retries: 3
+      unzip: false
+  
+  - name: Predation report context page 
+    id: context_cover_page
+    task: create_guardians_ctx_cover
+    partial:  
+      report_period: ${{ workflow.time_range.return }}
+      prepared_by: "Ecoscope"
+
+  - name: Persist context page for guardians report 
+    id: persist_ctx_page 
+    task: create_context_page_lg 
+    partial:  
+      template_path: ${{ workflow.persist_predation_cover_page.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      context: ${{ workflow.context_cover_page.return }}
+      filename: context_page.docx
+
+  - name: Predation predation report
+    id: persist_predation_report
+    task: fetch_and_persist_file
+    partial:
+      url: https://www.dropbox.com/scl/fi/8tdddezxzued4r6njaad3/custom_patrol_template.docx?rlkey=1ybl69jdv1ewla3dljl33debj&st=78qcni5v&dl=0
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      overwrite_existing: false
+      retries: 3
+      unzip: false
+
+  - name: Generate predation report 
+    id: generate_overall_report
+    task: generate_predation_report 
+    partial: 
+      template_path: ${{ workflow.persist_predation_report.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: null 
+
+  - name: Merge word docs
+    id: merge_docx
+    task: merge_cl_files 
+    partial: 
+      cover_page_path: ${{ workflow.persist_ctx_page.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      context_page_items: 
+        - ${{ workflow.generate_overall_report.return }}
+      filename: null
 
   - name: MEP monthly report  dashboard
     id: mep_monthly_dashboard
