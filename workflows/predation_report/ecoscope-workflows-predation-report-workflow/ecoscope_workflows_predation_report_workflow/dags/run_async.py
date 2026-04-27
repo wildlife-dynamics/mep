@@ -84,8 +84,18 @@ from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
 from ecoscope_workflows_ext_ecoscope.tasks.transformation import (
     apply_color_map as apply_color_map,
 )
+from ecoscope_workflows_ext_lion_guardians.tasks import (
+    create_context_page_lg as create_context_page_lg,
+)
+from ecoscope_workflows_ext_lion_guardians.tasks import (
+    create_guardians_ctx_cover as create_guardians_ctx_cover,
+)
+from ecoscope_workflows_ext_lion_guardians.tasks import merge_cl_files as merge_cl_files
 from ecoscope_workflows_ext_mep.tasks import custom_map_column as custom_map_column
 from ecoscope_workflows_ext_mep.tasks import draw_custom_heatmap as draw_custom_heatmap
+from ecoscope_workflows_ext_mep.tasks import (
+    generate_predation_report as generate_predation_report,
+)
 from ecoscope_workflows_ext_mep.tasks import (
     herder_effectiveness as herder_effectiveness,
 )
@@ -249,6 +259,12 @@ def main(params: Params):
         "convert_species_line_png": ["persist_species_killed_multiline"],
         "convert_livestock_png": ["persist_livestock_html"],
         "convert_grid_png": ["persist_grid_html"],
+        "persist_predation_cover_page": [],
+        "context_cover_page": ["time_range"],
+        "persist_ctx_page": ["persist_predation_cover_page", "context_cover_page"],
+        "persist_predation_report": [],
+        "generate_overall_report": ["persist_predation_report"],
+        "merge_docx": ["persist_ctx_page", "generate_overall_report"],
         "mep_monthly_dashboard": [
             "workflow_details",
             "merge_predation_map_widgets",
@@ -310,7 +326,7 @@ def main(params: Params):
                 unpack_depth=1,
             )
             .set_executor("lithops"),
-            partial=(params_dict.get("groupers") or {}),
+            partial={} | (params_dict.get("groupers") or {}),
             method="call",
         ),
         "time_frequency": Node(
@@ -3357,6 +3373,139 @@ def main(params: Params):
                 "argnames": ["html_path"],
                 "argvalues": DependsOn("persist_grid_html"),
             },
+        ),
+        "persist_predation_cover_page": Node(
+            async_task=fetch_and_persist_file.validate()
+            .set_task_instance_id("persist_predation_cover_page")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "url": "https://www.dropbox.com/scl/fi/nod9nriqch5y0mznpo7r3/predation_cover_page.docx?rlkey=wcqkglzrzb7ud1vqcimey5k6p&st=0o88qocj&dl=0",
+                "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "overwrite_existing": False,
+                "retries": 3,
+                "unzip": False,
+            }
+            | (params_dict.get("persist_predation_cover_page") or {}),
+            method="call",
+        ),
+        "context_cover_page": Node(
+            async_task=create_guardians_ctx_cover.validate()
+            .set_task_instance_id("context_cover_page")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "report_period": DependsOn("time_range"),
+                "prepared_by": "Ecoscope",
+            }
+            | (params_dict.get("context_cover_page") or {}),
+            method="call",
+        ),
+        "persist_ctx_page": Node(
+            async_task=create_context_page_lg.validate()
+            .set_task_instance_id("persist_ctx_page")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "template_path": DependsOn("persist_predation_cover_page"),
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "context": DependsOn("context_cover_page"),
+                "filename": "context_page.docx",
+            }
+            | (params_dict.get("persist_ctx_page") or {}),
+            method="call",
+        ),
+        "persist_predation_report": Node(
+            async_task=fetch_and_persist_file.validate()
+            .set_task_instance_id("persist_predation_report")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "url": "https://www.dropbox.com/scl/fi/8tdddezxzued4r6njaad3/custom_patrol_template.docx?rlkey=1ybl69jdv1ewla3dljl33debj&st=78qcni5v&dl=0",
+                "output_path": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "overwrite_existing": False,
+                "retries": 3,
+                "unzip": False,
+            }
+            | (params_dict.get("persist_predation_report") or {}),
+            method="call",
+        ),
+        "generate_overall_report": Node(
+            async_task=generate_predation_report.validate()
+            .set_task_instance_id("generate_overall_report")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "template_path": DependsOn("persist_predation_report"),
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "filename": None,
+            }
+            | (params_dict.get("generate_overall_report") or {}),
+            method="call",
+        ),
+        "merge_docx": Node(
+            async_task=merge_cl_files.validate()
+            .set_task_instance_id("merge_docx")
+            .handle_errors()
+            .with_tracing()
+            .skipif(
+                conditions=[
+                    any_is_empty_df,
+                    any_dependency_skipped,
+                ],
+                unpack_depth=1,
+            )
+            .set_executor("lithops"),
+            partial={
+                "cover_page_path": DependsOn("persist_ctx_page"),
+                "output_dir": os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+                "context_page_items": [
+                    DependsOn("generate_overall_report"),
+                ],
+                "filename": None,
+            }
+            | (params_dict.get("merge_docx") or {}),
+            method="call",
         ),
         "mep_monthly_dashboard": Node(
             async_task=gather_dashboard.validate()

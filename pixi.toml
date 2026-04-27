@@ -21,6 +21,7 @@ virtualenv = "20.39.0.*"
 
 [feature.compile.dependencies]
 ecoscope-workflows-ext-mep = "*"
+ecoscope-workflows-ext-lion-guardians = "0.0.6.*"
 ecoscope-workflows-ext-mnc = "0.0.9.*"
 ecoscope-workflows-ext-ste = "0.0.20.*"
 ecoscope-workflows-ext-big-life = "0.0.11.*"
