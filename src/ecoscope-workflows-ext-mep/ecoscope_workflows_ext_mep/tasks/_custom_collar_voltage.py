@@ -106,12 +106,14 @@ def generate_subject_voltage_chart(
     hist_lower_y = dataframe_column_min(hist_df, "voltage")
     curr_lower_y = dataframe_column_min(curr_df, "voltage")
     lower_y = apply_arithmetic_operation(hist_lower_y, curr_lower_y, "min")
-    lower_y_diff = apply_arithmetic_operation(lower_y, 0.1, "multiply")
+    lower_y_diff = apply_arithmetic_operation(lower_y, 0.15, "multiply")
     lower_y = apply_arithmetic_operation(lower_y, lower_y_diff, "subtract")
 
     hist_upper_y = dataframe_column_max(hist_df, "voltage")
     curr_upper_y = dataframe_column_max(curr_df, "voltage")
     upper_y = apply_arithmetic_operation(hist_upper_y, curr_upper_y, "max")
+    upper_y_diff = apply_arithmetic_operation(upper_y, 0.15, "multiply")
+    upper_y = apply_arithmetic_operation(upper_y, upper_y_diff, "add")
 
     transformation.assign_value(curr_df, "max", volt_upper)
     transformation.assign_value(curr_df, "min", volt_lower)
@@ -135,7 +137,7 @@ def generate_subject_voltage_chart(
         layout_style=LayoutStyle(
             yaxis=AxisStyle(range=[lower_y, upper_y], title="Collar Voltage"),
             xaxis=AxisStyle(title="Time"),
-            title=f"{subject_name}",
+            # title=f"{subject_name}",
             title_x=0.5,
             font_size=14,
             font_color="#222222",
