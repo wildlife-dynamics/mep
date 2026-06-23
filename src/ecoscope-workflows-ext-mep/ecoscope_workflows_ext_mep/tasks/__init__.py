@@ -34,7 +34,13 @@ from ._tabular_ops import (
 )
 from ._tabular_file import get_local_tabular_path, load_local_tabular_file
 from ._predation_context import generate_predation_report
-
+from ._animate import (
+    create_terrain_layer,
+    create_trips_layer,
+    normalize_timestamps,
+    draw_animated_map,
+    trajectory_to_trips
+)
 __all__ = [
     "create_monthly_ctx_cover",
     "create_mep_monthly_context",
@@ -77,4 +83,9 @@ __all__ = [
     "load_local_tabular_file",
     "utm_to_4326",
     "generate_predation_report",
+    "create_terrain_layer",
+    "create_trips_layer",
+    "normalize_timestamps",
+    "draw_animated_map",
+    "trajectory_to_trips"
 ]
