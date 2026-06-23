@@ -181,12 +181,11 @@ workflow:
       min_zoom: 0 
       max_zoom: 14 
       extruded: false
-      elevation_decoder: {
-        "rScaler": 256, 
-        "gScaler": 1, 
-        "bScaler": 1 / 256, 
-        "offset": -32768
-        }
+      elevation_decoder:
+        rScaler: 256
+        gScaler: 1
+        bScaler: 0.00390625
+        offset: -32768
 
   - name: Get trips view state 
     id: trips_view_state 

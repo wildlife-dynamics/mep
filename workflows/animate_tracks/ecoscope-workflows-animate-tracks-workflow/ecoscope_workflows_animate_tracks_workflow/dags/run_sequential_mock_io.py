@@ -345,7 +345,7 @@ def main(params: Params):
             elevation_decoder={
                 "rScaler": 256,
                 "gScaler": 1,
-                "bScaler": "1 / 256",
+                "bScaler": 0.00390625,
                 "offset": -32768,
             },
             **(params_dict.get("terrain_layer") or {}),

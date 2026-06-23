@@ -503,7 +503,7 @@ terrain_layer = (
         elevation_decoder={
             "rScaler": 256,
             "gScaler": 1,
-            "bScaler": "1 / 256",
+            "bScaler": 0.00390625,
             "offset": -32768,
         },
         **terrain_layer_params,
