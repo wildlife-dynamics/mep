@@ -1,5 +1,7 @@
 import os
 import io
+import base64
+import pathlib
 import logging
 import requests
 import numpy as np
@@ -9,7 +11,7 @@ import geopandas as gpd
 from pyproj import Transformer
 import concurrent.futures as cf
 from pydantic import BaseModel,Field
-from shapely.geometry import LineString
+from shapely.geometry import LineString 
 from typing import Annotated,Literal,cast
 from pydantic.json_schema import SkipJsonSchema
 from ecoscope_workflows_core.decorators import task
@@ -47,6 +49,139 @@ TerrainStrategy = Annotated[
     Literal["best-available", "no-overlap", "never"], PydeckAnnotation
 ]
 
+
+class ScenegraphLayerDefinition(BaseModel):
+    """An animated 3D head built from a glTF/GLB model (deck.gl ScenegraphLayer).
+
+    Create one with create_scenegraph_layer() and pass it to
+    draw_animated_map(head_layer=...). Its position and heading are driven per-frame
+    from the TripsLayer, so it follows each subject's current location. `glb` accepts
+    an http(s) URL, a `data:` URI, or a local file path (read and embedded as a data
+    URI). None -> bundled default (the elephant model). If the ScenegraphLayer
+    constructor or the glTF loader can't be resolved at runtime, the head silently
+    falls back to the flat ScatterplotLayer dot.
+    See https://deck.gl/docs/api-reference/mesh-layers/scenegraph-layer for more info.
+    """
+
+    enabled: Annotated[
+        bool,
+        Field(default=False, description="Enable the 3D head model. When off, subjects render as flat dots."),
+    ] = False
+    glb: Annotated[
+        str | SkipJsonSchema[None],
+        Field(
+            description="GLB source: an http(s) URL, a data: URI, or a local file path. "
+            "None -> bundled default model (elephant)."
+        ),
+    ] = "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb"
+    size_scale: Annotated[
+        float,
+        AdvancedField(default=50.0, description="ScenegraphLayer sizeScale. Tune to your scene."),
+    ] = 50.0
+    size_min_pixels: Annotated[
+        float,
+        AdvancedField(
+            default=12.0,
+            description="Clamp the on-screen model to at least this many pixels so it stays visible when zoomed out.",
+        ),
+    ] = 12.0
+    size_max_pixels: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(default=None, description="Optional upper clamp on the model's on-screen size in pixels."),
+    ] = 75.0
+    face_heading: Annotated[
+        bool,
+        AdvancedField(default=True, description="Rotate the model to face its direction of travel."),
+    ] = True
+    yaw_offset: Annotated[
+        float,
+        AdvancedField(
+            default=0.0,
+            description="Degrees added to the computed heading so the model's nose aligns with travel. "
+            "Model-dependent; tweak if your model faces sideways.",
+        ),
+    ] = 0.0
+    model_pitch: Annotated[
+        float,
+        AdvancedField(
+            default=0.0,
+            description="Tilt of the MODEL itself (deg), independent of the camera. "
+            "Use to correct a model authored nose-up/down; NOT the view pitch.",
+        ),
+    ] = 0.0
+    model_roll: Annotated[
+        float,
+        AdvancedField(
+            default=0.0,
+            description="Bank of the MODEL itself (deg), independent of the camera.",
+        ),
+    ] = 0.0
+    smooth_samples: Annotated[
+        int,
+        AdvancedField(
+            default=2,
+            description="Heading/slope smoothing window in track fixes (+/- N). "
+            "Higher = smoother orientation but more lag; 0 = raw single segment.",
+        ),
+    ] = 2
+    terrain_pitch: Annotated[
+        bool,
+        AdvancedField(
+            default=False,
+            description="Tilt the model to the terrain slope (from each fix's z) so it "
+            "noses up on climbs / down on descents. OFF by default -> stays upright; "
+            "enable only for steady, climbing tracks (it can tip near-stationary subjects).",
+        ),
+    ] = False
+    terrain_pitch_scale: Annotated[
+        float,
+        AdvancedField(
+            default=1.0,
+            description="Sign/strength of terrain pitch. Set -1.0 to flip if the model "
+            "tilts the wrong way; <1 to soften. (Tilt is also capped at +/-20deg.)",
+        ),
+    ] = 1.0
+    min_move_m: Annotated[
+        float,
+        AdvancedField(
+            default=3.0,
+            description="If the subject moves less than this (m) across the smoothing "
+            "window, hold the last heading and keep the model level -- stops it spinning "
+            "or tipping while milling in place.",
+        ),
+    ] = 3.0
+    pbr_lighting: Annotated[
+        bool,
+        AdvancedField(default=True, description="Physically-based lighting ('pbr'); False -> flat shading."),
+    ] = True
+    tint: Annotated[
+        list[int] | SkipJsonSchema[None],
+        AdvancedField(default=None, description="Optional RGB tint over the model as [R, G, B]. None -> the model's own materials."),
+    ] = [220,220,255]
+    use_track_color: Annotated[
+        bool,
+        AdvancedField(
+            default=True,
+            description="Colour the model with each subject's track colour. "
+            "False -> use `tint` (or the model's own materials). Note: the colour "
+            "multiplies the model's material, so it reads truest with a light/neutral "
+            "glb and flat lighting (pbr_lighting=False).",
+        ),
+    ] = True
+
+
+def _resolve_glb_data_uri(glb: str | None) -> str:
+    """Resolve a ScenegraphLayerDefinition.glb source to something deck.gl can load.
+
+    URLs and data: URIs pass through; a local path is read and base64-embedded so the
+    output HTML stays self-contained; None -> the bundled default (elephant) data URI.
+    """
+    if glb.startswith(("http://", "https://", "data:")):
+        return glb
+    raw = pathlib.Path(glb).read_bytes()
+    return "data:model/gltf-binary;base64," + base64.b64encode(raw).decode()
+
+
 class TimelineAnimation(BaseModel):
     """Settings for an animated TripsLayer timeline.
 
@@ -55,7 +190,7 @@ class TimelineAnimation(BaseModel):
     units as the layer's timestamps (typically seconds).
     """
     fade_ratio: float = Field(
-        default=0.05,
+        default=0.55,
         gt=0,
         le=1,
         description="Comet-tail length as a fraction of the total time span (0–1].",
@@ -66,10 +201,48 @@ class TimelineAnimation(BaseModel):
         description="Amount currentTime advances per tick (per-frame increment).",
     )
     fps_limit: float = Field(
-        default=20.0,
+        default=30.0,
         gt=0,
         description="Maximum animation frames per second.",
     )
+
+    # --- Historic-track ("fade to white") trail ---------------------------------
+    show_history: bool = Field(
+        default=True,
+        description="Draw the already-traversed path behind the comet (the 'fade to white' track).",
+    )
+    history_color: tuple[int, int, int] = Field(
+        default=(255, 255, 255),
+        description="RGB colour the historic track settles to. Default white.",
+    )
+    history_opacity: float = Field(
+        default=0.85, ge=0, le=1, description="Opacity of the historic track."
+    )
+    fade_history: bool = Field(
+        default=False,
+        description="If True the historic track also fades by opacity along its length; "
+        "if False it stays a solid line all the way back to the start.",
+    )
+
+    # --- Current-position head marker -------------------------------------------
+    show_head: bool = Field(
+        default=True,
+        description="Draw a marker at each subject's current position (no historic track on this layer).",
+    )
+    head_radius: float = Field(
+        default=6.0, gt=0, description="Head-marker radius in pixels."
+    )
+    head_color: tuple[int, int, int] | None = Field(
+        default=None,
+        description="RGB fill for the head marker. None -> use each subject's own colour.",
+    )
+    head_outline_color: tuple[int, int, int] = Field(
+        default=(255, 255, 255), description="RGB outline colour for the head marker."
+    )
+    head_outline_width: float = Field(
+        default=1.5, ge=0, description="Head-marker outline width in pixels."
+    )
+
     
 class TerrainLayerDefinition(BaseModel):
     """A 3D terrain layer built from RGB-encoded elevation tiles, optionally draped with a texture.
@@ -87,11 +260,11 @@ class TerrainLayerDefinition(BaseModel):
         dict, AdvancedField(default=lambda: dict(TERRARIUM_ELEVATION_DECODER))
     ] = TERRARIUM_ELEVATION_DECODER  # type: ignore[assignment]
     wireframe: Annotated[bool, AdvancedField(default=False)] = False
-    elevation_scale: Annotated[float, AdvancedField(default=1)] = 1
     min_zoom: Annotated[int, AdvancedField(default=0)] = 0
     max_zoom: Annotated[int, AdvancedField(default=15)] = 15
     strategy: Annotated[TerrainStrategy, AdvancedField(default="no-overlap")] = "no-overlap"
-    opacity: Annotated[float, AdvancedField(default=1, ge=0, le=1)] = 1
+    mesh_max_error: Annotated[float, AdvancedField(default=4)] = 4
+    material: Annotated[bool, AdvancedField(default=True)] = True
     
 class TripsLayerStyle(LayerStyleBase):
     """
@@ -115,10 +288,12 @@ class TripsLayerStyle(LayerStyleBase):
     width_max_pixels: Annotated[
         float | SkipJsonSchema[None], AdvancedField(default=None)
     ] = None
-    cap_rounded: Annotated[bool, AdvancedField(default=True)] = True
+    cap_rounded: Annotated[bool, AdvancedField(default=False)] = False
     joint_rounded: Annotated[bool, AdvancedField(default=False)] = False
     billboard: Annotated[bool, AdvancedField(default=False)] = False
     fade_trail: Annotated[bool, AdvancedField(default=True)] = True
+    current_time: Annotated[float, AdvancedField(default=0)] = 0
+    trail_length: Annotated[float, AdvancedField(default=0)] = 120
     
 class TerrainSampling(BaseModel):
     """Per-vertex ground-elevation sampling for 3D trips draped over a TerrainLayer.
@@ -130,11 +305,18 @@ class TerrainSampling(BaseModel):
         default=30.0, description="Metres added above the sampled ground at every vertex."
     )
     zoom: int = Field(
-        default=12, description="Terrarium tile zoom used for elevation sampling."
+        default=15, description="Terrarium tile zoom used for elevation sampling."
     )
-    vertical_scale: float = Field(
-        default=1.0,
-        description="Must equal the TerrainLayer's elevation_scale so trips align with the mesh.",
+    elevation_data: str = Field(
+        default=DEFAULT_TERRAIN_URL,
+        description="Elevation tile URL template. Must match the TerrainLayer's elevation_data.",
+    )
+    elevation_decoder: dict | None = Field(
+        default=TERRARIUM_ELEVATION_DECODER,
+        description=(
+            "RGB->elevation decoder. Must match the TerrainLayer's elevation_decoder so "
+            "sampled z aligns with the rendered mesh. None -> Terrarium default."
+        ),
     )
     ground_elevation: float = Field(
         default=1000.0, description="Constant ground used only if DEM sampling fails."
@@ -142,7 +324,7 @@ class TerrainSampling(BaseModel):
     cache_dir: str | None = Field(
         default=None, description="Optional dir to cache DEM tiles so reruns skip the network."
     )
-
+    
 @task
 def create_terrain_layer(
     elevation_data: Annotated[
@@ -151,11 +333,7 @@ def create_terrain_layer(
     texture: Annotated[
         str | SkipJsonSchema[None],
         Field(description="URL template for tiles draped over the terrain."),
-    ] = None,
-    elevation_scale: Annotated[
-        float, Field(description="Vertical exaggeration factor.")
-    ] = 1,
-    extruded: Annotated[bool, AdvancedField(default=True)] = True,
+    ] = SURFACE,
     wireframe: Annotated[bool, AdvancedField(default=False)] = False,
     min_zoom: Annotated[int, AdvancedField(default=0)] = 0,
     max_zoom: Annotated[int, AdvancedField(default=15)] = 15,
@@ -168,11 +346,9 @@ def create_terrain_layer(
     return TerrainLayerDefinition(
         elevation_data=elevation_data,
         texture=texture,
-        elevation_scale=elevation_scale,
-        extruded=extruded,
+        min_zoom= min_zoom,
+        max_zoom = max_zoom,
         wireframe=wireframe,
-        min_zoom=min_zoom,
-        max_zoom=max_zoom,
         elevation_decoder=elevation_decoder or dict(TERRARIUM_ELEVATION_DECODER),
     )
     
@@ -192,20 +368,6 @@ def create_trips_layer(
             default=TripsLayerStyle(), description="Style arguments for the layer."
         ),
     ] = None,
-    trail_frac: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            description="If set, trail_length = span * trail_frac, computed from the data.",
-        ),
-    ] = None,
-    current_frac: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            description="If set, current_time = span * current_frac, computed from the data.",
-        ),
-    ] = None,
     legend: Annotated[
         LegendDefinition | SkipJsonSchema[None],
         AdvancedField(
@@ -222,21 +384,6 @@ def create_trips_layer(
     timestamps column referenced by layer_style.get_timestamps.
     """
     layer_style = layer_style or TripsLayerStyle()
-
-    if (trail_frac is not None or current_frac is not None) and geodataframe is not None:
-        ts_col = layer_style.get_timestamps
-        timestamps = (t for ts in geodataframe[ts_col] for t in ts)
-        try:
-            span = max(timestamps)
-        except ValueError:
-            span = None  # no timestamps -> leave style values untouched
-
-        if span is not None:
-            if trail_frac is not None:
-                layer_style.trail_length = round(span * trail_frac, 2)
-            if current_frac is not None:
-                layer_style.current_time = round(span * current_frac, 2)
-
     return LayerDefinition(
         layer_type="TripsLayer",
         layer_style=layer_style,
@@ -244,7 +391,63 @@ def create_trips_layer(
         geodataframe=geodataframe,
         data_url=data_url,
     )
-    
+
+@task
+def create_scenegraph_layer(
+    glb: Annotated[
+        str | SkipJsonSchema[None],
+        Field(
+            description="GLB source: an http(s) URL, a data: URI, or a local file path. "
+            "None -> bundled default model (elephant)."
+        ),
+    ] = None,
+    size_scale: Annotated[
+        float, AdvancedField(default=50.0, description="ScenegraphLayer sizeScale. Tune to your scene.")
+    ] = 50.0,
+    size_min_pixels: Annotated[float, AdvancedField(default=12.0)] = 12.0,
+    size_max_pixels: Annotated[
+        float | SkipJsonSchema[None], AdvancedField(default=None)
+    ] = None,
+    face_heading: Annotated[bool, AdvancedField(default=True)] = True,
+    yaw_offset: Annotated[float, AdvancedField(default=0.0)] = 0.0,
+    model_pitch: Annotated[float, AdvancedField(default=0.0)] = 0.0,
+    model_roll: Annotated[float, AdvancedField(default=0.0)] = 0.0,
+    smooth_samples: Annotated[int, AdvancedField(default=2)] = 2,
+    terrain_pitch: Annotated[bool, AdvancedField(default=False)] = False,
+    terrain_pitch_scale: Annotated[float, AdvancedField(default=1.0)] = 1.0,
+    min_move_m: Annotated[float, AdvancedField(default=3.0)] = 3.0,
+    pbr_lighting: Annotated[bool, AdvancedField(default=True)] = True,
+    tint: Annotated[
+        list[int] | SkipJsonSchema[None], AdvancedField(default=None)
+    ] = None,
+    use_track_color: Annotated[bool, AdvancedField(default=True)] = True,
+) -> Annotated[ScenegraphLayerDefinition, Field()]:
+    """Create an animated 3D head layer from a glTF/GLB model.
+
+    Pass the result to draw_animated_map(head_layer=...). The model is placed at each
+    subject's current position and (optionally) rotated to face its direction of travel,
+    driven per-frame from the TripsLayer. With glb=None it uses the bundled default
+    (elephant). If ScenegraphLayer / the glTF loader can't be resolved in the browser,
+    the head falls back to the flat ScatterplotLayer dot.
+    """
+    return ScenegraphLayerDefinition(
+        glb=glb,
+        size_scale=size_scale,
+        size_min_pixels=size_min_pixels,
+        size_max_pixels=size_max_pixels,
+        face_heading=face_heading,
+        yaw_offset=yaw_offset,
+        model_pitch=model_pitch,
+        model_roll=model_roll,
+        smooth_samples=smooth_samples,
+        terrain_pitch=terrain_pitch,
+        terrain_pitch_scale=terrain_pitch_scale,
+        min_move_m=min_move_m,
+        pbr_lighting=pbr_lighting,
+        tint=tint,
+        use_track_color=use_track_color,
+    )
+
 def _build_map_deck(
     geo_layers,
     tile_layers,
@@ -381,11 +584,17 @@ def _make_session(pool=16):
     sess.mount("http://", adapter)
     return sess
 
-def _decode_terrarium(content):
+def _decode_elevation(content, decoder=None):
+    d = decoder or TERRARIUM_ELEVATION_DECODER
     img = Image.open(io.BytesIO(content)).convert("RGB")
     arr = np.asarray(img, dtype=np.float64)
-    return arr[:, :, 0] * 256 + arr[:, :, 1] + arr[:, :, 2] / 256 - 32768
-
+    return (
+        arr[:, :, 0] * d["rScaler"]
+        + arr[:, :, 1] * d["gScaler"]
+        + arr[:, :, 2] * d["bScaler"]
+        + d["offset"]
+    )
+    
 def sample_elevations(
     lonlats,
     zoom=12,
@@ -394,6 +603,7 @@ def sample_elevations(
     _cache=None,
     max_workers=16,
     cache_dir=None,
+    decoder = None,
 ):
     """Sample ground elevation (m) for an array of (lon, lat) points, bilinearly.
 
@@ -430,14 +640,14 @@ def sample_elevations(
             fp = os.path.join(cache_dir, f"{zoom}_{txx}_{tyy}.png")
             if os.path.exists(fp):
                 with open(fp, "rb") as fh:
-                    return key, _decode_terrarium(fh.read())
+                    return key, _decode_elevation(fh.read(), decoder) 
         r = sess.get(url.format(z=zoom, x=txx, y=tyy), timeout=30)
         r.raise_for_status()
         if cache_dir is not None:
             os.makedirs(cache_dir, exist_ok=True)
             with open(os.path.join(cache_dir, f"{zoom}_{txx}_{tyy}.png"), "wb") as fh:
                 fh.write(r.content)
-        return key, _decode_terrarium(r.content)
+        return key, _decode_elevation(r.content, decoder)
 
     if to_fetch:
         with cf.ThreadPoolExecutor(max_workers=min(max_workers, len(to_fetch))) as ex:
@@ -472,10 +682,10 @@ def trajectory_to_trips(
     trajectory_gdf: TrajectoryGDF,
     subject_name_col: Annotated[
         str, Field(description="Column holding the subject name.")
-    ] = "subject__name",
+    ] = "subject_name",
     subject_hex_col: Annotated[
         str, Field(description="Column holding the subject hex color.")
-    ] = "subject__hex",
+    ] = "subject_hex",
     terrain: Annotated[
         TerrainSampling | None,
         Field(description="Elevation sampling config. None -> flat ground (z=0)."),
@@ -524,9 +734,13 @@ def trajectory_to_trips(
     if terrain is not None and all_lonlats:
         try:
             elevs = sample_elevations(
-                all_lonlats, zoom=terrain.zoom, cache_dir=terrain.cache_dir
+                all_lonlats,
+                zoom=terrain.zoom,
+                url=terrain.elevation_data,
+                decoder=terrain.elevation_decoder,
+                cache_dir=terrain.cache_dir,
             )
-            zs_all = [e * terrain.vertical_scale + terrain.offset for e in elevs]
+            zs_all = [e + terrain.offset for e in elevs]
         except Exception as exc:  # network/tile failure -> safe constant fallback
             logger.warning(
                 "trajectory_to_trips: terrain sampling failed (%s); "
@@ -624,9 +838,31 @@ def draw_animated_map(
     view_state: Annotated[
         ViewState | SkipJsonSchema[None], AdvancedField(default=ViewState())
     ] = None,
+    entry_pitch: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="Override the camera pitch (deg) on view_state. "
+            "None (default) -> use whatever pitch is on view_state.",
+        ),
+    ] = None,
+    entry_bearing: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="Override the camera bearing (deg) on view_state. "
+            "None (default) -> use whatever bearing is on view_state.",
+        ),
+    ] = None,
     widget_id: Annotated[
         str | SkipJsonSchema[None], Field(default=None, exclude=True)
     ] = None,
+    head_layer: Annotated[
+        ScenegraphLayerDefinition,
+        Field(
+            description="3D glTF/GLB head model settings. Enable with the 'enabled' checkbox.",
+        ),
+    ] = ScenegraphLayerDefinition(),
 ) -> Annotated[str, Field()]:
     """Like draw_map, but animates the TripsLayer with an interactive TimelineWidget.
 
@@ -671,19 +907,93 @@ def draw_animated_map(
     if all_ts:
         max_ts = max(all_ts)
         span = max_ts * 1.02
-        trail_length = max_ts * 1.15
+        # The colored comet is a SHORT tail driven by fade_ratio; the full traversed
+        # path is carried by the (white) history trail beneath it.
+        comet_trail = max(span * fade_ratio, 1.0)
+        history_trail = span * 1.20  # >= span -> solid back to the start
     else:
         # Fallbacks so the JS replacements always have valid numbers.
         max_ts = 0
         span = 1.0
-        trail_length = fade_ratio
+        comet_trail = fade_ratio
+        history_trail = 1.0
 
-    print(f"max_ts : {max_ts} span: {span} trail_length: {trail_length} ")
-    
+    print(
+        f"max_ts : {max_ts} span: {span} comet_trail: {comet_trail} "
+        f"history_trail: {history_trail}"
+    )
+
     # Guard: a starting time past the span means nothing would animate.
     if current_time >= span:
         current_time = 0.0
-    
+
+    # --- Entry camera: view_state is authoritative; entry_pitch/entry_bearing only
+    # override when explicitly passed (default None -> leave view_state untouched). ---
+    if view_state is None:
+        view_state = view_state_from_layers(layers=geo_list, max_zoom=max_zoom)
+    overrides = {}
+    if entry_pitch is not None:
+        overrides["pitch"] = entry_pitch
+    if entry_bearing is not None:
+        overrides["bearing"] = entry_bearing
+    if overrides:
+        try:
+            view_state = view_state.model_copy(update=overrides)
+        except AttributeError:  # not a pydantic model -> set attributes directly
+            for k, v in overrides.items():
+                setattr(view_state, k, v)
+
+    # --- Marker / history params handed to the injected JS ------------------------
+    def _rgb(c):
+        return "[" + ", ".join(str(int(x)) for x in c) + "]"
+
+    show_history       = bool(animation.show_history)
+    history_color_js   = _rgb(animation.history_color)
+    history_opacity    = float(animation.history_opacity)
+    fade_history_js    = "true" if animation.fade_history else "false"
+
+    show_head          = bool(animation.show_head)
+    head_radius        = float(animation.head_radius)
+    head_color_js      = "null" if animation.head_color is None else _rgb(animation.head_color)
+    head_outline_js    = _rgb(animation.head_outline_color)
+    head_outline_width = float(animation.head_outline_width)
+
+    # --- Optional 3D head model (ScenegraphLayer via head_layer) ----------------
+    hm = head_layer
+    if hm is not None and hm.enabled:
+        show_head          = True   # a model implies you want the head drawn
+        head_model_uri_js  = '"' + _resolve_glb_data_uri(hm.glb) + '"'
+        head_model_size    = float(hm.size_scale)
+        head_model_min_px  = float(hm.size_min_pixels)
+        head_model_max_px  = "null" if hm.size_max_pixels is None else str(float(hm.size_max_pixels))
+        head_face_heading  = "true" if hm.face_heading else "false"
+        head_yaw_offset    = float(hm.yaw_offset)
+        head_pitch         = float(hm.model_pitch)
+        head_roll          = float(hm.model_roll)
+        head_smooth_samples      = int(hm.smooth_samples)
+        head_terrain_pitch       = "true" if hm.terrain_pitch else "false"
+        head_terrain_pitch_scale = float(hm.terrain_pitch_scale)
+        head_min_move_m          = float(hm.min_move_m)
+        head_lighting_js   = '"pbr"' if hm.pbr_lighting else '"flat"'
+        head_tint_js       = "null" if hm.tint is None else _rgb(hm.tint)
+        head_use_track_color = "true" if hm.use_track_color else "false"
+    else:
+        head_model_uri_js  = "null"
+        head_model_size    = 50.0
+        head_model_min_px  = 12.0
+        head_model_max_px  = "null"
+        head_face_heading  = "true"
+        head_yaw_offset    = 0.0
+        head_pitch         = 0.0
+        head_roll          = 0.0
+        head_smooth_samples      = 2
+        head_terrain_pitch       = "false"
+        head_terrain_pitch_scale = 1.0
+        head_min_move_m          = 3.0
+        head_lighting_js   = '"pbr"'
+        head_tint_js       = "null"
+        head_use_track_color = "true"
+
     deck = _build_map_deck(
         geo_list,
         tile_layers,
@@ -704,46 +1014,244 @@ def draw_animated_map(
 
     animation_js = """
 <script>
-// === Full Trail Visible - No disappearing start at the end ===
-let currentTime   = __CURRENT_TIME__;
-const maxTime     = __SPAN__;
-const trailLength = __TRAIL_LENGTH__;
+// === Comet over a (white) historic trail, plus a current-position head marker ===
+let currentTime    = __CURRENT_TIME__;
+const maxTime      = __SPAN__;
+const cometTrail   = __COMET_TRAIL__;
+const historyTrail = __HISTORY_TRAIL__;
 let animationSpeed = __ANIMATION_SPEED__;
-let isPlaying     = true;
-let lastFrameTime = 0;
-const fpsInterval = 1000 / __FPS_LIMIT__;
+let isPlaying      = true;
+let lastFrameTime  = 0;
+let prevTime       = 0;
+const fpsInterval  = 1000 / __FPS_LIMIT__;
+
+// Historic-track config
+const showHistory   = __SHOW_HISTORY__;
+const historyColor  = __HISTORY_COLOR__;
+const historyOpacity= __HISTORY_OPACITY__;
+const fadeHistory   = __FADE_HISTORY__;
+
+// Head-marker config
+const showHead          = __SHOW_HEAD__;
+const headRadius        = __HEAD_RADIUS__;
+const headColorOverride = __HEAD_COLOR__;  // null -> per-subject colour
+const headOutlineColor  = __HEAD_OUTLINE__;
+const headOutlineWidth  = __HEAD_OUTLINE_WIDTH__;
+
+// 3D head-model config (null modelUri -> keep the flat scatter dot)
+const headModelUri      = __HEAD_MODEL_URI__;
+const headModelSize     = __HEAD_MODEL_SIZE__;
+const headModelMinPx    = __HEAD_MODEL_MIN_PX__;
+const headModelMaxPx    = __HEAD_MODEL_MAX_PX__;
+const headFaceHeading   = __HEAD_FACE_HEADING__;
+const headYawOffset     = __HEAD_YAW_OFFSET__;
+const headPitch         = __HEAD_PITCH__;
+const headRoll          = __HEAD_ROLL__;
+const headSmoothSamples = __HEAD_SMOOTH_SAMPLES__;
+const headTerrainPitch  = __HEAD_TERRAIN_PITCH__;
+const headTerrainScale  = __HEAD_TERRAIN_SCALE__;
+const headMinMoveM      = __HEAD_MIN_MOVE_M__;   // below this window movement -> hold heading, level out
+const headLighting      = __HEAD_LIGHTING__;
+const headTint          = __HEAD_TINT__;
+const headUseTrackColor = __HEAD_USE_TRACK_COLOR__;
+const headModelEnabled  = (headModelUri != null);
 
 let baseLayers = null;
 let tripsBase  = null;
 let tripsId    = null;
+let ScatterCtor = null;     // resolved lazily
+let ScenegraphCtor = null;  // resolved lazily (only when a 3D head model is configured)
+let headCursors = null;     // per-feature search cursor (monotonic-time fast path)
+let headLastHeading = null; // per-feature last good heading (held when stationary)
+
+// Resolve a deck.gl layer constructor without hard-coding the global namespace.
+function resolveLayer(name) {
+  const cands = [window.deck, window.deckgl, window.DeckGL, window];
+  for (const ns of cands) {
+    if (ns && typeof ns[name] === 'function') return ns[name];
+  }
+  for (const k in window) {                       // last resort: scan
+    try {
+      const v = window[k];
+      if (v && typeof v[name] === 'function') return v[name];
+    } catch (e) { /* ignore cross-origin / getter throws */ }
+  }
+  return null;
+}
+
+// Append a <script> and resolve once it loads (used to pull mesh-layers + gltf loader).
+function loadScript(src) {
+  return new Promise(function (resolve, reject) {
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// Best-effort: make ScenegraphLayer + the glTF loader available, matching the running
+// deck.gl version. Returns true if the constructor is resolvable afterwards.
+async function ensureScenegraph() {
+  if (resolveLayer('ScenegraphLayer')) return true;
+  try {
+    const ver = (window.deck && window.deck.VERSION) ? window.deck.VERSION : 'latest';
+    await loadScript('https://unpkg.com/@deck.gl/mesh-layers@' + ver + '/dist.min.js');
+    await loadScript('https://unpkg.com/@loaders.gl/gltf@^4.0.0/dist/dist.min.js');
+    const reg = (window.deck && window.deck.registerLoaders) ||
+                (window.loaders && window.loaders.registerLoaders);
+    const GLTFLoader = window.loaders && window.loaders.GLTFLoader;
+    if (reg && GLTFLoader) { try { reg([GLTFLoader]); } catch (e) {} }
+    return !!resolveLayer('ScenegraphLayer');
+  } catch (e) {
+    console.warn('[draw_animated_map] could not load ScenegraphLayer/glTF loader; ' +
+                 'falling back to the 2D head dot.', e);
+    return false;
+  }
+}
+
+// Windowed tangent around the cursor: returns a SMOOTHED heading (deg, 0 = north)
+// and the terrain slope as a pitch (deg, + = uphill in the direction of travel),
+// taken from the elevation (z) already baked into each [lon,lat,z] coordinate.
+// k = +/- fixes to span; larger k => smoother, laggier. k = 0 => single segment.
+function headTangent(C, j, last, k) {
+  const ia = Math.max(0, j - k);
+  const ib = Math.min(last, j + 1 + k);
+  const a = C[ia], b = C[ib];
+  if (!a || !b) return { heading: 0, pitch: 0, horiz: 0 };
+  const midLat = (a[1] + b[1]) * 0.5 * Math.PI / 180;
+  const dEastDeg  = (b[0] - a[0]) * Math.cos(midLat);
+  const dNorthDeg = (b[1] - a[1]);
+  const heading = (dEastDeg === 0 && dNorthDeg === 0)
+    ? 0 : Math.atan2(dEastDeg, dNorthDeg) * 180 / Math.PI;
+  const M_PER_DEG = 111320;
+  const horiz = Math.hypot(dEastDeg, dNorthDeg) * M_PER_DEG;   // metres on the ground
+  const dz = (b[2] || 0) - (a[2] || 0);                        // metres of climb/descent
+  let pitch = (horiz > 0) ? Math.atan2(dz, horiz) * 180 / Math.PI : 0;
+  const CAP = 20;                                              // never tip past +/-20deg
+  if (pitch >  CAP) pitch =  CAP;
+  if (pitch < -CAP) pitch = -CAP;
+  return { heading: heading, pitch: pitch, horiz: horiz };
+}
+
+// Interpolate one feature's [lon,lat,z] at time t, using a monotonic cursor.
+// When the subject is essentially stationary (tiny movement over the window) we
+// HOLD the last good heading and zero the pitch, so the model doesn't spin or
+// tip over while milling in place (e.g. crop-raiding).
+function headAt(feature, i, t) {
+  const C = feature.geometry && feature.geometry.coordinates;
+  const T = feature.timestamps;
+  if (!C || !T || C.length === 0) return null;
+  const last = T.length - 1;
+  const k = headSmoothSamples;
+  function orient(g) {
+    if (g.horiz >= headMinMoveM) { headLastHeading[i] = g.heading; return { heading: g.heading, pitch: g.pitch }; }
+    return { heading: headLastHeading[i] || 0, pitch: 0 };   // stationary: hold + level
+  }
+  if (t <= T[0])    { const o = orient(headTangent(C, 0, last, k));        return { pos: C[0],    heading: o.heading, pitch: o.pitch }; }
+  if (t >= T[last]) { const o = orient(headTangent(C, last - 1, last, k)); return { pos: C[last], heading: o.heading, pitch: o.pitch }; }
+  let j = headCursors[i] || 0;
+  if (t < T[j]) j = 0;                 // scrubbed backwards
+  while (j < last && T[j + 1] < t) j++;
+  headCursors[i] = j;
+  const t0 = T[j], t1 = T[j + 1];
+  const f = (t1 > t0) ? (t - t0) / (t1 - t0) : 0;
+  const a = C[j], b = C[j + 1];
+  const az = a[2] || 0, bz = b[2] || 0;
+  const pos = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, az + (bz - az) * f];
+  const o = orient(headTangent(C, j, last, k));
+  return { pos: pos, heading: o.heading, pitch: o.pitch };
+}
+
+function headData(t) {
+  const feats = tripsBase.props.data || [];
+  const out = [];
+  for (let i = 0; i < feats.length; i++) {
+    const r = headAt(feats[i], i, t);
+    if (!r) continue;
+    const col = headColorOverride || (feats[i].color ? feats[i].color.slice(0, 3) : [255, 0, 0]);
+    out.push({ position: r.pos, color: col, heading: r.heading, pitch: r.pitch });
+  }
+  return out;
+}
 
 function buildLayers() {
-  let effectiveTrailLength = trailLength;
-    
-  let effectiveOpacity = 0.95;
-
-  // When we reach the end, use full trail length so nothing disappears
-  if (currentTime >= maxTime * 0.995) {
-    effectiveTrailLength = maxTime * 1.20;   // slightly longer than total
-    effectiveOpacity = 0.98;
-  }
-
-  const trail = tripsBase.clone({
-    id: tripsId + '-drawing',
+  const comet = tripsBase.clone({
+    id: tripsId + '-comet',
     currentTime: currentTime,
-    trailLength: effectiveTrailLength,
+    trailLength: cometTrail,
     fadeTrail: true,
-    opacity: effectiveOpacity,
+    opacity: 0.98,
   });
+
+  let history = null;
+  if (showHistory) {
+    // Inherit the comet's width from the TripsLayer (do NOT override getWidth).
+    history = tripsBase.clone({
+      id: tripsId + '-history',
+      currentTime: currentTime,
+      trailLength: historyTrail,     // >= span -> solid back to the start
+      fadeTrail: fadeHistory,
+      opacity: historyOpacity,
+      getColor: historyColor,        // constant -> the whole track is this colour
+      updateTriggers: { getColor: 'history' },
+    });
+  }
 
   const out = [];
   baseLayers.forEach(function (l) {
     if (l.id === tripsId) {
-      out.push(trail);
+      if (history) out.push(history);  // bottom
+      out.push(comet);                 // middle
     } else {
       out.push(l);
     }
   });
+
+  if (showHead) {                      // head marker on top of everything
+    if (headModelEnabled && ScenegraphCtor) {
+      out.push(new ScenegraphCtor({
+        id: tripsId + '-head',
+        data: headData(currentTime),
+        scenegraph: headModelUri,
+        getPosition: function (d) { return d.position; },
+        getOrientation: function (d) {
+          const yaw = (headFaceHeading ? -d.heading : 0) + headYawOffset;
+          const pitch = headPitch + (headTerrainPitch ? headTerrainScale * d.pitch : 0);
+          return [pitch, yaw, headRoll];   // [pitch, yaw, roll] degrees
+        },
+        getColor: function (d) {
+          return (headUseTrackColor && d.color) ? d.color : (headTint || [255, 255, 255]);
+        },
+        sizeScale: headModelSize,
+        sizeMinPixels: headModelMinPx,
+        sizeMaxPixels: (headModelMaxPx == null) ? Number.MAX_SAFE_INTEGER : headModelMaxPx,
+        _lighting: headLighting,
+        pickable: false,
+        parameters: { depthTest: true },
+        updateTriggers: {
+          getPosition: currentTime,
+          getOrientation: currentTime,
+          getColor: 'head',
+        },
+      }));
+    } else if (ScatterCtor) {          // 2D fallback dot
+      out.push(new ScatterCtor({
+        id: tripsId + '-head',
+        data: headData(currentTime),
+        getPosition: function (d) { return d.position; },
+        getFillColor: function (d) { return d.color; },
+        getRadius: headRadius,
+        radiusUnits: 'pixels',
+        stroked: headOutlineWidth > 0,
+        getLineColor: headOutlineColor,
+        getLineWidth: headOutlineWidth,
+        lineWidthUnits: 'pixels',
+        billboard: true,
+        pickable: false,
+        parameters: { depthTest: false },  // always visible over the terrain
+        updateTriggers: { getPosition: currentTime, getFillColor: 'head' },
+      }));
+    }
+  }
   return out;
 }
 
@@ -757,6 +1265,7 @@ function frame(timestamp) {
   }
   lastFrameTime = timestamp;
 
+  prevTime = currentTime;
   if (currentTime < maxTime) {
     currentTime = Math.min(maxTime, currentTime + animationSpeed);
   } else {
@@ -768,26 +1277,113 @@ function frame(timestamp) {
 }
 
 // Start
+let __headReady = !headModelEnabled;   // if no model, head is "ready" immediately
 const __startWhenReady = setInterval(function () {
   if (window.deckInstance && window.deckInstance.props && window.deckInstance.props.layers) {
     clearInterval(__startWhenReady);
 
-    baseLayers = window.deckInstance.props.layers;
-    tripsBase  = baseLayers.find(l => 'currentTime' in l.props);
-    tripsId    = tripsBase.id;
+    baseLayers  = window.deckInstance.props.layers;
+    tripsBase   = baseLayers.find(l => 'currentTime' in l.props);
+    tripsId     = tripsBase.id;
+    headCursors = new Array((tripsBase.props.data || []).length).fill(0);
+    headLastHeading = new Array((tripsBase.props.data || []).length).fill(0);
+
+    if (showHead) {
+      ScatterCtor = resolveLayer('ScatterplotLayer');
+      if (!ScatterCtor) {
+        console.warn('[draw_animated_map] ScatterplotLayer constructor not found; ' +
+                     '2D head marker disabled. Trail animation is unaffected.');
+      }
+      if (headModelEnabled) {
+        // Load mesh-layers + glTF loader, then enable the 3D head on the next frame.
+        ensureScenegraph().then(function (ok) {
+          if (ok) ScenegraphCtor = resolveLayer('ScenegraphLayer');
+          __headReady = true;
+          if (window.deckInstance) window.deckInstance.setProps({ layers: buildLayers() });
+        });
+      }
+    }
 
     requestAnimationFrame(frame);
   }
 }, 200);
+
+// --- Deterministic render bridge (used by the server-side MP4 exporter) ---------
+// Lets a headless driver pause autoplay and paint an exact frame at time t.
+window.__tripsAnim = {
+  get ready()    { return !!(window.deckInstance && tripsBase); },
+  get headReady() { return __headReady; },
+  get span()     { return maxTime; },
+  get speed()    { return animationSpeed; },
+  // Natural playback length (s): maxTime / per-tick advance, at ~60 rAF ticks/s.
+  get durationSec() { return animationSpeed > 0 ? (maxTime / animationSpeed) / 60 : 0; },
+  pause() { isPlaying = false; },
+  play()  { if (!isPlaying) { isPlaying = true; requestAnimationFrame(frame); } },
+  renderAt(t) {
+    isPlaying = false;
+    currentTime = Math.max(0, Math.min(maxTime, t));
+    if (window.deckInstance) window.deckInstance.setProps({ layers: buildLayers() });
+  }
+};
 </script>
 """
     animation_js = (
         animation_js
         .replace("__CURRENT_TIME__", str(current_time))
         .replace("__SPAN__", str(span))
-        .replace("__TRAIL_LENGTH__", str(trail_length))
+        .replace("__COMET_TRAIL__", str(comet_trail))
+        .replace("__HISTORY_TRAIL__", str(history_trail))
         .replace("__ANIMATION_SPEED__", str(animation_speed))
         .replace("__FPS_LIMIT__", str(fps_limit))
+        .replace("__SHOW_HISTORY__", "true" if show_history else "false")
+        .replace("__HISTORY_COLOR__", history_color_js)
+        .replace("__HISTORY_OPACITY__", str(history_opacity))
+        .replace("__FADE_HISTORY__", fade_history_js)
+        .replace("__SHOW_HEAD__", "true" if show_head else "false")
+        .replace("__HEAD_RADIUS__", str(head_radius))
+        .replace("__HEAD_COLOR__", head_color_js)
+        .replace("__HEAD_OUTLINE__", head_outline_js)
+        .replace("__HEAD_OUTLINE_WIDTH__", str(head_outline_width))
+        .replace("__HEAD_MODEL_URI__", head_model_uri_js)
+        .replace("__HEAD_MODEL_SIZE__", str(head_model_size))
+        .replace("__HEAD_MODEL_MIN_PX__", str(head_model_min_px))
+        .replace("__HEAD_MODEL_MAX_PX__", head_model_max_px)
+        .replace("__HEAD_FACE_HEADING__", head_face_heading)
+        .replace("__HEAD_YAW_OFFSET__", str(head_yaw_offset))
+        .replace("__HEAD_PITCH__", str(head_pitch))
+        .replace("__HEAD_ROLL__", str(head_roll))
+        .replace("__HEAD_SMOOTH_SAMPLES__", str(head_smooth_samples))
+        .replace("__HEAD_TERRAIN_PITCH__", head_terrain_pitch)
+        .replace("__HEAD_TERRAIN_SCALE__", str(head_terrain_pitch_scale))
+        .replace("__HEAD_MIN_MOVE_M__", str(head_min_move_m))
+        .replace("__HEAD_LIGHTING__", head_lighting_js)
+        .replace("__HEAD_TINT__", head_tint_js)
+        .replace("__HEAD_USE_TRACK_COLOR__", head_use_track_color)
     )
     html_str = html_str.replace("</body>", animation_js + "</body>")
     return html_str
+
+@task
+def create_elevation_decoder(
+    exaggeration: Annotated[
+        float,
+        Field(gt=0, description="Vertical exaggeration factor. 1.0 = true scale, 2.0 = 2x heights."),
+    ] = 1.0,
+    r_scaler: Annotated[float, AdvancedField(default=256.0)] = 256.0,
+    g_scaler: Annotated[float, AdvancedField(default=1.0)] = 1.0,
+    b_scaler: Annotated[float, AdvancedField(default=1 / 256)] = 1 / 256,
+    offset: Annotated[float, AdvancedField(default=-32768.0)] = -32768.0,
+) -> Annotated[dict, Field()]:
+    """Build an RGB->elevation decoder with vertical exaggeration baked in.
+
+    deck.gl's TerrainLayer has no elevation-scale prop, so exaggeration is applied by
+    scaling every decoder term by `exaggeration`. Feed the result into BOTH
+    create_terrain_layer and create_terrain_sampling so the mesh and the trips agree.
+    Defaults are Terrarium.
+    """
+    return {
+        "rScaler": r_scaler * exaggeration,
+        "gScaler": g_scaler * exaggeration,
+        "bScaler": b_scaler * exaggeration,
+        "offset": offset * exaggeration,
+    }

@@ -75,6 +75,7 @@ docxtpl="*"
 playwright="*"
 setuptools="81.0.0.*"
 docxcompose="*"
+imageio-ffmpeg="*"
 
 # additional dependencies added by this extension
 

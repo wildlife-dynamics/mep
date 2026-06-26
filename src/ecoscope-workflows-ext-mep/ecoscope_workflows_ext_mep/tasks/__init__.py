@@ -39,8 +39,11 @@ from ._animate import (
     create_trips_layer,
     normalize_timestamps,
     draw_animated_map,
-    trajectory_to_trips
+    trajectory_to_trips,
+    create_scenegraph_layer,
+    create_elevation_decoder
 )
+from ._render_animation import render_animation
 __all__ = [
     "create_monthly_ctx_cover",
     "create_mep_monthly_context",
@@ -87,5 +90,8 @@ __all__ = [
     "create_trips_layer",
     "normalize_timestamps",
     "draw_animated_map",
-    "trajectory_to_trips"
+    "trajectory_to_trips",
+    "create_scenegraph_layer",
+    "create_elevation_decoder",
+    "render_animation"
 ]
