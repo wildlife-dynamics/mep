@@ -28,6 +28,17 @@ class SubjectGroup(BaseModel):
     subject_group_var: Optional[SubjectGroupVar] = Field(None, title="")
 
 
+class TerrainExaggeration(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    exaggeration: Optional[PositiveFloat] = Field(
+        1.0,
+        description="Vertical exaggeration factor. 1.0 = true scale, 2.0 = 2x heights.",
+        title="Exaggeration",
+    )
+
+
 class EarthRangerConnection(BaseModel):
     name: str = Field(..., title="Data Source")
 
@@ -60,19 +71,16 @@ class TrajectorySegmentFilter(BaseModel):
     )
 
 
-class TimelineAnimation(BaseModel):
-    fade_ratio: Optional[confloat(le=1.0, gt=0.0)] = Field(
-        0.05,
-        description="Comet-tail length as a fraction of the total time span (0–1].",
-        title="Fade Ratio",
+class DurationConfig(BaseModel):
+    auto: Optional[bool] = Field(
+        True,
+        description="Match the animation's own playback length. Uncheck to set a fixed duration.",
+        title="Auto",
     )
-    animation_speed: Optional[PositiveFloat] = Field(
-        10000.0,
-        description="Amount currentTime advances per tick (per-frame increment).",
-        title="Animation Speed",
-    )
-    fps_limit: Optional[PositiveFloat] = Field(
-        20.0, description="Maximum animation frames per second.", title="Fps Limit"
+    seconds: Optional[float] = Field(
+        75.0,
+        description="Video duration in seconds. Used when auto is off, or as a fallback when auto cannot determine the length.",
+        title="Seconds",
     )
 
 
@@ -117,16 +125,15 @@ class ConvertToTrajs(BaseModel):
     )
 
 
-class DrawAnimation(BaseModel):
+class CreateAnimation(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    animation: Optional[TimelineAnimation] = Field(
-        default_factory=lambda: TimelineAnimation.model_validate(
-            {"fade_ratio": 0.955, "animation_speed": 10000.0, "fps_limit": 30}
+    duration: Optional[DurationConfig] = Field(
+        default_factory=lambda: DurationConfig.model_validate(
+            {"auto": True, "seconds": 75.0}
         ),
-        description="Timeline settings.",
-        title="Animation",
+        title="Duration",
     )
 
 
@@ -155,4 +162,7 @@ class FormData(BaseModel):
     convert_to_trajs: Optional[ConvertToTrajs] = Field(
         None, title="Convert relocations to trajectories"
     )
-    draw_animation: Optional[DrawAnimation] = Field(None, title="Draw animated map")
+    terrain_exaggeration: Optional[TerrainExaggeration] = Field(
+        None, title="Terrain exaggeration factor"
+    )
+    create_animation: Optional[CreateAnimation] = Field(None, title="Create animation")

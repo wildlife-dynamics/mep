@@ -115,28 +115,40 @@
       "type": "object",
       "title": "Convert relocations to trajectories"
     },
-    "draw_animation": {
+    "terrain_exaggeration": {
       "additionalProperties": false,
       "properties": {
-        "animation": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/TimelineAnimation"
-            }
-          ],
-          "default": {
-            "fade_ratio": 0.05,
-            "animation_speed": 10000.0,
-            "fps_limit": 20.0
-          },
-          "title": "Animation",
-          "description": "Timeline settings.",
-          "ecoscope:advanced": true
+        "exaggeration": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Exaggeration",
+          "type": "number",
+          "description": "Vertical exaggeration factor. 1.0 = true scale, 2.0 = 2x heights."
         }
       },
       "type": "object",
       "required": [],
-      "title": "Draw animated map"
+      "title": "Terrain exaggeration factor"
+    },
+    "create_animation": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/DurationConfig"
+            }
+          ],
+          "default": {
+            "auto": true,
+            "seconds": 75.0
+          },
+          "title": "Duration"
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Create animation"
     }
   },
   "$defs": {
@@ -229,33 +241,22 @@
       "title": "TrajectorySegmentFilter",
       "type": "object"
     },
-    "TimelineAnimation": {
-      "description": "Settings for an animated TripsLayer timeline.\n\nEither construct directly, or derive from data with\ntimeline_animation_from_gdf(). All time fields are in the same\nunits as the layer's timestamps (typically seconds).",
+    "DurationConfig": {
       "properties": {
-        "fade_ratio": {
-          "default": 0.05,
-          "description": "Comet-tail length as a fraction of the total time span (0\u20131].",
-          "exclusiveMinimum": 0.0,
-          "maximum": 1.0,
-          "title": "Fade Ratio",
-          "type": "number"
+        "auto": {
+          "default": true,
+          "description": "Match the animation's own playback length. Uncheck to set a fixed duration.",
+          "title": "Auto",
+          "type": "boolean"
         },
-        "animation_speed": {
-          "default": 10000.0,
-          "description": "Amount currentTime advances per tick (per-frame increment).",
-          "exclusiveMinimum": 0.0,
-          "title": "Animation Speed",
-          "type": "number"
-        },
-        "fps_limit": {
-          "default": 20.0,
-          "description": "Maximum animation frames per second.",
-          "exclusiveMinimum": 0.0,
-          "title": "Fps Limit",
+        "seconds": {
+          "default": 75.0,
+          "description": "Video duration in seconds. Used when auto is off, or as a fallback when auto cannot determine the length.",
+          "title": "Seconds",
           "type": "number"
         }
       },
-      "title": "TimelineAnimation",
+      "title": "DurationConfig",
       "type": "object"
     }
   },
@@ -280,7 +281,8 @@
       "time_range",
       "subject_group_var",
       "convert_to_trajs",
-      "draw_animation"
+      "terrain_exaggeration",
+      "create_animation"
     ]
   },
   "additionalProperties": false

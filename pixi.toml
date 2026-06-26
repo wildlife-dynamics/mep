@@ -19,6 +19,7 @@ hatch = "*"
 pip="*"
 hatch-vcs = "*"
 virtualenv = "20.39.0.*"
+imageio-ffmpeg="*"
 
 [feature.compile.dependencies]
 ecoscope-workflows-ext-mep = "*"
