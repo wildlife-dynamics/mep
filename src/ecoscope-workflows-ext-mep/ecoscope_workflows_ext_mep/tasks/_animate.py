@@ -88,7 +88,7 @@ class ScenegraphLayerDefinition(BaseModel):
     size_max_pixels: Annotated[
         float | SkipJsonSchema[None],
         AdvancedField(default=None, description="Optional upper clamp on the model's on-screen size in pixels."),
-    ] = None
+    ] = 75.0
     face_heading: Annotated[
         bool,
         AdvancedField(default=True, description="Rotate the model to face its direction of travel."),
@@ -155,9 +155,9 @@ class ScenegraphLayerDefinition(BaseModel):
         AdvancedField(default=True, description="Physically-based lighting ('pbr'); False -> flat shading."),
     ] = True
     tint: Annotated[
-        tuple[int, int, int] | SkipJsonSchema[None],
-        AdvancedField(default=None, description="Optional RGB tint over the model. None -> the model's own materials."),
-    ] = None
+        list[int] | SkipJsonSchema[None],
+        AdvancedField(default=None, description="Optional RGB tint over the model as [R, G, B]. None -> the model's own materials."),
+    ] = [220,220,255]
     use_track_color: Annotated[
         bool,
         AdvancedField(
@@ -418,7 +418,7 @@ def create_scenegraph_layer(
     min_move_m: Annotated[float, AdvancedField(default=3.0)] = 3.0,
     pbr_lighting: Annotated[bool, AdvancedField(default=True)] = True,
     tint: Annotated[
-        tuple[int, int, int] | SkipJsonSchema[None], AdvancedField(default=None)
+        list[int] | SkipJsonSchema[None], AdvancedField(default=None)
     ] = None,
     use_track_color: Annotated[bool, AdvancedField(default=True)] = True,
 ) -> Annotated[ScenegraphLayerDefinition, Field()]:

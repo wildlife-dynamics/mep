@@ -255,9 +255,9 @@ workflow:
         head_radius: 1.75
         head_color: null 
         head_outline_width: 1.05 
-      head_layer:
-        enabled: false
-        glb: "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb"
+      # head_layer:
+      #   enabled: false
+      #   glb: "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb"
       
   - name: Persist map
     id: map_urls

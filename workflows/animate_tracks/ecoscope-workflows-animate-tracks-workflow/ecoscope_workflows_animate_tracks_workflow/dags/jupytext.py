@@ -664,6 +664,7 @@ trips_layer = (
 
 draw_animation_params = dict(
     widget_id=...,
+    head_layer=...,
 )
 
 # %%
@@ -702,10 +703,6 @@ draw_animation = (
             "head_radius": 1.75,
             "head_color": None,
             "head_outline_width": 1.05,
-        },
-        head_layer={
-            "enabled": False,
-            "glb": "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb",
         },
         **draw_animation_params,
     )

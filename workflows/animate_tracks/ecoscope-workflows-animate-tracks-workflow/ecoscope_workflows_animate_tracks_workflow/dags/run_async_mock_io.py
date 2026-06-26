@@ -541,10 +541,6 @@ def main(params: Params):
                     "head_color": None,
                     "head_outline_width": 1.05,
                 },
-                "head_layer": {
-                    "enabled": False,
-                    "glb": "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb",
-                },
             }
             | (params_dict.get("draw_animation") or {}),
             method="call",
