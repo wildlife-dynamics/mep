@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import logging
 import os
 import subprocess
 import sys
@@ -11,6 +12,26 @@ import imageio_ffmpeg
 from ecoscope_workflows_core.decorators import task
 from playwright.async_api import async_playwright
 from pydantic import BaseModel, Field
+
+_browsers_ensured = False
+
+
+def _ensure_playwright_browsers(force: bool = False) -> None:
+    """Install Playwright Chromium binaries if not already present (once per process)."""
+    global _browsers_ensured
+    if _browsers_ensured and not force:
+        return
+    logger = logging.getLogger(__name__)
+    logger.info("Ensuring Playwright Chromium browser is installed...")
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        logger.warning("playwright install returned non-zero: %s", result.stderr)
+    else:
+        _browsers_ensured = True
 
 
 class DurationConfig(BaseModel):
@@ -349,9 +370,17 @@ async def render_animation_async(
             log(f"[render] {done['n']}/{n_frames} frames  "
                 f"({el:.1f}s, {done['n']/max(el,1e-6):.1f} fps)")
 
+    _ensure_playwright_browsers()
     with tempfile.TemporaryDirectory(prefix="anim_frames_") as frame_dir:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=_launch_args(gl))
+            try:
+                browser = await p.chromium.launch(headless=True, args=_launch_args(gl))
+            except Exception as e:
+                if "Executable doesn't exist" in str(e):
+                    _ensure_playwright_browsers(force=True)
+                    browser = await p.chromium.launch(headless=True, args=_launch_args(gl))
+                else:
+                    raise
 
             # One page to read span/base view and compute the whole camera path.
             page0, pending0 = await _prepare_page(
