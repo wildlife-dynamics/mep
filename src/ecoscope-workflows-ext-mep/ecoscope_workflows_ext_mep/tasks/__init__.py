@@ -41,9 +41,12 @@ from ._animate import (
     draw_animated_map,
     trajectory_to_trips,
     create_scenegraph_layer,
-    create_elevation_decoder
+    create_elevation_decoder,
+    create_timeline_animation,
+    compute_view_state_from_gdf,
 )
-from ._render_animation import render_animation
+from ._render_animation import configure_video_export, render_animation
+
 __all__ = [
     "create_monthly_ctx_cover",
     "create_mep_monthly_context",
@@ -93,5 +96,8 @@ __all__ = [
     "trajectory_to_trips",
     "create_scenegraph_layer",
     "create_elevation_decoder",
-    "render_animation"
+    "create_timeline_animation",
+    "configure_video_export",
+    "render_animation",
+    "compute_view_state_from_gdf",
 ]

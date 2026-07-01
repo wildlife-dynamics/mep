@@ -1,5 +1,6 @@
 import os
 import io
+import math
 import base64
 import pathlib
 import logging
@@ -10,31 +11,31 @@ from PIL import Image
 import geopandas as gpd
 from pyproj import Transformer
 import concurrent.futures as cf
-from pydantic import BaseModel,Field
-from shapely.geometry import LineString 
-from typing import Annotated,Literal,cast
+from pydantic import BaseModel, Field
+from shapely.geometry import LineString
+from typing import Annotated, Literal, cast
 from pydantic.json_schema import SkipJsonSchema
 from ecoscope_workflows_core.decorators import task
 from ecoscope.base.utils import hex_to_rgba  # type: ignore[import-untyped]
 from ecoscope_workflows_ext_ecoscope.schemas import TrajectoryGDF
 from ecoscope_workflows_core.annotations import AdvancedField, AnyGeoDataFrame
 from ecoscope_workflows_ext_custom.tasks.results._map import (
-PydeckAnnotation,
-PydeckString,
-LayerStyleBase,
-ColorAccessor,
-FloatAccessor,
-UnitType,
-LegendDefinition,
-LayerDefinition,
-LegendStyle,
-ViewState, 
-LegendFromDataframe,
-PYDECK_CUSTOM_LIBRARIES,
-_model_dump_with_pydeck_literals,
-LegendSegment,
-BitmapLayerDefinition,
-view_state_from_layers
+    PydeckAnnotation,
+    PydeckString,
+    LayerStyleBase,
+    ColorAccessor,
+    FloatAccessor,
+    UnitType,
+    LegendDefinition,
+    LayerDefinition,
+    LegendStyle,
+    ViewState,
+    LegendFromDataframe,
+    PYDECK_CUSTOM_LIBRARIES,
+    _model_dump_with_pydeck_literals,
+    LegendSegment,
+    BitmapLayerDefinition,
+    view_state_from_layers,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,9 +46,7 @@ TERRARIUM_ELEVATION_DECODER = {"rScaler": 256, "gScaler": 1, "bScaler": 1 / 256,
 DEFAULT_TERRAIN_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
 SURFACE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 
-TerrainStrategy = Annotated[
-    Literal["best-available", "no-overlap", "never"], PydeckAnnotation
-]
+TerrainStrategy = Annotated[Literal["best-available", "no-overlap", "never"], PydeckAnnotation]
 
 
 class ScenegraphLayerDefinition(BaseModel):
@@ -65,13 +64,14 @@ class ScenegraphLayerDefinition(BaseModel):
 
     enabled: Annotated[
         bool,
-        Field(default=False, description="Enable the 3D head model. When off, subjects render as flat dots."),
+        AdvancedField(default=False, description="Enable the 3D head model. When off, subjects render as flat dots."),
     ] = False
     glb: Annotated[
         str | SkipJsonSchema[None],
-        Field(
+        AdvancedField(
+            default="https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb",
             description="GLB source: an http(s) URL, a data: URI, or a local file path. "
-            "None -> bundled default model (elephant)."
+            "None -> bundled default model (elephant).",
         ),
     ] = "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb"
     size_scale: Annotated[
@@ -104,11 +104,11 @@ class ScenegraphLayerDefinition(BaseModel):
     model_pitch: Annotated[
         float,
         AdvancedField(
-            default=0.0,
+            default=90.0,
             description="Tilt of the MODEL itself (deg), independent of the camera. "
             "Use to correct a model authored nose-up/down; NOT the view pitch.",
         ),
-    ] = 0.0
+    ] = 90.0
     model_roll: Annotated[
         float,
         AdvancedField(
@@ -156,8 +156,11 @@ class ScenegraphLayerDefinition(BaseModel):
     ] = True
     tint: Annotated[
         list[int] | SkipJsonSchema[None],
-        AdvancedField(default=None, description="Optional RGB tint over the model as [R, G, B]. None -> the model's own materials."),
-    ] = [220,220,255]
+        AdvancedField(
+            default=None,
+            description="Optional RGB tint over the model as [R, G, B]. None -> the model's own materials.",
+        ),
+    ] = [220, 220, 255]
     use_track_color: Annotated[
         bool,
         AdvancedField(
@@ -189,6 +192,7 @@ class TimelineAnimation(BaseModel):
     timeline_animation_from_gdf(). All time fields are in the same
     units as the layer's timestamps (typically seconds).
     """
+
     fade_ratio: float = Field(
         default=0.55,
         gt=0,
@@ -215,9 +219,7 @@ class TimelineAnimation(BaseModel):
         default=(255, 255, 255),
         description="RGB colour the historic track settles to. Default white.",
     )
-    history_opacity: float = Field(
-        default=0.85, ge=0, le=1, description="Opacity of the historic track."
-    )
+    history_opacity: float = Field(default=0.85, ge=0, le=1, description="Opacity of the historic track.")
     fade_history: bool = Field(
         default=False,
         description="If True the historic track also fades by opacity along its length; "
@@ -229,9 +231,7 @@ class TimelineAnimation(BaseModel):
         default=True,
         description="Draw a marker at each subject's current position (no historic track on this layer).",
     )
-    head_radius: float = Field(
-        default=6.0, gt=0, description="Head-marker radius in pixels."
-    )
+    head_radius: float = Field(default=6.0, gt=0, description="Head-marker radius in pixels.")
     head_color: tuple[int, int, int] | None = Field(
         default=None,
         description="RGB fill for the head marker. None -> use each subject's own colour.",
@@ -239,11 +239,17 @@ class TimelineAnimation(BaseModel):
     head_outline_color: tuple[int, int, int] = Field(
         default=(255, 255, 255), description="RGB outline colour for the head marker."
     )
-    head_outline_width: float = Field(
-        default=1.5, ge=0, description="Head-marker outline width in pixels."
-    )
+    head_outline_width: float = Field(default=1.5, ge=0, description="Head-marker outline width in pixels.")
+    auto_rotate_speed: Annotated[
+        float,
+        AdvancedField(
+            default=0.0,
+            description="Camera rotation speed in degrees per second while the animation plays. "
+            "0 = off; positive = clockwise; negative = counter-clockwise.",
+        ),
+    ] = 0.0
 
-    
+
 class TerrainLayerDefinition(BaseModel):
     """A 3D terrain layer built from RGB-encoded elevation tiles, optionally draped with a texture.
     See https://deck.gl/docs/api-reference/geo-layers/terrain-layer for more info."""
@@ -255,58 +261,48 @@ class TerrainLayerDefinition(BaseModel):
     texture: Annotated[
         PydeckString | SkipJsonSchema[None],
         AdvancedField(default=None, description="URL template for tiles draped over the terrain."),
-    ] = SURFACE,
-    elevation_decoder: Annotated[
-        dict, AdvancedField(default=lambda: dict(TERRARIUM_ELEVATION_DECODER))
-    ] = TERRARIUM_ELEVATION_DECODER  # type: ignore[assignment]
+    ] = (SURFACE,)
+    elevation_decoder: Annotated[dict, AdvancedField(default=lambda: dict(TERRARIUM_ELEVATION_DECODER))] = (
+        TERRARIUM_ELEVATION_DECODER  # type: ignore[assignment]
+    )
     wireframe: Annotated[bool, AdvancedField(default=False)] = False
     min_zoom: Annotated[int, AdvancedField(default=0)] = 0
     max_zoom: Annotated[int, AdvancedField(default=15)] = 15
     strategy: Annotated[TerrainStrategy, AdvancedField(default="no-overlap")] = "no-overlap"
     mesh_max_error: Annotated[float, AdvancedField(default=4)] = 4
     material: Annotated[bool, AdvancedField(default=True)] = True
-    
+
+
 class TripsLayerStyle(LayerStyleBase):
     """
     Trips Layer style kwargs
     See https://deck.gl/docs/api-reference/geo-layers/trips-layer for more info
     """
 
-    get_path: Annotated[str, AdvancedField(default="geometry.coordinates")] = (
-        "geometry.coordinates"
-    )
+    get_path: Annotated[str, AdvancedField(default="geometry.coordinates")] = "geometry.coordinates"
     get_timestamps: Annotated[str, AdvancedField(default="timestamps")] = "timestamps"
-    get_color: Annotated[
-        ColorAccessor | SkipJsonSchema[None], AdvancedField(default=None)
-    ] = None
-    get_width: Annotated[
-        FloatAccessor | SkipJsonSchema[None], AdvancedField(default=1)
-    ] = 1
+    get_color: Annotated[ColorAccessor | SkipJsonSchema[None], AdvancedField(default=None)] = None
+    get_width: Annotated[FloatAccessor | SkipJsonSchema[None], AdvancedField(default=1)] = 1
     width_units: Annotated[UnitType, AdvancedField(default="pixels")] = "pixels"
     width_scale: Annotated[float, AdvancedField(default=1)] = 1
     width_min_pixels: Annotated[float, AdvancedField(default=0)] = 0
-    width_max_pixels: Annotated[
-        float | SkipJsonSchema[None], AdvancedField(default=None)
-    ] = None
+    width_max_pixels: Annotated[float | SkipJsonSchema[None], AdvancedField(default=None)] = None
     cap_rounded: Annotated[bool, AdvancedField(default=False)] = False
     joint_rounded: Annotated[bool, AdvancedField(default=False)] = False
     billboard: Annotated[bool, AdvancedField(default=False)] = False
     fade_trail: Annotated[bool, AdvancedField(default=True)] = True
     current_time: Annotated[float, AdvancedField(default=0)] = 0
     trail_length: Annotated[float, AdvancedField(default=0)] = 120
-    
+
+
 class TerrainSampling(BaseModel):
     """Per-vertex ground-elevation sampling for 3D trips draped over a TerrainLayer.
 
     Pass `terrain=None` to trajectory_to_trips for flat (z=0) paths and skip the network.
     """
 
-    offset: float = Field(
-        default=30.0, description="Metres added above the sampled ground at every vertex."
-    )
-    zoom: int = Field(
-        default=15, description="Terrarium tile zoom used for elevation sampling."
-    )
+    offset: float = Field(default=30.0, description="Metres added above the sampled ground at every vertex.")
+    zoom: int = Field(default=15, description="Terrarium tile zoom used for elevation sampling.")
     elevation_data: str = Field(
         default=DEFAULT_TERRAIN_URL,
         description="Elevation tile URL template. Must match the TerrainLayer's elevation_data.",
@@ -318,13 +314,12 @@ class TerrainSampling(BaseModel):
             "sampled z aligns with the rendered mesh. None -> Terrarium default."
         ),
     )
-    ground_elevation: float = Field(
-        default=1000.0, description="Constant ground used only if DEM sampling fails."
-    )
+    ground_elevation: float = Field(default=1000.0, description="Constant ground used only if DEM sampling fails.")
     cache_dir: str | None = Field(
         default=None, description="Optional dir to cache DEM tiles so reruns skip the network."
     )
-    
+
+
 @task
 def create_terrain_layer(
     elevation_data: Annotated[
@@ -346,12 +341,13 @@ def create_terrain_layer(
     return TerrainLayerDefinition(
         elevation_data=elevation_data,
         texture=texture,
-        min_zoom= min_zoom,
-        max_zoom = max_zoom,
+        min_zoom=min_zoom,
+        max_zoom=max_zoom,
         wireframe=wireframe,
         elevation_decoder=elevation_decoder or dict(TERRARIUM_ELEVATION_DECODER),
     )
-    
+
+
 @task
 def create_trips_layer(
     geodataframe: Annotated[
@@ -364,9 +360,7 @@ def create_trips_layer(
     ] = None,
     layer_style: Annotated[
         TripsLayerStyle | SkipJsonSchema[None],
-        AdvancedField(
-            default=TripsLayerStyle(), description="Style arguments for the layer."
-        ),
+        AdvancedField(default=TripsLayerStyle(), description="Style arguments for the layer."),
     ] = None,
     legend: Annotated[
         LegendDefinition | SkipJsonSchema[None],
@@ -392,22 +386,26 @@ def create_trips_layer(
         data_url=data_url,
     )
 
+
 @task
 def create_scenegraph_layer(
+    enabled: Annotated[
+        bool,
+        AdvancedField(default=False, description="Enable the 3D head model. When off, subjects render as flat dots."),
+    ] = False,
     glb: Annotated[
         str | SkipJsonSchema[None],
-        Field(
+        AdvancedField(
+            default=None,
             description="GLB source: an http(s) URL, a data: URI, or a local file path. "
-            "None -> bundled default model (elephant)."
+            "None -> bundled default model (elephant).",
         ),
     ] = None,
     size_scale: Annotated[
         float, AdvancedField(default=50.0, description="ScenegraphLayer sizeScale. Tune to your scene.")
     ] = 50.0,
     size_min_pixels: Annotated[float, AdvancedField(default=12.0)] = 12.0,
-    size_max_pixels: Annotated[
-        float | SkipJsonSchema[None], AdvancedField(default=None)
-    ] = None,
+    size_max_pixels: Annotated[float | SkipJsonSchema[None], AdvancedField(default=None)] = None,
     face_heading: Annotated[bool, AdvancedField(default=True)] = True,
     yaw_offset: Annotated[float, AdvancedField(default=0.0)] = 0.0,
     model_pitch: Annotated[float, AdvancedField(default=0.0)] = 0.0,
@@ -417,9 +415,7 @@ def create_scenegraph_layer(
     terrain_pitch_scale: Annotated[float, AdvancedField(default=1.0)] = 1.0,
     min_move_m: Annotated[float, AdvancedField(default=3.0)] = 3.0,
     pbr_lighting: Annotated[bool, AdvancedField(default=True)] = True,
-    tint: Annotated[
-        list[int] | SkipJsonSchema[None], AdvancedField(default=None)
-    ] = None,
+    tint: Annotated[list[int] | SkipJsonSchema[None], AdvancedField(default=None)] = None,
     use_track_color: Annotated[bool, AdvancedField(default=True)] = True,
 ) -> Annotated[ScenegraphLayerDefinition, Field()]:
     """Create an animated 3D head layer from a glTF/GLB model.
@@ -431,6 +427,7 @@ def create_scenegraph_layer(
     the head falls back to the flat ScatterplotLayer dot.
     """
     return ScenegraphLayerDefinition(
+        enabled=enabled,
         glb=glb,
         size_scale=size_scale,
         size_min_pixels=size_min_pixels,
@@ -447,6 +444,7 @@ def create_scenegraph_layer(
         tint=tint,
         use_track_color=use_track_color,
     )
+
 
 def _build_map_deck(
     geo_layers,
@@ -479,10 +477,8 @@ def _build_map_deck(
     map_widgets: list = DEFAULT_WIDGETS.copy()
 
     for tile_layer in tile_layers:
-        if hasattr(tile_layer, "elevation_data"):          # TerrainLayerDefinition
-            map_layers.append(
-                pdk.Layer("TerrainLayer", **_model_dump_with_pydeck_literals(tile_layer))
-            )
+        if hasattr(tile_layer, "elevation_data"):  # TerrainLayerDefinition
+            map_layers.append(pdk.Layer("TerrainLayer", **_model_dump_with_pydeck_literals(tile_layer)))
             if tile_layer.max_zoom < max_zoom:
                 max_zoom = tile_layer.max_zoom
         elif isinstance(tile_layer, BitmapLayerDefinition):
@@ -537,9 +533,7 @@ def _build_map_deck(
                 legend_values.append(legend_def)
             elif isinstance(legend_def, LegendFromDataframe):
                 if layer_def.geodataframe is not None:
-                    legend_values.append(
-                        legend_def.build_legend_from_dataframe(layer_def.geodataframe)
-                    )
+                    legend_values.append(legend_def.build_legend_from_dataframe(layer_def.geodataframe))
                 else:
                     logger.warning(
                         "LegendFromDataframe legend skipped for layer '%s': "
@@ -565,36 +559,29 @@ def _build_map_deck(
     return pdk.Deck(
         layers=map_layers,
         widgets=map_widgets,
-        initial_view_state=view_state
-        or view_state_from_layers(layers=geo_layers, max_zoom=max_zoom),
+        initial_view_state=view_state or view_state_from_layers(layers=geo_layers, max_zoom=max_zoom),
         views=pdk.View("MapView", controller=not static, repeat=True),
-        parameters={
-            "depthTest": any(getattr(l, "extruded", False) for l in map_layers)
-        },
+        parameters={"depthTest": any(getattr(l, "extruded", False) for l in map_layers)},
         map_style=pdk.map_styles.LIGHT_NO_LABELS,
     )
+
 
 def _make_session(pool=16):
     """A pooled, keep-alive session so repeated tile fetches reuse connections."""
     sess = requests.Session()
-    adapter = requests.adapters.HTTPAdapter(
-        pool_connections=pool, pool_maxsize=pool, max_retries=3
-    )
+    adapter = requests.adapters.HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=3)
     sess.mount("https://", adapter)
     sess.mount("http://", adapter)
     return sess
+
 
 def _decode_elevation(content, decoder=None):
     d = decoder or TERRARIUM_ELEVATION_DECODER
     img = Image.open(io.BytesIO(content)).convert("RGB")
     arr = np.asarray(img, dtype=np.float64)
-    return (
-        arr[:, :, 0] * d["rScaler"]
-        + arr[:, :, 1] * d["gScaler"]
-        + arr[:, :, 2] * d["bScaler"]
-        + d["offset"]
-    )
-    
+    return arr[:, :, 0] * d["rScaler"] + arr[:, :, 1] * d["gScaler"] + arr[:, :, 2] * d["bScaler"] + d["offset"]
+
+
 def sample_elevations(
     lonlats,
     zoom=12,
@@ -603,7 +590,7 @@ def sample_elevations(
     _cache=None,
     max_workers=16,
     cache_dir=None,
-    decoder = None,
+    decoder=None,
 ):
     """Sample ground elevation (m) for an array of (lon, lat) points, bilinearly.
 
@@ -622,7 +609,7 @@ def sample_elevations(
     cache = {} if _cache is None else _cache
 
     lon, lat = pts[:, 0], pts[:, 1]
-    n = TILE * (2 ** zoom)
+    n = TILE * (2**zoom)
     px = (lon + 180.0) / 360.0 * n
     s = np.sin(np.radians(lat))
     py = (0.5 - np.log((1 + s) / (1 - s)) / (4 * np.pi)) * n
@@ -640,7 +627,7 @@ def sample_elevations(
             fp = os.path.join(cache_dir, f"{zoom}_{txx}_{tyy}.png")
             if os.path.exists(fp):
                 with open(fp, "rb") as fh:
-                    return key, _decode_elevation(fh.read(), decoder) 
+                    return key, _decode_elevation(fh.read(), decoder)
         r = sess.get(url.format(z=zoom, x=txx, y=tyy), timeout=30)
         r.raise_for_status()
         if cache_dir is not None:
@@ -677,15 +664,12 @@ def sample_elevations(
         )
     return out.tolist()
 
+
 @task
 def trajectory_to_trips(
     trajectory_gdf: TrajectoryGDF,
-    subject_name_col: Annotated[
-        str, Field(description="Column holding the subject name.")
-    ] = "subject_name",
-    subject_hex_col: Annotated[
-        str, Field(description="Column holding the subject hex color.")
-    ] = "subject_hex",
+    subject_name_col: Annotated[str, Field(description="Column holding the subject name.")] = "subject_name",
+    subject_hex_col: Annotated[str, Field(description="Column holding the subject hex color.")] = "subject_hex",
     terrain: Annotated[
         TerrainSampling | None,
         Field(description="Elevation sampling config. None -> flat ground (z=0)."),
@@ -721,14 +705,16 @@ def trajectory_to_trips(
             continue
         i0 = len(all_lonlats)
         all_lonlats.extend(coords2d)
-        tracks.append({
-            "groupby_col": group_key,
-            "i0": i0,
-            "i1": len(all_lonlats),
-            "raw_ts": times,
-            "color": hex_to_rgba(g[subject_hex_col].iloc[0]),
-            "name": g[subject_name_col].iloc[0],
-        })
+        tracks.append(
+            {
+                "groupby_col": group_key,
+                "i0": i0,
+                "i1": len(all_lonlats),
+                "raw_ts": times,
+                "color": hex_to_rgba(g[subject_hex_col].iloc[0]),
+                "name": g[subject_name_col].iloc[0],
+            }
+        )
 
     # --- One batched elevation sample for the entire job ----------------------------
     if terrain is not None and all_lonlats:
@@ -743,9 +729,9 @@ def trajectory_to_trips(
             zs_all = [e + terrain.offset for e in elevs]
         except Exception as exc:  # network/tile failure -> safe constant fallback
             logger.warning(
-                "trajectory_to_trips: terrain sampling failed (%s); "
-                "using constant ground_elevation=%s",
-                exc, terrain.ground_elevation,
+                "trajectory_to_trips: terrain sampling failed (%s); " "using constant ground_elevation=%s",
+                exc,
+                terrain.ground_elevation,
             )
             zs_all = [terrain.ground_elevation + terrain.offset] * len(all_lonlats)
     else:
@@ -753,8 +739,8 @@ def trajectory_to_trips(
 
     # --- Pass 2: attach z back to each subject's coordinates ------------------------
     for t in tracks:
-        pts = all_lonlats[t["i0"]:t["i1"]]
-        zz = zs_all[t["i0"]:t["i1"]]
+        pts = all_lonlats[t["i0"] : t["i1"]]
+        zz = zs_all[t["i0"] : t["i1"]]
         t["coordinates"] = [[lon, lat, z] for (lon, lat), z in zip(pts, zz)]
         del t["i0"], t["i1"]
 
@@ -773,8 +759,9 @@ def trajectory_to_trips(
     trips = trips.drop(columns=["raw_ts", "coordinates"])
     return cast(AnyGeoDataFrame, trips)
 
+
 @task
-def normalize_timestamps(df:AnyGeoDataFrame, target_span: int | None = None)->AnyGeoDataFrame:
+def normalize_timestamps(df: AnyGeoDataFrame, target_span: int | None = None) -> AnyGeoDataFrame:
     """Rescale all subjects onto one [0, COMMON_SPAN] timeline."""
     if df is None or len(df) == 0:
         return df
@@ -815,6 +802,7 @@ def normalize_timestamps(df:AnyGeoDataFrame, target_span: int | None = None)->An
     )
     return df
 
+
 @task
 def draw_animated_map(
     geo_layers: Annotated[
@@ -831,35 +819,14 @@ def draw_animated_map(
     ] = None,
     static: Annotated[bool, Field(default=False)] = False,
     title: Annotated[str | SkipJsonSchema[None], AdvancedField(default="")] = None,
-    legend_style: Annotated[
-        LegendStyle | SkipJsonSchema[None], AdvancedField(default=LegendStyle())
-    ] = None,
+    legend_style: Annotated[LegendStyle | SkipJsonSchema[None], AdvancedField(default=LegendStyle())] = None,
     max_zoom: Annotated[int, AdvancedField(default=20)] = 20,
-    view_state: Annotated[
-        ViewState | SkipJsonSchema[None], AdvancedField(default=ViewState())
-    ] = None,
-    entry_pitch: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            description="Override the camera pitch (deg) on view_state. "
-            "None (default) -> use whatever pitch is on view_state.",
-        ),
-    ] = None,
-    entry_bearing: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            description="Override the camera bearing (deg) on view_state. "
-            "None (default) -> use whatever bearing is on view_state.",
-        ),
-    ] = None,
-    widget_id: Annotated[
-        str | SkipJsonSchema[None], Field(default=None, exclude=True)
-    ] = None,
+    view_state: Annotated[ViewState | SkipJsonSchema[None], AdvancedField(default=ViewState())] = None,
+    widget_id: Annotated[str | SkipJsonSchema[None], Field(default=None, exclude=True)] = None,
     head_layer: Annotated[
         ScenegraphLayerDefinition,
-        Field(
+        AdvancedField(
+            default=ScenegraphLayerDefinition(),
             description="3D glTF/GLB head model settings. Enable with the 'enabled' checkbox.",
         ),
     ] = ScenegraphLayerDefinition(),
@@ -870,32 +837,24 @@ def draw_animated_map(
     derived from the trips data; the widget's scrubber and play button drive the
     layer's currentTime via an injected onTimeChange bridge.
     """
-    import pydeck as pdk  # type: ignore[import-untyped]
     import numpy as np
 
     if animation is None:
         animation = TimelineAnimation()
 
-    geo_list = (
-        [geo_layers]
-        if isinstance(geo_layers, LayerDefinition)
-        else list(geo_layers or [])
-    )
-    trips_def = next(
-        (ld for ld in geo_list if ld.layer_type == "TripsLayer"), None
-    )
+    geo_list = [geo_layers] if isinstance(geo_layers, LayerDefinition) else list(geo_layers or [])
+    trips_def = next((ld for ld in geo_list if ld.layer_type == "TripsLayer"), None)
     if trips_def is None:
         raise ValueError(
-            "draw_animated_map requires a TripsLayer in geo_layers "
-            "(create one with create_trips_layer)."
+            "draw_animated_map requires a TripsLayer in geo_layers " "(create one with create_trips_layer)."
         )
 
     style = getattr(trips_def, "layer_style", None)
     current_time = getattr(style, "current_time", 0.0) if style else 0.0
 
-    fade_ratio      = animation.fade_ratio
+    fade_ratio = animation.fade_ratio
     animation_speed = animation.animation_speed
-    fps_limit       = animation.fps_limit
+    fps_limit = animation.fps_limit
 
     gdf = trips_def.geodataframe
     all_ts = []
@@ -918,80 +877,65 @@ def draw_animated_map(
         comet_trail = fade_ratio
         history_trail = 1.0
 
-    print(
-        f"max_ts : {max_ts} span: {span} comet_trail: {comet_trail} "
-        f"history_trail: {history_trail}"
-    )
+    print(f"max_ts : {max_ts} span: {span} comet_trail: {comet_trail} " f"history_trail: {history_trail}")
 
     # Guard: a starting time past the span means nothing would animate.
     if current_time >= span:
         current_time = 0.0
 
-    # --- Entry camera: view_state is authoritative; entry_pitch/entry_bearing only
-    # override when explicitly passed (default None -> leave view_state untouched). ---
     if view_state is None:
         view_state = view_state_from_layers(layers=geo_list, max_zoom=max_zoom)
-    overrides = {}
-    if entry_pitch is not None:
-        overrides["pitch"] = entry_pitch
-    if entry_bearing is not None:
-        overrides["bearing"] = entry_bearing
-    if overrides:
-        try:
-            view_state = view_state.model_copy(update=overrides)
-        except AttributeError:  # not a pydantic model -> set attributes directly
-            for k, v in overrides.items():
-                setattr(view_state, k, v)
 
     # --- Marker / history params handed to the injected JS ------------------------
     def _rgb(c):
         return "[" + ", ".join(str(int(x)) for x in c) + "]"
 
-    show_history       = bool(animation.show_history)
-    history_color_js   = _rgb(animation.history_color)
-    history_opacity    = float(animation.history_opacity)
-    fade_history_js    = "true" if animation.fade_history else "false"
+    show_history = bool(animation.show_history)
+    history_color_js = _rgb(animation.history_color)
+    history_opacity = float(animation.history_opacity)
+    fade_history_js = "true" if animation.fade_history else "false"
 
-    show_head          = bool(animation.show_head)
-    head_radius        = float(animation.head_radius)
-    head_color_js      = "null" if animation.head_color is None else _rgb(animation.head_color)
-    head_outline_js    = _rgb(animation.head_outline_color)
+    show_head = bool(animation.show_head)
+    head_radius = float(animation.head_radius)
+    head_color_js = "null" if animation.head_color is None else _rgb(animation.head_color)
+    head_outline_js = _rgb(animation.head_outline_color)
     head_outline_width = float(animation.head_outline_width)
+    auto_rotate_speed = float(animation.auto_rotate_speed)
 
     # --- Optional 3D head model (ScenegraphLayer via head_layer) ----------------
     hm = head_layer
     if hm is not None and hm.enabled:
-        show_head          = True   # a model implies you want the head drawn
-        head_model_uri_js  = '"' + _resolve_glb_data_uri(hm.glb) + '"'
-        head_model_size    = float(hm.size_scale)
-        head_model_min_px  = float(hm.size_min_pixels)
-        head_model_max_px  = "null" if hm.size_max_pixels is None else str(float(hm.size_max_pixels))
-        head_face_heading  = "true" if hm.face_heading else "false"
-        head_yaw_offset    = float(hm.yaw_offset)
-        head_pitch         = float(hm.model_pitch)
-        head_roll          = float(hm.model_roll)
-        head_smooth_samples      = int(hm.smooth_samples)
-        head_terrain_pitch       = "true" if hm.terrain_pitch else "false"
+        show_head = True  # a model implies you want the head drawn
+        head_model_uri_js = '"' + _resolve_glb_data_uri(hm.glb) + '"'
+        head_model_size = float(hm.size_scale)
+        head_model_min_px = float(hm.size_min_pixels)
+        head_model_max_px = "null" if hm.size_max_pixels is None else str(float(hm.size_max_pixels))
+        head_face_heading = "true" if hm.face_heading else "false"
+        head_yaw_offset = float(hm.yaw_offset)
+        head_pitch = float(hm.model_pitch)
+        head_roll = float(hm.model_roll)
+        head_smooth_samples = int(hm.smooth_samples)
+        head_terrain_pitch = "true" if hm.terrain_pitch else "false"
         head_terrain_pitch_scale = float(hm.terrain_pitch_scale)
-        head_min_move_m          = float(hm.min_move_m)
-        head_lighting_js   = '"pbr"' if hm.pbr_lighting else '"flat"'
-        head_tint_js       = "null" if hm.tint is None else _rgb(hm.tint)
+        head_min_move_m = float(hm.min_move_m)
+        head_lighting_js = '"pbr"' if hm.pbr_lighting else '"flat"'
+        head_tint_js = "null" if hm.tint is None else _rgb(hm.tint)
         head_use_track_color = "true" if hm.use_track_color else "false"
     else:
-        head_model_uri_js  = "null"
-        head_model_size    = 50.0
-        head_model_min_px  = 12.0
-        head_model_max_px  = "null"
-        head_face_heading  = "true"
-        head_yaw_offset    = 0.0
-        head_pitch         = 0.0
-        head_roll          = 0.0
-        head_smooth_samples      = 2
-        head_terrain_pitch       = "false"
+        head_model_uri_js = "null"
+        head_model_size = 50.0
+        head_model_min_px = 12.0
+        head_model_max_px = "null"
+        head_face_heading = "true"
+        head_yaw_offset = 0.0
+        head_pitch = 0.0
+        head_roll = 0.0
+        head_smooth_samples = 2
+        head_terrain_pitch = "false"
         head_terrain_pitch_scale = 1.0
-        head_min_move_m          = 3.0
-        head_lighting_js   = '"pbr"'
-        head_tint_js       = "null"
+        head_min_move_m = 3.0
+        head_lighting_js = '"pbr"'
+        head_tint_js = "null"
         head_use_track_color = "true"
 
     deck = _build_map_deck(
@@ -1056,6 +1000,9 @@ const headTint          = __HEAD_TINT__;
 const headUseTrackColor = __HEAD_USE_TRACK_COLOR__;
 const headModelEnabled  = (headModelUri != null);
 
+// Camera rotation
+const autoRotateSpeed = __AUTO_ROTATE_SPEED__;  // deg/s; 0 = off
+
 let baseLayers = null;
 let tripsBase  = null;
 let tripsId    = null;
@@ -1063,6 +1010,9 @@ let ScatterCtor = null;     // resolved lazily
 let ScenegraphCtor = null;  // resolved lazily (only when a 3D head model is configured)
 let headCursors = null;     // per-feature search cursor (monotonic-time fast path)
 let headLastHeading = null; // per-feature last good heading (held when stationary)
+let rotateBearing  = 0;    // accumulated bearing for smooth rotation
+let lastRotateTs   = 0;    // last frame timestamp used for rotation delta
+let _deckViewState = null; // mirrors interactive view state so rotation + user pan compose
 
 // Resolve a deck.gl layer constructor without hard-coding the global namespace.
 function resolveLayer(name) {
@@ -1273,6 +1223,14 @@ function frame(timestamp) {
   }
 
   window.deckInstance.setProps({ layers: buildLayers() });
+
+  if (autoRotateSpeed !== 0 && _deckViewState) {
+    const dt = lastRotateTs ? (timestamp - lastRotateTs) : 0;
+    lastRotateTs = timestamp;
+    rotateBearing = (rotateBearing + autoRotateSpeed * dt / 1000) % 360;
+    window.deckInstance.setProps({ viewState: Object.assign({}, _deckViewState, { bearing: rotateBearing }) });
+  }
+
   requestAnimationFrame(frame);
 }
 
@@ -1287,6 +1245,23 @@ const __startWhenReady = setInterval(function () {
     tripsId     = tripsBase.id;
     headCursors = new Array((tripsBase.props.data || []).length).fill(0);
     headLastHeading = new Array((tripsBase.props.data || []).length).fill(0);
+
+    // Seed rotation from the initial view state and hook onViewStateChange so
+    // user panning/zooming is preserved while rotation is applied.
+    if (autoRotateSpeed !== 0) {
+      const ivs = window.deckInstance.props && window.deckInstance.props.initialViewState;
+      if (ivs) {
+        _deckViewState = Object.assign({}, ivs);
+        rotateBearing  = _deckViewState.bearing || 0;
+      }
+      const _origOnVS = window.deckInstance.props.onViewStateChange;
+      window.deckInstance.setProps({
+        onViewStateChange: function (params) {
+          _deckViewState = params.viewState;
+          if (_origOnVS) _origOnVS(params);
+        }
+      });
+    }
 
     if (showHead) {
       ScatterCtor = resolveLayer('ScatterplotLayer');
@@ -1328,8 +1303,7 @@ window.__tripsAnim = {
 </script>
 """
     animation_js = (
-        animation_js
-        .replace("__CURRENT_TIME__", str(current_time))
+        animation_js.replace("__CURRENT_TIME__", str(current_time))
         .replace("__SPAN__", str(span))
         .replace("__COMET_TRAIL__", str(comet_trail))
         .replace("__HISTORY_TRAIL__", str(history_trail))
@@ -1359,15 +1333,66 @@ window.__tripsAnim = {
         .replace("__HEAD_LIGHTING__", head_lighting_js)
         .replace("__HEAD_TINT__", head_tint_js)
         .replace("__HEAD_USE_TRACK_COLOR__", head_use_track_color)
+        .replace("__AUTO_ROTATE_SPEED__", str(auto_rotate_speed))
     )
     html_str = html_str.replace("</body>", animation_js + "</body>")
     return html_str
+
+
+@task
+def create_timeline_animation(
+    animation_speed: Annotated[float, AdvancedField(default=1000, ge=0)] = 1000,
+    fade_ratio: Annotated[float, AdvancedField(default=0.95, gt=0, le=1)] = 0.95,
+    fps_limit: Annotated[float, AdvancedField(default=30.0, gt=0)] = 30.0,
+    show_history: Annotated[bool, AdvancedField(default=True)] = True,
+    history_color: Annotated[
+        tuple[int, int, int], AdvancedField(default=(255, 255, 255), json_schema_extra={"items": {"type": "integer"}})
+    ] = (255, 255, 255),
+    history_opacity: Annotated[float, AdvancedField(default=0.85, ge=0, le=1)] = 0.85,
+    fade_history: Annotated[bool, AdvancedField(default=False)] = False,
+    show_head: Annotated[bool, AdvancedField(default=True)] = True,
+    head_radius: Annotated[float, AdvancedField(default=6.0, gt=0)] = 6.0,
+    head_color: Annotated[
+        tuple[int, int, int] | None, AdvancedField(default=None, json_schema_extra={"items": {"type": "integer"}})
+    ] = None,
+    head_outline_color: Annotated[
+        tuple[int, int, int], AdvancedField(default=(255, 255, 255), json_schema_extra={"items": {"type": "integer"}})
+    ] = (255, 255, 255),
+    head_outline_width: Annotated[float, AdvancedField(default=1.5, ge=0)] = 1.5,
+    auto_rotate_speed: Annotated[
+        float,
+        AdvancedField(
+            default=0.0,
+            description="Camera rotation speed in degrees per second. "
+            "0 = off; positive = clockwise; negative = counter-clockwise.",
+        ),
+    ] = 0.0,
+) -> Annotated[TimelineAnimation, Field()]:
+    """Construct a TimelineAnimation config, exposing animation_speed as the primary form field."""
+    return TimelineAnimation(
+        animation_speed=animation_speed,
+        fade_ratio=fade_ratio,
+        fps_limit=fps_limit,
+        show_history=show_history,
+        history_color=history_color,
+        history_opacity=history_opacity,
+        fade_history=fade_history,
+        show_head=show_head,
+        head_radius=head_radius,
+        head_color=head_color,
+        head_outline_color=head_outline_color,
+        head_outline_width=head_outline_width,
+        auto_rotate_speed=auto_rotate_speed,
+    )
+
 
 @task
 def create_elevation_decoder(
     exaggeration: Annotated[
         float,
-        Field(gt=0, description="Vertical exaggeration factor. 1.0 = true scale, 2.0 = 2x heights."),
+        AdvancedField(
+            default=1.0, gt=0, description="Vertical exaggeration factor. 1.0 = true scale, 2.0 = 2x heights."
+        ),
     ] = 1.0,
     r_scaler: Annotated[float, AdvancedField(default=256.0)] = 256.0,
     g_scaler: Annotated[float, AdvancedField(default=1.0)] = 1.0,
@@ -1387,3 +1412,71 @@ def create_elevation_decoder(
         "bScaler": b_scaler * exaggeration,
         "offset": offset * exaggeration,
     }
+
+
+def _zoom_from_bbox(minx, miny, maxx, maxy, map_width_px=800, map_height_px=600) -> float:
+    """
+    Calculate zoom level to fit bounding box in a given map size.
+    This approach considers both dimensions for optimal fitting.
+
+    Args:
+        minx, miny, maxx, maxy (float): bounding box coordinates, must be in EPSG:4326
+        map_width_px, map_height_px (int): target map dimensions in pixels
+
+    Returns:
+        float: zoom level that fits the bbox in the map
+    """
+    width_deg = abs(maxx - minx)
+    height_deg = abs(maxy - miny)
+    center_lat = (miny + maxy) / 2
+
+    # Convert to km
+    height_km = height_deg * 111.0
+    width_km = width_deg * 111.0 * abs(math.cos(math.radians(center_lat)))
+
+    world_width_km = 40075
+    world_height_km = 40075
+
+    zoom_for_width = math.log2(world_width_km * map_width_px / (512 * width_km))
+    zoom_for_height = math.log2(world_height_km * map_height_px / (512 * height_km))
+
+    zoom = min(zoom_for_width, zoom_for_height)
+    zoom = round(max(0, min(20, zoom)), 2)
+    return zoom
+
+
+@task
+def compute_view_state_from_gdf(
+    gdf,
+    pitch: Annotated[
+        int,
+        AdvancedField(
+            default=45,
+            ge=0,
+            le=90,
+            description="Camera tilt in degrees (0 = top-down, 90 = horizon). "
+            "45° gives a natural 3-D perspective over terrain.",
+        ),
+    ] = 45,
+    bearing: Annotated[
+        int,
+        AdvancedField(
+            default=0,
+            ge=-180,
+            le=180,
+            description="Camera compass heading in degrees (0 = north, 90 = east, -90 = west). "
+            "Rotates the map so a different cardinal direction faces up.",
+        ),
+    ] = 0,
+) -> ViewState:
+    if gdf.empty:
+        raise ValueError("GeoDataFrame is empty. Cannot compute ViewState.")
+
+    if gdf.crs is None or not gdf.crs.is_geographic:
+        gdf = gdf.to_crs("EPSG:4326")
+
+    minx, miny, maxx, maxy = gdf.total_bounds
+    center_lon = (minx + maxx) / 2.0
+    center_lat = (miny + maxy) / 2.0
+    zoom = _zoom_from_bbox(minx, miny, maxx, maxy)
+    return ViewState(longitude=center_lon, latitude=center_lat, zoom=zoom, pitch=pitch, bearing=bearing)
