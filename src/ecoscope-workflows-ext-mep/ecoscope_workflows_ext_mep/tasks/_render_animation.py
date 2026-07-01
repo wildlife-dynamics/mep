@@ -10,8 +10,11 @@ from pathlib import Path
 from typing import Annotated, Literal
 import imageio_ffmpeg
 from ecoscope_workflows_core.decorators import task
+from ecoscope_workflows_core.annotations import AdvancedField
+from ecoscope_workflows_core.skip import SKIP_SENTINEL, SkipSentinel
 from playwright.async_api import async_playwright
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 _browsers_ensured = False
 
@@ -46,7 +49,7 @@ class DurationConfig(BaseModel):
         float,
         Field(
             default=75.0,
-            description="Video duration in seconds. Used when auto is off, or as a fallback when auto cannot determine the length.",
+            description="Video duration in seconds.",
         ),
     ] = 75.0
 
@@ -214,17 +217,21 @@ window.__cam = (function () {
 
 
 def _launch_args(gl: str):
-    base = ["--headless=new", "--ignore-gpu-blocklist", "--enable-unsafe-swapchains",
-            "--no-sandbox", "--hide-scrollbars"]
+    base = [
+        "--headless=new",
+        "--ignore-gpu-blocklist",
+        "--enable-unsafe-swapchains",
+        "--no-sandbox",
+        "--hide-scrollbars",
+    ]
     if gl == "software":
         return base + ["--use-gl=angle", "--use-angle=swiftshader"]
     if gl in ("angle", "auto"):
-        return base + ["--use-gl=angle"]   # ANGLE picks Metal/GL/Vulkan -> real GPU
+        return base + ["--use-gl=angle"]  # ANGLE picks Metal/GL/Vulkan -> real GPU
     return base
 
 
-async def _prepare_page(browser, html_uri, *, width, height, device_scale_factor,
-                        head_ready_timeout_ms):
+async def _prepare_page(browser, html_uri, *, width, height, device_scale_factor, head_ready_timeout_ms):
     """Open a page, load the scene, take control of the autoplay loop, inject helper.
     Returns (page, pending_counter_dict)."""
     page = await browser.new_page(
@@ -247,12 +254,11 @@ async def _prepare_page(browser, html_uri, *, width, height, device_scale_factor
     page.on("requestfailed", _on_done)
 
     await page.goto(html_uri, wait_until="load")
-    await page.wait_for_function(
-        "() => window.__tripsAnim && window.__tripsAnim.ready", timeout=60000)
+    await page.wait_for_function("() => window.__tripsAnim && window.__tripsAnim.ready", timeout=60000)
     await page.evaluate("() => window.__tripsAnim.pause()")
-    await page.wait_for_function(
-        "() => window.__tripsAnim.headReady", timeout=head_ready_timeout_ms)
+    await page.wait_for_function("() => window.__tripsAnim.headReady", timeout=head_ready_timeout_ms)
     await page.add_script_tag(content=_CAM_HELPER)
+    await page.add_style_tag(content="#SaveImageWidget { display: none !important; }")
     return page, pending
 
 
@@ -272,23 +278,36 @@ async def _await_ready(page, pending, *, settle_timeout_ms, settle_ms, stable_ms
     deadline = time.time() + settle_timeout_ms / 1000.0
     while True:
         if pending["n"] <= 0 and await page.evaluate(_TILES_LOADED_JS):
-            await page.wait_for_timeout(stable_ms)        # confirm it stays settled
+            await page.wait_for_timeout(stable_ms)  # confirm it stays settled
             if pending["n"] <= 0:
                 break
         if time.time() >= deadline:
             break
         await page.wait_for_timeout(15)
     if settle_ms:
-        await page.wait_for_timeout(settle_ms)            # compositor cushion
+        await page.wait_for_timeout(settle_ms)  # compositor cushion
 
 
-async def _render_frames(page, pending, frames, clip, *, capture_format, jpeg_quality,
-                         settle_timeout_ms, settle_ms, frame_dir, ext, log, progress):
+async def _render_frames(
+    page,
+    pending,
+    frames,
+    clip,
+    *,
+    capture_format,
+    jpeg_quality,
+    settle_timeout_ms,
+    settle_ms,
+    frame_dir,
+    ext,
+    log,
+    progress,
+):
     """Render an iterable of (index, t, viewState) to numbered files."""
     shot_kwargs = {"clip": clip, "type": capture_format}
     if capture_format == "jpeg":
         shot_kwargs["quality"] = jpeg_quality
-    for (idx, t, vs) in frames:
+    for idx, t, vs in frames:
         await page.evaluate(
             """([t, vs]) => {
                 const d = window.deckInstance;
@@ -299,12 +318,33 @@ async def _render_frames(page, pending, frames, clip, *, capture_format, jpeg_qu
             [t, vs],
         )
         # let deck issue tile requests for the new viewport, then drain them
-        await page.evaluate(
-            "() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        await page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
         await _await_ready(page, pending, settle_timeout_ms=settle_timeout_ms, settle_ms=settle_ms)
         shot_kwargs["path"] = os.path.join(frame_dir, f"f_{idx:06d}.{ext}")
         await page.screenshot(**shot_kwargs)
         progress(idx)
+
+
+@task
+def configure_video_export(
+    filename: Annotated[
+        str,
+        Field(description="Animated html file."),
+    ] = "animated.html",
+    enabled: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Render the animated map as a video file. "
+            "When off, the video creation step is skipped entirely.",
+        ),
+    ] = False,
+) -> str | SkipSentinel:
+    """Return the output filename, or a skip sentinel when video export is disabled."""
+    if not enabled:
+        return SKIP_SENTINEL
+    return filename
+
 
 async def render_animation_async(
     html_path: str,
@@ -316,15 +356,15 @@ async def render_animation_async(
     width: int = 1280,
     height: int = 720,
     device_scale_factor: int = 1,
-    gl: str = "auto",                 # "auto"/"angle" = GPU; "software" only if no GPU
-    workers: int = 1,                 # parallel browser pages
-    capture_format: str = "jpeg",     # "jpeg" (fast) or "png" (lossless)
+    gl: str = "auto",  # "auto"/"angle" = GPU; "software" only if no GPU
+    workers: int = 1,  # parallel browser pages
+    capture_format: str = "jpeg",  # "jpeg" (fast) or "png" (lossless)
     jpeg_quality: int = 92,
     settle_ms: int = 30,
     settle_timeout_ms: int = 8000,
     head_ready_timeout_ms: int = 30000,
     crf: int = 18,
-    x264_preset: str = "veryfast",    # ultrafast..medium..veryslow
+    x264_preset: str = "veryfast",  # ultrafast..medium..veryslow
     subject_index: int = 0,
     zoom: float | None = None,
     pitch: float | None = None,
@@ -335,14 +375,14 @@ async def render_animation_async(
     orbits: float = 1.0,
     fit_padding: int = 80,
     lead_frac: float = 0.0,
-    bearing_mode: Literal["rotate", "heading", "fixed"] = "rotate",   # cinematic bearing mode
-    rotate_deg: float = 45.0,         # cinematic "rotate": total bearing sweep over the clip
+    bearing_mode: Literal["rotate", "heading", "fixed"] = "rotate",  # cinematic bearing mode
+    rotate_deg: float = 45.0,  # cinematic "rotate": total bearing sweep over the clip
     intro_frac: float = 0.12,
     intro_zoom_out: float = 2.5,
     start_frac: float = 0.0,
     end_frac: float = 1.0,
     verbose: bool = True,
-)->str:
+) -> str:
     """Async core. ``await`` this directly inside a notebook if you prefer."""
     html_path = Path(html_path).resolve()
     if not html_path.exists():
@@ -367,8 +407,7 @@ async def render_animation_async(
         done["n"] += 1
         if verbose and (done["n"] % 10 == 0 or done["n"] == n_frames):
             el = time.time() - t_wall
-            log(f"[render] {done['n']}/{n_frames} frames  "
-                f"({el:.1f}s, {done['n']/max(el,1e-6):.1f} fps)")
+            log(f"[render] {done['n']}/{n_frames} frames  " f"({el:.1f}s, {done['n']/max(el,1e-6):.1f} fps)")
 
     _ensure_playwright_browsers()
     with tempfile.TemporaryDirectory(prefix="anim_frames_") as frame_dir:
@@ -384,40 +423,57 @@ async def render_animation_async(
 
             # One page to read span/base view and compute the whole camera path.
             page0, pending0 = await _prepare_page(
-                browser, html_uri, width=width, height=height,
+                browser,
+                html_uri,
+                width=width,
+                height=height,
                 device_scale_factor=device_scale_factor,
-                head_ready_timeout_ms=head_ready_timeout_ms)
-            span = await page0.evaluate("() => window.__cam.span()") \
-                or await page0.evaluate("() => window.__tripsAnim.span")
+                head_ready_timeout_ms=head_ready_timeout_ms,
+            )
+            span = await page0.evaluate("() => window.__cam.span()") or await page0.evaluate(
+                "() => window.__tripsAnim.span"
+            )
             base_view = await page0.evaluate("() => window.__cam.initialView()") or {}
             log(f"[render] span={span}  base_view={base_view}  gl={gl}  workers={workers}")
 
             if duration.auto:
-                nat = await page0.evaluate(
-                    "() => (window.__tripsAnim && window.__tripsAnim.durationSec) || 0")
+                nat = await page0.evaluate("() => (window.__tripsAnim && window.__tripsAnim.durationSec) || 0")
                 if nat and nat > 0:
                     resolved_duration = float(nat)
                     log(f"[render] duration=auto -> {resolved_duration:.2f}s (animation's own length)")
                 else:
                     resolved_duration = float(duration.seconds)
-                    log(f"[render] duration=auto, but the scene exposes no durationSec; "
-                        f"using fallback {resolved_duration:.1f}s")
+                    log(
+                        f"[render] duration=auto, but the scene exposes no durationSec; "
+                        f"using fallback {resolved_duration:.1f}s"
+                    )
             else:
                 resolved_duration = float(duration.seconds)
                 log(f"[render] duration=fixed -> {resolved_duration:.2f}s")
             n_frames = max(1, int(round(fps * resolved_duration)))
 
             t_lo, t_hi = span * start_frac, span * end_frac
-            times = [t_lo + (t_hi - t_lo) * (i / (n_frames - 1) if n_frames > 1 else 1.0)
-                     for i in range(n_frames)]
-            opts = {"preset": camera, "subject_index": subject_index, "zoom": zoom,
-                    "pitch": pitch, "bearing": bearing, "follow_smoothing": follow_smoothing,
-                    "heading_lock": heading_lock, "orbits": orbits, "fit_padding": fit_padding, "zoom_boost": zoom_boost,
-                    "lead_frac": lead_frac, "intro_frac": intro_frac,
-                    "bearing_mode": bearing_mode, "rotate_deg": rotate_deg,
-                    "intro_zoom_out": intro_zoom_out, "width": width, "height": height}
-            views = await page0.evaluate(
-                "([times, opts]) => window.__cam.path(times, opts)", [times, opts])
+            times = [t_lo + (t_hi - t_lo) * (i / (n_frames - 1) if n_frames > 1 else 1.0) for i in range(n_frames)]
+            opts = {
+                "preset": camera,
+                "subject_index": subject_index,
+                "zoom": zoom,
+                "pitch": pitch,
+                "bearing": bearing,
+                "follow_smoothing": follow_smoothing,
+                "heading_lock": heading_lock,
+                "orbits": orbits,
+                "fit_padding": fit_padding,
+                "zoom_boost": zoom_boost,
+                "lead_frac": lead_frac,
+                "intro_frac": intro_frac,
+                "bearing_mode": bearing_mode,
+                "rotate_deg": rotate_deg,
+                "intro_zoom_out": intro_zoom_out,
+                "width": width,
+                "height": height,
+            }
+            views = await page0.evaluate("([times, opts]) => window.__cam.path(times, opts)", [times, opts])
 
             canvas = await page0.query_selector("#deck-container canvas")
             if canvas is None:
@@ -427,9 +483,16 @@ async def render_animation_async(
 
             all_frames = list(zip(range(n_frames), times, views))
 
-            common = dict(capture_format=capture_format, jpeg_quality=jpeg_quality,
-                          settle_timeout_ms=settle_timeout_ms, settle_ms=settle_ms,
-                          frame_dir=frame_dir, ext=ext, log=log, progress=progress)
+            common = dict(
+                capture_format=capture_format,
+                jpeg_quality=jpeg_quality,
+                settle_timeout_ms=settle_timeout_ms,
+                settle_ms=settle_ms,
+                frame_dir=frame_dir,
+                ext=ext,
+                log=log,
+                progress=progress,
+            )
 
             if workers == 1:
                 await _render_frames(page0, pending0, all_frames, clip, **common)
@@ -437,7 +500,7 @@ async def render_animation_async(
                 # Contiguous chunks -> good tile-cache locality within each worker.
                 chunks, per = [], (n_frames + workers - 1) // workers
                 for w in range(workers):
-                    sl = all_frames[w * per:(w + 1) * per]
+                    sl = all_frames[w * per : (w + 1) * per]
                     if sl:
                         chunks.append(sl)
 
@@ -448,9 +511,13 @@ async def render_animation_async(
                 extra_pages = []
                 for chunk in chunks[1:]:
                     pg, pend = await _prepare_page(
-                        browser, html_uri, width=width, height=height,
+                        browser,
+                        html_uri,
+                        width=width,
+                        height=height,
                         device_scale_factor=device_scale_factor,
-                        head_ready_timeout_ms=head_ready_timeout_ms)
+                        head_ready_timeout_ms=head_ready_timeout_ms,
+                    )
                     extra_pages.append(pg)
                     tasks.append(run_chunk(chunk, pg, pend))
                 await asyncio.gather(*tasks)
@@ -460,11 +527,29 @@ async def render_animation_async(
             await browser.close()
 
         # Assemble the numbered frame sequence into H.264.
-        cmd = [ffmpeg_exe, "-y", "-framerate", str(fps),
-               "-start_number", "0", "-i", os.path.join(frame_dir, f"f_%06d.{ext}"),
-               "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-               "-c:v", "libx264", "-preset", x264_preset, "-pix_fmt", "yuv420p",
-               "-crf", str(crf), "-movflags", "+faststart", out_path]
+        cmd = [
+            ffmpeg_exe,
+            "-y",
+            "-framerate",
+            str(fps),
+            "-start_number",
+            "0",
+            "-i",
+            os.path.join(frame_dir, f"f_%06d.{ext}"),
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            "-c:v",
+            "libx264",
+            "-preset",
+            x264_preset,
+            "-pix_fmt",
+            "yuv420p",
+            "-crf",
+            str(crf),
+            "-movflags",
+            "+faststart",
+            out_path,
+        ]
         proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         if proc.returncode != 0:
             raise RuntimeError("ffmpeg failed:\n" + proc.stderr.decode("utf-8", "ignore")[-2000:])
@@ -478,38 +563,207 @@ def render_animation(
     html_path: str,
     output_dir: str | None = None,
     out_path: str = "animation.mp4",
-    camera: Literal["static", "follow", "follow_3d", "orbit", "fit", "cinematic"] = "static",
-    fps: int = 30,
-    duration: DurationConfig = DurationConfig(),
-    width: int = 1280,
-    height: int = 720,
-    device_scale_factor: int = 1,
-    gl: str = "auto",
-    workers: int = 1,
-    capture_format: str = "jpeg",
-    jpeg_quality: int = 92,
-    settle_ms: int = 30,
-    settle_timeout_ms: int = 8000,
-    head_ready_timeout_ms: int = 30000,
-    crf: int = 18,
-    x264_preset: str = "veryfast",
-    subject_index: int = 0,
-    zoom: float | None = None,
-    pitch: float | None = None,
-    bearing: float | None = None,
-    follow_smoothing: float = 0.25,
-    zoom_boost: float = 0.0,
-    heading_lock: bool = False,
-    orbits: float = 1.0,
-    fit_padding: int = 80,
-    lead_frac: float = 0.0,
-    bearing_mode: Literal["rotate", "heading", "fixed"] = "rotate",
-    rotate_deg: float = 45.0,
-    intro_frac: float = 0.12,
-    intro_zoom_out: float = 2.5,
-    start_frac: float = 0.0,
-    end_frac: float = 1.0,
-    verbose: bool = True,
+    camera: Annotated[
+        Literal["static", "follow", "follow_3d", "orbit", "fit", "cinematic"],
+        AdvancedField(
+            default="static",
+            description="Camera mode. 'static' keeps the initial view; 'follow'/'follow_3d' tracks a subject; "
+            "'orbit' circles the scene; 'fit' zooms to show all visited points; 'cinematic' does a smooth fly-through.",
+        ),
+    ] = "static",
+    fps: Annotated[int, AdvancedField(default=30, gt=0, description="Output video frame rate.")] = 30,
+    duration: Annotated[
+        DurationConfig,
+        AdvancedField(
+            default=DurationConfig(),
+            description="Video duration. 'auto' derives length from the animation's own playback time.",
+        ),
+    ] = DurationConfig(),
+    width: Annotated[int, AdvancedField(default=1280, gt=0, description="Video width in pixels.")] = 1280,
+    height: Annotated[int, AdvancedField(default=720, gt=0, description="Video height in pixels.")] = 720,
+    device_scale_factor: Annotated[
+        int, AdvancedField(default=1, gt=0, description="Browser device pixel ratio. 2 = HiDPI/Retina output.")
+    ] = 1,
+    gl: Annotated[
+        str,
+        AdvancedField(
+            default="auto",
+            description="WebGL backend: 'auto' uses the GPU via ANGLE;",
+        ),
+    ] = "auto",
+    workers: Annotated[
+        int,
+        AdvancedField(
+            default=1,
+            gt=0,
+            description="Number of parallel browser pages for frame capture.",
+        ),
+    ] = 1,
+    capture_format: Annotated[
+        str,
+        AdvancedField(
+            default="jpeg", description="Per-frame image format: 'jpeg' (fast, small) or 'png' (lossless, larger)."
+        ),
+    ] = "jpeg",
+    jpeg_quality: Annotated[
+        int,
+        AdvancedField(
+            default=92, ge=1, le=100, description="JPEG quality (1–100). Only used when capture_format is 'jpeg'."
+        ),
+    ] = 92,
+    settle_ms: Annotated[
+        int,
+        AdvancedField(
+            default=30,
+            ge=0,
+            description="Extra milliseconds to wait after tiles are loaded before capturing each frame.",
+        ),
+    ] = 30,
+    settle_timeout_ms: Annotated[
+        int,
+        AdvancedField(
+            default=8000,
+            gt=0,
+            description="Maximum milliseconds to wait for tiles to finish loading per frame before giving up.",
+        ),
+    ] = 8000,
+    head_ready_timeout_ms: Annotated[
+        int,
+        AdvancedField(
+            default=30000,
+            gt=0,
+            description="Maximum milliseconds to wait for the 3D head model to load before starting capture.",
+        ),
+    ] = 30000,
+    crf: Annotated[
+        int,
+        AdvancedField(
+            default=18,
+            ge=0,
+            le=51,
+            description="H.264 constant rate factor (0 = lossless, 51 = worst). Lower = better quality, larger file.",
+        ),
+    ] = 18,
+    x264_preset: Annotated[
+        str,
+        AdvancedField(
+            default="veryfast",
+            description="x264 encoding speed preset (ultrafast → veryslow).",
+        ),
+    ] = "veryfast",
+    subject_index: Annotated[
+        int,
+        AdvancedField(
+            default=0,
+            ge=0,
+            description="Index of the subject to follow or use as reference in follow/cinematic/fit modes.",
+        ),
+    ] = 0,
+    zoom: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(default=None, description="Override the map zoom level. None → use the scene's initial zoom."),
+    ] = None,
+    pitch: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="Override the camera tilt in degrees (0 = top-down). None → use the scene's initial pitch.",
+        ),
+    ] = None,
+    bearing: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="Override the camera heading in degrees (0 = north). None → use the scene's initial bearing.",
+        ),
+    ] = None,
+    follow_smoothing: Annotated[
+        float,
+        AdvancedField(
+            default=0.25,
+            ge=0,
+            le=1,
+            description="Interpolation factor for follow/cinematic camera movement (0 = instant snap, 1 = no lag).",
+        ),
+    ] = 0.25,
+    zoom_boost: Annotated[
+        float,
+        AdvancedField(default=0.0, description="Zoom levels added on top of the base zoom. Positive = closer in."),
+    ] = 0.0,
+    heading_lock: Annotated[
+        bool,
+        AdvancedField(
+            default=False, description="In follow_3d mode, rotate the camera to match the subject's travel direction."
+        ),
+    ] = False,
+    orbits: Annotated[
+        float, AdvancedField(default=1.0, description="Number of full rotations to complete in 'orbit' camera mode.")
+    ] = 1.0,
+    fit_padding: Annotated[
+        int,
+        AdvancedField(
+            default=80, ge=0, description="Pixel padding around the bounds when fitting the viewport to visited points."
+        ),
+    ] = 80,
+    lead_frac: Annotated[
+        float,
+        AdvancedField(
+            default=0.0,
+            ge=0,
+            le=1,
+            description="In cinematic mode, fraction of the total time span to look ahead of the subject.",
+        ),
+    ] = 0.0,
+    bearing_mode: Annotated[
+        Literal["rotate", "heading", "fixed"],
+        AdvancedField(
+            default="rotate",
+            description="Cinematic bearing mode: 'rotate' sweeps at a constant rate;",
+        ),
+    ] = "rotate",
+    rotate_deg: Annotated[
+        float,
+        AdvancedField(
+            default=45.0, description="Total bearing sweep in degrees over the clip when bearing_mode is 'rotate'."
+        ),
+    ] = 45.0,
+    intro_frac: Annotated[
+        float,
+        AdvancedField(
+            default=0.12,
+            ge=0,
+            le=1,
+            description="Fraction of the clip used for the cinematic fly-in intro. 0 = no intro.",
+        ),
+    ] = 0.12,
+    intro_zoom_out: Annotated[
+        float,
+        AdvancedField(
+            default=2.5, description="Zoom levels to pull back during the cinematic intro before flying into the scene."
+        ),
+    ] = 2.5,
+    start_frac: Annotated[
+        float,
+        AdvancedField(
+            default=0.0,
+            ge=0,
+            le=1,
+            description="Fraction of the animation timeline at which to start capturing (0 = beginning).",
+        ),
+    ] = 0.0,
+    end_frac: Annotated[
+        float,
+        AdvancedField(
+            default=1.0,
+            ge=0,
+            le=1,
+            description="Fraction of the animation timeline at which to stop capturing (1 = end).",
+        ),
+    ] = 1.0,
+    verbose: Annotated[
+        bool,
+        AdvancedField(default=True, description="Print progress and timing information to stderr during rendering."),
+    ] = True,
 ) -> str:
     """Render an animated map HTML to an MP4 video file.
 
@@ -517,18 +771,41 @@ def render_animation(
     A running loop (Jupyter/IPython) -> dispatches to a worker thread.
     """
     kwargs = dict(
-        html_path=html_path, output_dir=output_dir, out_path=out_path, camera=camera, fps=fps,
-        duration=duration, width=width,
-        height=height, device_scale_factor=device_scale_factor, gl=gl,
-        workers=workers, capture_format=capture_format, jpeg_quality=jpeg_quality,
-        settle_ms=settle_ms, settle_timeout_ms=settle_timeout_ms,
-        head_ready_timeout_ms=head_ready_timeout_ms, crf=crf,
-        x264_preset=x264_preset, subject_index=subject_index, zoom=zoom,
-        pitch=pitch, bearing=bearing, follow_smoothing=follow_smoothing,
-        zoom_boost=zoom_boost, heading_lock=heading_lock, orbits=orbits,
-        fit_padding=fit_padding, lead_frac=lead_frac, bearing_mode=bearing_mode,
-        rotate_deg=rotate_deg, intro_frac=intro_frac, intro_zoom_out=intro_zoom_out,
-        start_frac=start_frac, end_frac=end_frac, verbose=verbose,
+        html_path=html_path,
+        output_dir=output_dir,
+        out_path=out_path,
+        camera=camera,
+        fps=fps,
+        duration=duration,
+        width=width,
+        height=height,
+        device_scale_factor=device_scale_factor,
+        gl=gl,
+        workers=workers,
+        capture_format=capture_format,
+        jpeg_quality=jpeg_quality,
+        settle_ms=settle_ms,
+        settle_timeout_ms=settle_timeout_ms,
+        head_ready_timeout_ms=head_ready_timeout_ms,
+        crf=crf,
+        x264_preset=x264_preset,
+        subject_index=subject_index,
+        zoom=zoom,
+        pitch=pitch,
+        bearing=bearing,
+        follow_smoothing=follow_smoothing,
+        zoom_boost=zoom_boost,
+        heading_lock=heading_lock,
+        orbits=orbits,
+        fit_padding=fit_padding,
+        lead_frac=lead_frac,
+        bearing_mode=bearing_mode,
+        rotate_deg=rotate_deg,
+        intro_frac=intro_frac,
+        intro_zoom_out=intro_zoom_out,
+        start_frac=start_frac,
+        end_frac=end_frac,
+        verbose=verbose,
     )
 
     def coro_factory():
@@ -546,4 +823,3 @@ def render_animation(
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         return ex.submit(_worker).result()
-
