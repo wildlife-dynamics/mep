@@ -258,6 +258,7 @@ async def _prepare_page(browser, html_uri, *, width, height, device_scale_factor
     await page.evaluate("() => window.__tripsAnim.pause()")
     await page.wait_for_function("() => window.__tripsAnim.headReady", timeout=head_ready_timeout_ms)
     await page.add_script_tag(content=_CAM_HELPER)
+    await page.add_style_tag(content="#SaveImageWidget { display: none !important; }")
     return page, pending
 
 
