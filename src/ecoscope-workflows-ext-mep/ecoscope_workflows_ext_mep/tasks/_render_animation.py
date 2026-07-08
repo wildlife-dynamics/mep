@@ -809,7 +809,7 @@ class KeyframesFromSubject(BaseModel):
     ] = None
 
 
-KeyframeSource = Annotated[KeyframesFromFile | KeyframesFromSubject, Field(discriminator="type_")]
+KeyframeSource = Annotated[KeyframesFromSubject | KeyframesFromFile, Field(discriminator="type_")]
 
 
 class KeyframesCamera(BaseModel):
