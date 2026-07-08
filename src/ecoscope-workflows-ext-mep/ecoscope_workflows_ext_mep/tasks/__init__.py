@@ -45,7 +45,9 @@ from ._animate import (
     create_timeline_animation,
     compute_view_state_from_gdf,
 )
-from ._render_animation import configure_video_export, render_animation
+from ._render_animation import (
+    configure_video_export, render_animation,
+    derive_camera_keyframes)
 
 __all__ = [
     "create_monthly_ctx_cover",
@@ -100,4 +102,5 @@ __all__ = [
     "configure_video_export",
     "render_animation",
     "compute_view_state_from_gdf",
+    "derive_camera_keyframes"
 ]

@@ -642,7 +642,7 @@ trips_layer = (
         layer_style={
             "get_timestamps": "timestamps",
             "get_color": "color",
-            "get_width": 2.25,
+            "get_width": 2.15,
             "width_units": "pixels",
             "width_scale": 1,
             "width_min_pixels": 1,
@@ -675,7 +675,8 @@ trips_layer = (
 
 animation_settings_params = dict(
     animation_speed=...,
-    auto_rotate_speed=...,
+    head_radius=...,
+    head_outline_width=...,
 )
 
 # %%
@@ -702,9 +703,8 @@ animation_settings = (
         history_opacity=1.0,
         fade_history=True,
         show_head=True,
-        head_radius=1.75,
         head_color=None,
-        head_outline_width=1.05,
+        auto_rotate_speed=0.0,
         **animation_settings_params,
     )
     .call()
@@ -825,10 +825,6 @@ video_output_path = (
 
 create_animation_params = dict(
     camera=...,
-    fps=...,
-    duration=...,
-    width=...,
-    height=...,
 )
 
 # %%
@@ -849,6 +845,10 @@ create_animation = (
         html_path=video_output_path,
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         out_path="animation.mp4",
+        fps=30,
+        duration={"auto": False, "seconds": 60.0},
+        width=1280,
+        height=720,
         device_scale_factor=1,
         gl="auto",
         workers=1,
@@ -859,20 +859,6 @@ create_animation = (
         head_ready_timeout_ms=30000,
         crf=18,
         x264_preset="veryfast",
-        subject_index=0,
-        zoom=None,
-        pitch=None,
-        bearing=None,
-        follow_smoothing=0.25,
-        zoom_boost=0.0,
-        heading_lock=False,
-        orbits=1.0,
-        fit_padding=80,
-        lead_frac=0.0,
-        bearing_mode="rotate",
-        rotate_deg=45.0,
-        intro_frac=0.12,
-        intro_zoom_out=2.5,
         start_frac=0.0,
         end_frac=1.0,
         verbose=True,

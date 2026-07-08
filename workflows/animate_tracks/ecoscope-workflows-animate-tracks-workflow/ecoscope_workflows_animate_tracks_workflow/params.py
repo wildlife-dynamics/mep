@@ -5,17 +5,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Literal, Optional, Union
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    PositiveFloat,
-    PositiveInt,
-    confloat,
-    conint,
-)
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, confloat, conint
 
 
 class WorkflowDetails(BaseModel):
@@ -65,10 +57,9 @@ class AnimationSettings(BaseModel):
         extra="forbid",
     )
     animation_speed: Optional[confloat(ge=0.0)] = Field(1000, title="Animation Speed")
-    auto_rotate_speed: Optional[float] = Field(
-        0.0,
-        description="Camera rotation speed in degrees per second. 0 = off; positive = clockwise; negative = counter-clockwise.",
-        title="Auto Rotate Speed",
+    head_radius: Optional[PositiveFloat] = Field(2.0, title="Head Radius")
+    head_outline_width: Optional[confloat(ge=0.0)] = Field(
+        1.5, title="Head Outline Width"
     )
 
 
@@ -77,15 +68,6 @@ class VideoOutputPath(BaseModel):
         extra="forbid",
     )
     enabled: Optional[bool] = Field(False, title="Enabled")
-
-
-class Camera(str, Enum):
-    static = "static"
-    follow = "follow"
-    follow_3d = "follow_3d"
-    orbit = "orbit"
-    fit = "fit"
-    cinematic = "cinematic"
 
 
 class EarthRangerConnection(BaseModel):
@@ -157,12 +139,12 @@ class ScenegraphLayerDefinition(BaseModel):
         title="Yaw Offset",
     )
     model_pitch: Optional[float] = Field(
-        90.0,
+        0.0,
         description="Tilt of the MODEL itself (deg), independent of the camera. Use to correct a model authored nose-up/down; NOT the view pitch.",
         title="Model Pitch",
     )
     model_roll: Optional[float] = Field(
-        0.0,
+        90.0,
         description="Bank of the MODEL itself (deg), independent of the camera.",
         title="Model Roll",
     )
@@ -181,21 +163,6 @@ class ScenegraphLayerDefinition(BaseModel):
         description="Sign/strength of terrain pitch. Set -1.0 to flip if the model tilts the wrong way; <1 to soften. (Tilt is also capped at +/-20deg.)",
         title="Terrain Pitch Scale",
     )
-    min_move_m: Optional[float] = Field(
-        3.0,
-        description="If the subject moves less than this (m) across the smoothing window, hold the last heading and keep the model level -- stops it spinning or tipping while milling in place.",
-        title="Min Move M",
-    )
-    pbr_lighting: Optional[bool] = Field(
-        True,
-        description="Physically-based lighting ('pbr'); False -> flat shading.",
-        title="Pbr Lighting",
-    )
-    tint: Optional[List[int]] = Field(
-        [220, 220, 255],
-        description="Optional RGB tint over the model as [R, G, B]. None -> the model's own materials.",
-        title="Tint",
-    )
     use_track_color: Optional[bool] = Field(
         True,
         description="Colour the model with each subject's track colour. False -> use `tint` (or the model's own materials). Note: the colour multiplies the model's material, so it reads truest with a light/neutral glb and flat lighting (pbr_lighting=False).",
@@ -203,17 +170,88 @@ class ScenegraphLayerDefinition(BaseModel):
     )
 
 
-class DurationConfig(BaseModel):
-    auto: Optional[bool] = Field(
-        True,
-        description="Match the animation's own playback length. Uncheck to set a fixed duration.",
-        title="Auto",
+class Type(str, Enum):
+    cinematic = "cinematic"
+
+
+class CinematicCamera(BaseModel):
+    type_: Literal["cinematic"] = Field("cinematic", title="Type ")
+
+
+class Type1(str, Enum):
+    fit = "fit"
+
+
+class FitCamera(BaseModel):
+    type_: Literal["fit"] = Field("fit", title="Type ")
+
+
+class Type2(str, Enum):
+    follow_3d = "follow_3d"
+
+
+class Follow3DCamera(BaseModel):
+    type_: Literal["follow_3d"] = Field("follow_3d", title="Type ")
+
+
+class Type3(str, Enum):
+    follow = "follow"
+
+
+class FollowCamera(BaseModel):
+    type_: Literal["follow"] = Field("follow", title="Type ")
+
+
+class Type4(str, Enum):
+    keyframes = "keyframes"
+
+
+class KeyframeEasing(str, Enum):
+    smooth = "smooth"
+    linear = "linear"
+    spline = "spline"
+
+
+class Type5(str, Enum):
+    file = "file"
+
+
+class KeyframesFromFile(BaseModel):
+    type_: Literal["file"] = Field("file", title="Type ")
+    keyframes_file: Optional[str] = Field(
+        None,
+        description="Path to an uploaded keyframe file: a .json list of {lon, lat, t?, zoom?, pitch?, bearing?} objects, a .geojson of Point features (extras read from properties), or a .csv/.tsv with lon/lat columns.",
+        title="Keyframes File",
     )
-    seconds: Optional[float] = Field(
-        75.0,
-        description="Video duration in seconds. Used when auto is off, or as a fallback when auto cannot determine the length.",
-        title="Seconds",
+
+
+class Type6(str, Enum):
+    subject = "subject"
+
+
+class KeyframesFromSubject(BaseModel):
+    type_: Literal["subject"] = Field("subject", title="Type ")
+    subject: Optional[str] = Field(
+        None,
+        description="Which subject to follow -- a value from the 'name' (or 'groupby_col') column, a positional index (as digits, e.g. '2'), 'all' for the group's mean position, or empty for the longest-running track.",
+        title="Subject",
     )
+
+
+class Type7(str, Enum):
+    orbit = "orbit"
+
+
+class OrbitCamera(BaseModel):
+    type_: Literal["orbit"] = Field("orbit", title="Type ")
+
+
+class Type8(str, Enum):
+    static = "static"
+
+
+class StaticCamera(BaseModel):
+    type_: Literal["static"] = Field("static", title="Type ")
 
 
 class ErClientName(BaseModel):
@@ -271,14 +309,11 @@ class DrawAnimation(BaseModel):
                 "size_max_pixels": 75.0,
                 "face_heading": True,
                 "yaw_offset": 0.0,
-                "model_pitch": 90.0,
-                "model_roll": 0.0,
+                "model_pitch": 0.0,
+                "model_roll": 90.0,
                 "smooth_samples": 2,
                 "terrain_pitch": False,
                 "terrain_pitch_scale": 1.0,
-                "min_move_m": 3.0,
-                "pbr_lighting": True,
-                "tint": [220, 220, 255],
                 "use_track_color": True,
             }
         ),
@@ -287,20 +322,56 @@ class DrawAnimation(BaseModel):
     )
 
 
+class KeyframesCamera(BaseModel):
+    type_: Literal["keyframes"] = Field("keyframes", title="Type ")
+    source: Optional[Union[KeyframesFromFile, KeyframesFromSubject]] = Field(
+        default_factory=lambda: KeyframesFromFile.model_validate(
+            {"type_": "subject", "subject": None}
+        ),
+        description="How to build the camera path when `keyframes` is empty: upload a file, or auto-derive one by following a subject. Ignored when `keyframes` is provided directly.",
+        discriminator="type_",
+        title="Source",
+    )
+    keyframe_easing: Optional[KeyframeEasing] = Field(
+        "smooth",
+        description="How the camera moves between keyframes: 'smooth' eases in/out of each waypoint, 'linear' moves at constant speed, 'spline' curves through waypoints (Catmull-Rom) without pausing at them.",
+        title="Keyframe Easing",
+    )
+    zoom: Optional[float] = Field(
+        12,
+        description="Zoom applied to every auto-derived keyframe. None -> the scene's initial zoom. Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        title="Zoom",
+    )
+    pitch: Optional[float] = Field(
+        45,
+        description="Pitch applied to every auto-derived keyframe. None -> the scene's initial pitch. Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        title="Pitch",
+    )
+    bearing: Optional[float] = Field(
+        0,
+        description="Bearing applied to every auto-derived keyframe. None -> the scene's initial bearing. Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        title="Bearing",
+    )
+
+
 class CreateAnimation(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    camera: Optional[Camera] = Field("static", title="Camera")
-    fps: Optional[PositiveInt] = Field(30, title="Fps")
-    duration: Optional[DurationConfig] = Field(
-        default_factory=lambda: DurationConfig.model_validate(
-            {"auto": True, "seconds": 75.0}
-        ),
-        title="Duration",
+    camera: Optional[
+        Union[
+            StaticCamera,
+            FollowCamera,
+            Follow3DCamera,
+            OrbitCamera,
+            FitCamera,
+            CinematicCamera,
+            KeyframesCamera,
+        ]
+    ] = Field(
+        default_factory=lambda: StaticCamera.model_validate({"type_": "static"}),
+        title="Camera",
     )
-    width: Optional[PositiveInt] = Field(1280, title="Width")
-    height: Optional[PositiveInt] = Field(720, title="Height")
 
 
 class Params(BaseModel):

@@ -12,6 +12,7 @@ import imageio_ffmpeg
 from ecoscope_workflows_core.decorators import task
 from ecoscope_workflows_core.annotations import AdvancedField
 from ecoscope_workflows_core.skip import SKIP_SENTINEL, SkipSentinel
+from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 from playwright.async_api import async_playwright
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
@@ -52,6 +53,835 @@ class DurationConfig(BaseModel):
             description="Video duration in seconds.",
         ),
     ] = 75.0
+
+
+class CameraKeyframe(BaseModel):
+    """One waypoint on a user-defined camera path.
+
+    Only ``lon``/``lat`` are required. ``t`` places the keyframe on the clip
+    timeline (0 = first captured frame, 1 = last); when omitted on every
+    keyframe they are spaced evenly. ``zoom``/``pitch``/``bearing`` left as
+    None are interpolated between the nearest keyframes that define them, or
+    fall back to the scene's initial view.
+    """
+
+    lon: Annotated[float, Field(description="Longitude of the camera look-at point.")]
+    lat: Annotated[float, Field(description="Latitude of the camera look-at point.")]
+    t: Annotated[
+        float | None,
+        Field(
+            default=None,
+            description="Position on the clip timeline (0 = start, 1 = end). "
+            "Any monotonically increasing numbers work (they are normalized to 0–1); "
+            "omit everywhere for even spacing.",
+        ),
+    ] = None
+    zoom: Annotated[float | None, Field(default=None, description="Zoom level at this keyframe.")] = None
+    pitch: Annotated[float | None, Field(default=None, description="Camera tilt in degrees at this keyframe.")] = None
+    bearing: Annotated[
+        float | None, Field(default=None, description="Camera heading in degrees at this keyframe.")
+    ] = None
+
+
+_KF_CHANNELS = ("zoom", "pitch", "bearing")
+
+
+def _load_keyframes_file(path: str) -> list[dict]:
+    """Load camera keyframes from a .json (list of objects), .geojson
+    (Point features; t/zoom/pitch/bearing read from properties), or .csv/.tsv
+    (lon/lat columns, optional t/zoom/pitch/bearing columns) file."""
+    import csv
+    import json
+
+    p = Path(remove_file_scheme(path))
+    suffix = p.suffix.lower()
+
+    def norm(d: dict) -> dict:
+        out: dict = {}
+        for key, aliases in (
+            ("lon", ("lon", "longitude", "lng", "x")),
+            ("lat", ("lat", "latitude", "y")),
+            ("t", ("t", "time", "frac")),
+            ("zoom", ("zoom",)),
+            ("pitch", ("pitch",)),
+            ("bearing", ("bearing", "heading")),
+        ):
+            for a in aliases:
+                if a in d and d[a] not in (None, ""):
+                    out[key] = float(d[a])
+                    break
+        return out
+
+    if suffix in (".json", ".geojson"):
+        data = json.loads(p.read_text())
+        if isinstance(data, dict) and data.get("type") == "FeatureCollection":
+            rows = []
+            for f in data.get("features", []):
+                g = f.get("geometry") or {}
+                if g.get("type") != "Point":
+                    continue
+                d = {str(k).lower(): v for k, v in (f.get("properties") or {}).items()}
+                d["lon"], d["lat"] = g["coordinates"][:2]
+                rows.append(norm(d))
+            return rows
+        if isinstance(data, list):
+            return [norm({str(k).lower(): v for k, v in d.items()}) for d in data]
+        raise ValueError(f"Unsupported keyframe JSON structure in {path}")
+    if suffix in (".csv", ".tsv"):
+        with open(p, newline="") as fh:
+            reader = csv.DictReader(fh, delimiter="\t" if suffix == ".tsv" else ",")
+            return [norm({(k or "").strip().lower(): v for k, v in row.items()}) for row in reader]
+    raise ValueError(f"Unsupported keyframe file type: {path} (use .json, .geojson, .csv, or .tsv)")
+
+
+def _resolve_keyframes(raw: list[dict], base_view: dict) -> list[dict]:
+    """Turn sparse user keyframes into a complete, sorted camera path.
+
+    - Missing ``t`` -> even spacing; any monotone times are normalized to 0–1.
+    - Missing zoom/pitch/bearing -> interpolated between the nearest keyframes
+      that define them (held flat past the ends), defaulting to the scene's
+      initial view when no keyframe defines the channel at all.
+    - Bearings are unwrapped so in-browser lerp always rotates the short way.
+    """
+    kf = [dict(k) for k in raw]
+    if len(kf) < 2:
+        raise ValueError("camera='keyframes' needs at least 2 keyframes")
+    for k in kf:
+        if k.get("lon") is None or k.get("lat") is None:
+            raise ValueError(f"keyframe is missing lon/lat: {k}")
+    n = len(kf)
+    if any(k.get("t") is None for k in kf):
+        for i, k in enumerate(kf):
+            k["t"] = i / (n - 1)
+    kf.sort(key=lambda k: k["t"])
+    t0, t1 = kf[0]["t"], kf[-1]["t"]
+    if t1 > t0:
+        for k in kf:
+            k["t"] = (k["t"] - t0) / (t1 - t0)
+    defaults = {
+        "zoom": base_view.get("zoom", 8),
+        "pitch": base_view.get("pitch", 0),
+        "bearing": base_view.get("bearing", 0),
+    }
+    for ch in _KF_CHANNELS:
+        idxs = [i for i, k in enumerate(kf) if k.get(ch) is not None]
+        if not idxs:
+            for k in kf:
+                k[ch] = defaults[ch]
+            continue
+        if ch == "bearing":  # unwrap defined values -> shortest-path rotation
+            for a, b in zip(idxs, idxs[1:]):
+                d = (kf[b][ch] - kf[a][ch] + 180) % 360 - 180
+                kf[b][ch] = kf[a][ch] + d
+        for i in range(idxs[0]):  # hold flat before the first defined value
+            kf[i][ch] = kf[idxs[0]][ch]
+        for i in range(idxs[-1] + 1, n):  # ...and after the last
+            kf[i][ch] = kf[idxs[-1]][ch]
+        for a, b in zip(idxs, idxs[1:]):  # linear fill between defined values
+            span_t = max(kf[b]["t"] - kf[a]["t"], 1e-9)
+            for i in range(a + 1, b):
+                fr = (kf[i]["t"] - kf[a]["t"]) / span_t
+                kf[i][ch] = kf[a][ch] + (kf[b][ch] - kf[a][ch]) * fr
+    return [
+        {"t": k["t"], "lon": k["lon"], "lat": k["lat"], "zoom": k["zoom"], "pitch": k["pitch"], "bearing": k["bearing"]}
+        for k in kf
+    ]
+
+
+def keyframes_from_gdf(
+    gdf,
+    subject: str | int | None = None,
+    n_keyframes: int = 12,
+    zoom: float | None = None,
+    pitch: float | None = None,
+    bearing_from_travel: bool = False,
+    smooth_window: int = 3,
+    span: float | None = None,
+    name_col: str = "name",
+) -> list[CameraKeyframe]:
+    """Derive camera keyframes from a trajectory GeoDataFrame.
+
+    Expects the same shape the animated TripsLayer is built from: one row per
+    subject with a ``timestamps`` sequence and a (2D or Z) LineString whose
+    vertices align with those timestamps.
+
+    - ``subject``: row to follow — a value in ``name_col`` (or ``groupby_col``),
+      a positional index, ``"all"`` for the mean position of every subject, or
+      None to pick the longest-running track.
+    - Keyframe ``t`` is ``timestamp / span`` where ``span`` defaults to the
+      largest final timestamp in the gdf — i.e. the same span the animation
+      plays over — so the camera is where the subject is *at that moment*.
+      (If you render with start_frac/end_frac trims, pass span accordingly.)
+    - ``bearing_from_travel``: also set each keyframe's bearing to the local
+      direction of travel (the resolver unwraps them for shortest rotation).
+    - ``smooth_window``: odd rolling-mean width applied to the sampled lon/lat
+      to keep the camera from inheriting GPS jitter. 0/1 disables.
+    """
+    import numpy as np
+
+    if n_keyframes < 2:
+        raise ValueError("n_keyframes must be >= 2")
+
+    def track(row):
+        T = np.asarray(list(row.timestamps), dtype=float)
+        C = np.asarray(row.geometry.coords, dtype=float)[:, :2]  # drop Z
+        if len(T) != len(C):
+            m = min(len(T), len(C))
+            T, C = T[:m], C[:m]
+        order = np.argsort(T)
+        return T[order], C[order]
+
+    tracks = [track(r) for r in gdf.itertuples(index=False)]
+    if not tracks:
+        raise ValueError("gdf has no rows")
+    global_span = float(span) if span else max(float(T[-1]) for T, _ in tracks if len(T))
+    if global_span <= 0:
+        raise ValueError("could not determine a positive time span from the gdf")
+
+    if isinstance(subject, str) and subject != "all":
+        cols = [c for c in (name_col, "groupby_col") if c in gdf.columns]
+        mask = None
+        for c in cols:
+            m = gdf[c].astype(str) == subject
+            if m.any():
+                mask = m
+                break
+        if mask is None:
+            raise ValueError(f"subject {subject!r} not found in columns {cols}")
+        chosen = [tracks[i] for i in np.flatnonzero(mask.to_numpy())][:1]
+    elif subject == "all":
+        chosen = tracks
+    elif isinstance(subject, int):
+        chosen = [tracks[subject]]
+    else:  # None -> longest-running track
+        chosen = [max(tracks, key=lambda tc: tc[0][-1] if len(tc[0]) else -1)]
+
+    t0 = min(float(T[0]) for T, _ in chosen)
+    t1 = max(float(T[-1]) for T, _ in chosen)
+    sample_times = np.linspace(t0, t1, n_keyframes)
+
+    def at(T, C, ts):
+        return np.stack([np.interp(ts, T, C[:, 0]), np.interp(ts, T, C[:, 1])], axis=1)
+
+    pts = np.mean([at(T, C, sample_times) for T, C in chosen], axis=0)
+
+    w = int(smooth_window)
+    if w > 1:
+        if w % 2 == 0:
+            w += 1
+        pad = w // 2
+        padded = np.pad(pts, ((pad, pad), (0, 0)), mode="edge")
+        kernel = np.ones(w) / w
+        pts = np.stack(
+            [np.convolve(padded[:, 0], kernel, "valid"), np.convolve(padded[:, 1], kernel, "valid")], axis=1
+        )
+
+    bearings: list[float | None] = [None] * n_keyframes
+    if bearing_from_travel:
+        for i in range(n_keyframes):
+            a = pts[max(0, i - 1)], pts[min(n_keyframes - 1, i + 1)]
+            dx = (a[1][0] - a[0][0]) * np.cos(np.radians((a[0][1] + a[1][1]) / 2))
+            dy = a[1][1] - a[0][1]
+            bearings[i] = float(np.degrees(np.arctan2(dx, dy))) if (dx or dy) else None
+
+    return [
+        CameraKeyframe(
+            lon=float(pts[i, 0]),
+            lat=float(pts[i, 1]),
+            t=float(min(1.0, max(0.0, sample_times[i] / global_span))),
+            zoom=zoom,
+            pitch=pitch,
+            bearing=bearings[i],
+        )
+        for i in range(n_keyframes)
+    ]
+
+
+@task
+def derive_camera_keyframes(
+    trajectory_gdf: Annotated[
+        object,
+        Field(description="Trajectory GeoDataFrame with per-subject LineString geometry and a 'timestamps' column."),
+    ],
+    subject: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="Subject to follow: a value from the 'name' (or 'groupby_col') column, 'all' for the group "
+            "mean position, or empty for the longest-running track.",
+        ),
+    ] = None,
+    n_keyframes: Annotated[
+        int, AdvancedField(default=12, ge=2, description="Number of camera keyframes to sample along the track.")
+    ] = 12,
+    zoom: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(default=None, description="Zoom applied to every keyframe. Empty → the scene's initial zoom."),
+    ] = None,
+    pitch: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(default=None, description="Pitch applied to every keyframe. Empty → the scene's initial pitch."),
+    ] = None,
+    bearing_from_travel: Annotated[
+        bool,
+        AdvancedField(default=False, description="Rotate the camera to face the subject's direction of travel."),
+    ] = False,
+    smooth_window: Annotated[
+        int,
+        AdvancedField(default=3, ge=0, description="Rolling-mean window (keyframes) to smooth GPS jitter. 0 = off."),
+    ] = 0,
+) -> list[CameraKeyframe]:
+    """Auto-generate camera keyframes for render_animation from a trajectory gdf."""
+    return keyframes_from_gdf(
+        trajectory_gdf,
+        subject=subject,
+        n_keyframes=n_keyframes,
+        zoom=zoom,
+        pitch=pitch,
+        bearing_from_travel=bearing_from_travel,
+        smooth_window=smooth_window,
+    )
+
+
+class StaticCamera(BaseModel):
+    """Camera holds the scene's initial view for the whole clip.
+
+    No motion, no overrides -- whatever view the map/animation was authored
+    with is what renders. Pick one of the other camera types for movement.
+    """
+
+    type_: Literal["static"] = "static"
+
+
+class FollowCamera(BaseModel):
+    """Camera tracks a subject (or the group) in a flat, top-down-ish view.
+
+    Longitude/latitude follow the tracked subject(s) every frame; pitch stays
+    level (0) unless overridden and bearing stays fixed. For a tilted, 3D
+    chase-cam that can also rotate with the subject's heading, use
+    Follow3DCamera instead.
+    """
+
+    type_: Literal["follow"] = "follow"
+    subject_index: Annotated[
+        int,
+        Field(
+            default=0,
+            ge=0,
+            exclude=True,
+            description="Index of the subject to follow. Ignored when subjects='all'. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0
+    subjects: Annotated[
+        Literal["single", "all"],
+        Field(
+            default="all",
+            exclude=True,
+            description="'single' follows subject_index; 'all' follows the group's center and — unless a zoom "
+            "override is set — smoothly zooms so every subject stays in frame. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = "all"
+    zoom: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Zoom override. None -> the scene's initial zoom. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    pitch: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Camera tilt override in degrees. None -> flat (0). "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    bearing: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Camera heading override in degrees. None -> the scene's initial bearing. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    follow_smoothing: Annotated[
+        float,
+        Field(
+            default=0.25,
+            ge=0,
+            le=1,
+            exclude=True,
+            description="Interpolation factor for camera movement (0 = instant snap, 1 = no lag). "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0.25
+    zoom_boost: Annotated[
+        float,
+        Field(
+            default=0.0,
+            exclude=True,
+            description="Zoom levels added on top of the base zoom. Positive = closer in. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0.0
+    fit_padding: Annotated[
+        int,
+        Field(
+            default=80,
+            ge=0,
+            exclude=True,
+            description="Pixel padding used when subjects='all' to fit every subject in frame. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 80
+
+
+class Follow3DCamera(BaseModel):
+    """Camera tracks a subject (or the group) in a tilted, 3D chase-cam view.
+
+    Like FollowCamera, but pitched by default and able to rotate its heading
+    to match the tracked subject's direction of travel (heading_lock).
+    """
+
+    type_: Literal["follow_3d"] = "follow_3d"
+    subject_index: Annotated[
+        int,
+        Field(
+            default=0,
+            ge=0,
+            exclude=True,
+            description="Index of the subject to follow. Ignored when subjects='all'. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0
+    subjects: Annotated[
+        Literal["single", "all"],
+        Field(
+            default="all",
+            exclude=True,
+            description="'single' follows subject_index; 'all' follows the group's center and — unless a zoom "
+            "override is set — smoothly zooms so every subject stays in frame. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = "all"
+    zoom: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Zoom override. None -> the scene's initial zoom. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    pitch: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Camera tilt override in degrees. None -> the scene's initial pitch. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    bearing: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Camera heading override in degrees. Ignored when heading_lock is on. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    follow_smoothing: Annotated[
+        float,
+        Field(
+            default=0.25,
+            ge=0,
+            le=1,
+            exclude=True,
+            description="Interpolation factor for camera movement (0 = instant snap, 1 = no lag). "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0.25
+    zoom_boost: Annotated[
+        float,
+        Field(
+            default=0.0,
+            exclude=True,
+            description="Zoom levels added on top of the base zoom. Positive = closer in. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0.0
+    fit_padding: Annotated[
+        int,
+        Field(
+            default=80,
+            ge=0,
+            exclude=True,
+            description="Pixel padding used when subjects='all' to fit every subject in frame. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 80
+    heading_lock: Annotated[
+        bool,
+        Field(
+            default=False,
+            exclude=True,
+            description="Rotate the camera to match the tracked subject's travel direction. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = False
+
+
+class OrbitCamera(BaseModel):
+    """Camera circles the scene's centroid at a constant tilt.
+
+    Not tied to any subject -- it orbits the mean position of every visited
+    point in the scene.
+    """
+
+    type_: Literal["orbit"] = "orbit"
+    zoom: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Zoom override. None -> the scene's initial zoom. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    pitch: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Camera tilt override in degrees. None -> 45. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    bearing: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Starting heading in degrees. None -> the scene's initial bearing. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    orbits: Annotated[
+        float,
+        Field(
+            default=1.0,
+            exclude=True,
+            description="Number of full rotations to complete over the clip. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 1.0
+
+
+class FitCamera(BaseModel):
+    """Camera zooms to keep every point visited so far in frame.
+
+    Zoom is always computed from the visited bounds (there's no zoom
+    override); pitch and bearing can still be fixed.
+    """
+
+    type_: Literal["fit"] = "fit"
+    subject_index: Annotated[
+        int,
+        Field(
+            default=0,
+            ge=0,
+            exclude=True,
+            description="Index of the subject whose visited points to fit. Ignored when subjects='all'. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0
+    subjects: Annotated[
+        Literal["single", "all"],
+        Field(
+            default="all",
+            exclude=True,
+            description="'single' fits subject_index's visited points only; 'all' fits every subject's. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = "all"
+    fit_padding: Annotated[
+        int,
+        Field(
+            default=80,
+            ge=0,
+            exclude=True,
+            description="Pixel padding around the fitted bounds. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 80
+    pitch: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Camera tilt override in degrees. None -> the scene's initial pitch. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    bearing: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Camera heading override in degrees. None -> the scene's initial bearing. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+
+
+class CinematicCamera(BaseModel):
+    """Camera does a smooth fly-through: leads the subject, banks its bearing,
+    and optionally flies in from altitude at the start.
+
+    Faithful to the Mapbox "cinematic route" technique, expressed in deck.gl's
+    MapView.
+    """
+
+    type_: Literal["cinematic"] = "cinematic"
+    subject_index: Annotated[
+        int,
+        Field(
+            default=0,
+            ge=0,
+            exclude=True,
+            description="Index of the subject to follow. Ignored when subjects='all'. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0
+    subjects: Annotated[
+        Literal["single", "all"],
+        Field(
+            default="all",
+            exclude=True,
+            description="'single' follows subject_index; 'all' follows the group's center and — unless a zoom "
+            "override is set — smoothly zooms so every subject stays in frame. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = "all"
+    zoom: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Zoom override. None -> the scene's initial zoom. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    pitch: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Camera tilt override in degrees. None -> 60 (deck's MapView caps ~60). "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    bearing: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Starting heading in degrees. None -> the scene's initial bearing. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    follow_smoothing: Annotated[
+        float,
+        Field(
+            default=0.25,
+            ge=0,
+            le=1,
+            exclude=True,
+            description="Interpolation factor for the look-at point catching up to the leading edge. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0.25
+    zoom_boost: Annotated[
+        float,
+        Field(
+            default=0.0,
+            exclude=True,
+            description="Zoom levels added on top of the base zoom. Positive = closer in. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0.0
+    fit_padding: Annotated[
+        int,
+        Field(
+            default=80,
+            ge=0,
+            exclude=True,
+            description="Pixel padding used when subjects='all' to fit every subject in frame. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 80
+    lead_frac: Annotated[
+        float,
+        Field(
+            default=0.0,
+            ge=0,
+            le=1,
+            exclude=True,
+            description="Fraction of the total time span to look ahead of the subject. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0.0
+    bearing_mode: Annotated[
+        Literal["rotate", "heading", "fixed"],
+        Field(
+            default="rotate",
+            exclude=True,
+            description="'rotate' sweeps the bearing at a constant rate; 'heading' chases the subject's travel "
+            "direction; 'fixed' holds the starting bearing. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = "rotate"
+    rotate_deg: Annotated[
+        float,
+        Field(
+            default=45.0,
+            exclude=True,
+            description="Total bearing sweep in degrees over the clip when bearing_mode is 'rotate'. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 45.0
+    intro_frac: Annotated[
+        float,
+        Field(
+            default=0.12,
+            ge=0,
+            le=1,
+            exclude=True,
+            description="Fraction of the clip used for the fly-in intro. 0 = no intro. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0.12
+    intro_zoom_out: Annotated[
+        float,
+        Field(
+            default=2.5,
+            exclude=True,
+            description="Zoom levels to pull back during the intro before flying into the scene. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 2.5
+
+
+class KeyframesFromFile(BaseModel):
+    """Camera path loaded from an uploaded waypoint file."""
+
+    type_: Literal["file"] = "file"
+    keyframes_file: Annotated[
+        str | SkipJsonSchema[None],
+        Field(
+            default=None,
+            description="Path to an uploaded keyframe file: a .json list of {lon, lat, t?, zoom?, pitch?, bearing?} "
+            "objects, a .geojson of Point features (extras read from properties), or a .csv/.tsv with lon/lat "
+            "columns.",
+        ),
+    ] = None
+
+
+class KeyframesFromSubject(BaseModel):
+    """Camera path auto-derived from the animated data by following one subject (or the group)."""
+
+    type_: Literal["subject"] = "subject"
+    subject: Annotated[
+        str | SkipJsonSchema[None],
+        Field(
+            default=None,
+            description="Which subject to follow -- a value from the 'name' (or 'groupby_col') column, a "
+            "positional index (as digits, e.g. '2'), 'all' for the group's mean position, or empty for the "
+            "longest-running track.",
+        ),
+    ] = None
+
+
+KeyframeSource = Annotated[KeyframesFromFile | KeyframesFromSubject, Field(discriminator="type_")]
+
+
+class KeyframesCamera(BaseModel):
+    """Camera flies through a set of waypoints while the data animates.
+
+    Pick a `source`: upload a waypoint file (KeyframesFromFile) or auto-derive a
+    path by following a subject (KeyframesFromSubject) -- see also the
+    derive_camera_keyframes task, which does the same derivation as an explicit,
+    inspectable/editable list of keyframes. Alternatively, supply your own
+    ``keyframes`` (a list of CameraKeyframe) programmatically -- these can be
+    placed anywhere and are not tied to any subject's track, and take priority
+    over `source` when non-empty.
+    """
+
+    type_: Literal["keyframes"] = "keyframes"
+    keyframes: Annotated[
+        list[CameraKeyframe] | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="Camera waypoints. The camera flies through them in order while the animation plays. "
+            "Each keyframe needs lon/lat; t (0–1 clip position), zoom, pitch, and bearing are optional and "
+            "interpolated when omitted. Leave empty to use `source` instead. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = None
+    source: Annotated[
+        KeyframeSource,
+        AdvancedField(
+            default=KeyframesFromSubject(),
+            description="How to build the camera path when `keyframes` is empty: upload a file, or auto-derive "
+            "one by following a subject. Ignored when `keyframes` is provided directly.",
+        ),
+    ] = KeyframesFromSubject()
+    keyframe_easing: Annotated[
+        Literal["smooth", "linear", "spline"],
+        AdvancedField(
+            default="smooth",
+            description="How the camera moves between keyframes: 'smooth' eases in/out of each waypoint, 'linear' "
+            "moves at constant speed, 'spline' curves through waypoints (Catmull-Rom) without pausing at them.",
+        ),
+    ] = "smooth"
+    zoom: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(
+            default=12,
+            description="Zoom applied to every auto-derived keyframe. None -> the scene's initial zoom. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 12
+    pitch: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(
+            default=45,
+            description="Pitch applied to every auto-derived keyframe. None -> the scene's initial pitch. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 45
+    bearing: Annotated[
+        float | SkipJsonSchema[None],
+        AdvancedField(
+            default=0,
+            description="Bearing applied to every auto-derived keyframe. None -> the scene's initial bearing. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
+    ] = 0
+
+
+CameraConfig = Annotated[
+    StaticCamera | FollowCamera | Follow3DCamera | OrbitCamera | FitCamera | CinematicCamera | KeyframesCamera,
+    Field(discriminator="type_"),
+]
 
 
 # --- JS injected into each page: reads the scene data and builds the camera ----
@@ -108,16 +938,36 @@ window.__cam = (function () {
     }
     return n ? { lon: sx / n, lat: sy / n } : { lon: 0, lat: 0 };
   }
-  function boundsUpTo(t, idx) {
-    var F = feats(); var f = F[Math.max(0, Math.min(idx || 0, F.length - 1))]; if (!f) return null;
-    var C = f.geometry && f.geometry.coordinates, T = f.timestamps; if (!C || !T) return null;
+  function boundsUpTo(t, idx, all) {
+    var F = feats(); if (!F.length) return null;
+    var rows = all ? F : [F[Math.max(0, Math.min(idx || 0, F.length - 1))]];
     var w = 180, s = 90, e = -180, nn = -90, any = false;
-    for (var k = 0; k < C.length; k++) {
-      if (T[k] > t) break; any = true;
-      w = Math.min(w, C[k][0]); e = Math.max(e, C[k][0]); s = Math.min(s, C[k][1]); nn = Math.max(nn, C[k][1]);
+    for (var r = 0; r < rows.length; r++) {
+      var f = rows[r]; if (!f) continue;
+      var C = f.geometry && f.geometry.coordinates, T = f.timestamps; if (!C || !T) continue;
+      for (var k = 0; k < C.length; k++) {
+        if (T[k] > t) break; any = true;
+        w = Math.min(w, C[k][0]); e = Math.max(e, C[k][0]); s = Math.min(s, C[k][1]); nn = Math.max(nn, C[k][1]);
+      }
     }
-    if (!any) { var h = headAt(t, idx); if (!h) return null; w = e = h.lon; s = nn = h.lat; }
+    if (!any) {
+      var h = all ? groupAt(t) : headAt(t, idx); if (!h) return null;
+      w = e = h.lon; s = nn = h.lat;
+    }
     return [[w, s], [e, nn]];
+  }
+  // Group state at time t: mean position of every subject plus the bounds that
+  // contain them all. Subjects whose tracks have ended hold their last fix.
+  function groupAt(t) {
+    var F = feats(); if (!F.length) return null;
+    var sx = 0, sy = 0, m = 0, w = 180, s = 90, e = -180, nn = -90;
+    for (var j = 0; j < F.length; j++) {
+      var h = headAt(t, j); if (!h) continue;
+      sx += h.lon; sy += h.lat; m++;
+      w = Math.min(w, h.lon); e = Math.max(e, h.lon);
+      s = Math.min(s, h.lat); nn = Math.max(nn, h.lat);
+    }
+    return m ? { lon: sx / m, lat: sy / m, heading: 0, bounds: [[w, s], [e, nn]] } : null;
   }
   function fit(bounds, width, height, padding) {
     var deck = window.deck || window.deckgl || {}, VP = deck.WebMercatorViewport;
@@ -131,6 +981,107 @@ window.__cam = (function () {
 
   function shortestAngle(a, b) { var d = ((b - a + 180) % 360) - 180; return d <= -180 ? d + 360 : d; }
 
+  // Centripetal-flavoured Catmull-Rom on one scalar channel.
+  function catmullRom(p0, p1, p2, p3, u) {
+    return 0.5 * ((2 * p1) + (-p0 + p2) * u
+           + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u
+           + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u);
+  }
+
+  // Resolve the `subject` option to a feature index: a number is a positional
+  // index; a string matches the feature's `name` (falling back to
+  // `groupby_col`); null/undefined picks the longest-running track (the
+  // feature whose last timestamp is greatest) -- mirrors keyframes_from_gdf's
+  // `subject` argument on the Python side.
+  function resolveSubjectIndex(F, subject) {
+    if (typeof subject === 'number') return Math.max(0, Math.min(subject, F.length - 1));
+    if (typeof subject === 'string') {
+      if (/^-?\d+$/.test(subject)) return Math.max(0, Math.min(parseInt(subject, 10), F.length - 1));
+      for (var i = 0; i < F.length; i++) {
+        if (String(F[i].name) === subject || String(F[i].groupby_col) === subject) return i;
+      }
+      return 0; // no match -> fall back to the first feature
+    }
+    var best = 0, bestLast = -Infinity;
+    for (var j = 0; j < F.length; j++) {
+      var T = F[j].timestamps, last = (T && T.length) ? T[T.length - 1] : -Infinity;
+      if (last > bestLast) { bestLast = last; best = j; }
+    }
+    return best;
+  }
+
+  // Fallback when the user picked the keyframes preset but supplied none:
+  // sample a camera path from the trips data itself (t synced to the span).
+  // mode 'single' follows one subject's track (`o.subject`: name, index, or
+  // null for the longest-running track); mode 'all' follows the group center
+  // and, unless a zoom override is given, zooms to keep EVERY subject in
+  // frame (finished subjects hold their last position, so they stay shown).
+  // Returns [] when the scene has no usable trips data.
+  function autoKeyframes(o, n, zoom, pitch, bearing) {
+    var F = feats(); if (!F.length) return [];
+    var wantAll = (o.subject === 'all');
+    var mode = (wantAll && F.length > 1) ? 'all' : 'single';
+    var idx = mode === 'single' ? resolveSubjectIndex(F, o.subject) : 0;
+    var SPAN = span() || 1;
+    var out = [];
+    if (mode === 'single') {
+      var f = F[Math.max(0, Math.min(idx, F.length - 1))];
+      var T = f && f.timestamps;
+      if (!T || T.length < 2) return [];
+      for (var i = 0; i < n; i++) {
+        var tt = T[0] + (T[T.length - 1] - T[0]) * (i / (n - 1));
+        var h = headAt(tt, idx); if (!h) continue;
+        out.push({ t: Math.min(1, tt / SPAN), lon: h.lon, lat: h.lat,
+                   zoom: zoom, pitch: pitch, bearing: bearing });
+      }
+      return out.length >= 2 ? out : [];
+    }
+    // mode === 'all'
+    var t0 = Infinity;
+    for (var j = 0; j < F.length; j++) {
+      var Tj = F[j].timestamps;
+      if (Tj && Tj.length) t0 = Math.min(t0, Tj[0]);
+    }
+    if (!isFinite(t0)) return [];
+    for (var i = 0; i < n; i++) {
+      var tt = t0 + (SPAN - t0) * (i / (n - 1));
+      var g = groupAt(tt); if (!g) continue;
+      var zk = zoom;                               // user override / base zoom
+      if (o.zoom == null) {                        // no override -> fit the group
+        var fz = fit(g.bounds, o.width, o.height, o.fit_padding);
+        if (fz) zk = Math.min(fz.zoom, 14) + (o.zoom_boost || 0);  // cap: converged
+      }                                            // subjects would over-zoom
+      out.push({ t: Math.min(1, tt / SPAN), lon: g.lon, lat: g.lat,
+                 zoom: zk, pitch: pitch, bearing: bearing });
+    }
+    return out.length >= 2 ? out : [];
+  }
+
+  // Interpolate the user-supplied keyframe path at clip-progress `prog` (0..1).
+  // Keyframes arrive fully resolved from Python: sorted, t in [0,1], every
+  // channel filled, bearings pre-unwrapped (so plain lerp rotates correctly).
+  function keyframeView(K, prog, easing) {
+    var hi = K.length - 1, s = 0;
+    while (s + 1 < hi && K[s + 1].t <= prog) s++;
+    var A = K[s], B = K[Math.min(s + 1, hi)];
+    var u = (B.t > A.t) ? (prog - A.t) / (B.t - A.t) : 1;
+    u = Math.max(0, Math.min(1, u));
+    var ue = (easing === 'linear' || easing === 'spline') ? u : u * u * (3 - 2 * u); // smoothstep
+    var lon, lat;
+    if (easing === 'spline') {                       // Catmull-Rom through lon/lat
+      var P0 = K[Math.max(0, s - 1)], P3 = K[Math.min(hi, s + 2)];
+      lon = catmullRom(P0.lon, A.lon, B.lon, P3.lon, u);
+      lat = catmullRom(P0.lat, A.lat, B.lat, P3.lat, u);
+    } else {
+      lon = A.lon + (B.lon - A.lon) * ue;
+      lat = A.lat + (B.lat - A.lat) * ue;
+    }
+    return { longitude: lon, latitude: lat,
+             zoom:    A.zoom    + (B.zoom    - A.zoom   ) * ue,
+             pitch:   A.pitch   + (B.pitch   - A.pitch  ) * ue,
+             bearing: A.bearing + (B.bearing - A.bearing) * ue };
+  }
+
   // Build the entire per-frame viewState array in one pass.
   function path(times, o) {
     o = o || {};
@@ -143,19 +1094,50 @@ window.__cam = (function () {
     var smooth = Math.max(0, Math.min(1, o.follow_smoothing == null ? 0.25 : o.follow_smoothing));
     var orbits = (o.orbits == null) ? 1 : o.orbits;
     var cx = base.longitude, cy = base.latitude, cb = base.bearing || 0;
+    // --- multi-subject support (subjects: 'all') -------------------------
+    // follow/follow_3d/cinematic track the group's mean position instead of
+    // one subject, and (when no zoom override is set) ease the zoom toward
+    // whatever keeps EVERY subject in frame. fit aggregates all tracks.
+    var multi = (o.subjects === 'all') && feats().length > 1;
+    var cz = null, gpx = null, gpy = null;
+    function lookAt(t) { return multi ? groupAt(t) : headAt(t, idx); }
+    function groupZoom(g, fallback) {          // smoothed fit-zoom for the group
+      if (!multi || o.zoom != null || !g || !g.bounds) return fallback;
+      var f = fit(g.bounds, o.width, o.height, o.fit_padding);
+      if (!f) return fallback;
+      var tz = Math.min(f.zoom, 14) + (o.zoom_boost || 0);
+      var k = Math.max(smooth, 0.1);
+      cz = (cz == null) ? tz : cz + (tz - cz) * k;
+      return cz;
+    }
+    function headingOf(h) {                    // travel direction; for the group,
+      if (!multi) return h.heading;            // derived from the center's motion
+      var hd = cb;
+      if (gpx != null && (h.lon !== gpx || h.lat !== gpy)) {
+        var latm = (gpy + h.lat) * 0.5 * Math.PI / 180;
+        hd = Math.atan2((h.lon - gpx) * Math.cos(latm), h.lat - gpy) * 180 / Math.PI;
+      }
+      gpx = h.lon; gpy = h.lat;
+      return hd;
+    }
+    // ---------------------------------------------------------------------
+    var KF = o.keyframes || [];
+    if (preset === 'keyframes' && KF.length < 2 && o.auto_keyframes) {
+      KF = autoKeyframes(o, o.auto_keyframe_count || 12, zoom, pitch, bearing);
+    }
     var out = [], n = times.length;
     for (var i = 0; i < n; i++) {
       var t = times[i], prog = n > 1 ? i / (n - 1) : 1, vs;
       if (preset === 'follow' || preset === 'follow_3d') {
-        var h = headAt(t, idx);
+        var h = lookAt(t);
         if (h) { var k = smooth > 0 ? smooth : 1;
                  cx = (cx == null) ? h.lon : cx + (h.lon - cx) * k;
                  cy = (cy == null) ? h.lat : cy + (h.lat - cy) * k; }
-        vs = { longitude: cx, latitude: cy, zoom: zoom,
+        vs = { longitude: cx, latitude: cy, zoom: groupZoom(h, zoom),
                pitch: preset === 'follow_3d' ? pitch : (o.pitch != null ? o.pitch : 0),
                bearing: bearing };
         if (preset === 'follow_3d' && o.heading_lock && h) {
-          cb += shortestAngle(cb, h.heading) * Math.max(smooth, 0.15); vs.bearing = cb;
+          cb += shortestAngle(cb, headingOf(h)) * Math.max(smooth, 0.15); vs.bearing = cb;
         }
       } else if (preset === 'orbit') {
         var c = centroid();
@@ -163,9 +1145,15 @@ window.__cam = (function () {
                pitch: (o.pitch != null ? o.pitch : 45),
                bearing: (bearing + 360 * orbits * prog) % 360 };
       } else if (preset === 'fit') {
-        var b = boundsUpTo(t, idx), f = b ? fit(b, o.width, o.height, o.fit_padding) : null;
+        var b = boundsUpTo(t, idx, multi), f = b ? fit(b, o.width, o.height, o.fit_padding) : null;
         vs = f ? { longitude: f.longitude, latitude: f.latitude, zoom: f.zoom, pitch: pitch, bearing: bearing }
                : Object.assign({}, base);
+      } else if (preset === 'keyframes') {
+        // User-authored camera path: fly through uploaded waypoints while the
+        // data animation plays underneath, synced by clip progress. KF may be
+        // auto-derived above; with <2 usable keyframes we hold the base view.
+        vs = (KF.length >= 2) ? keyframeView(KF, prog, o.keyframe_easing || 'smooth')
+                              : Object.assign({}, base);
       } else if (preset === 'cinematic') {
         // Faithful to the Mapbox "cinematic route" post, expressed in deck's
         // MapView: LERP the look-at toward the leading edge; pitch + zoom are
@@ -176,8 +1164,8 @@ window.__cam = (function () {
         // is handled for us.
         var SPAN = span();
         var lead = (o.lead_frac == null ? 0 : o.lead_frac) * SPAN;
-        var here = headAt(t, idx);
-        var target = (lead > 0) ? (headAt(Math.min(SPAN, t + lead), idx) || here) : here;
+        var here = lookAt(t);
+        var target = (lead > 0) ? (lookAt(Math.min(SPAN, t + lead)) || here) : here;
         if (target) {                                    // lerp(prev, leadingEdge)
           var k = smooth > 0 ? smooth : 1;
           cx = (cx == null) ? target.lon : cx + (target.lon - cx) * k;
@@ -186,14 +1174,14 @@ window.__cam = (function () {
         var startB = (o.bearing != null) ? o.bearing : (base.bearing || 0);
         var mode = o.bearing_mode || 'rotate', brg;
         if (mode === 'heading' && here) {                // chase cam (their old way)
-          cb += shortestAngle(cb, here.heading) * Math.max(smooth, 0.12); brg = cb;
+          cb += shortestAngle(cb, headingOf(here)) * Math.max(smooth, 0.12); brg = cb;
         } else if (mode === 'fixed') {
           brg = startB;
         } else {                                         // 'rotate' -- constant rate
           brg = startB + (o.rotate_deg == null ? 45 : o.rotate_deg) * prog;
         }
         var cpitch = (o.pitch != null ? o.pitch : 60);   // deck MapView caps ~60
-        vs = { longitude: cx, latitude: cy, zoom: zoom, pitch: cpitch, bearing: brg };
+        vs = { longitude: cx, latitude: cy, zoom: groupZoom(here, zoom), pitch: cpitch, bearing: brg };
         var introFrac = (o.intro_frac == null ? 0.12 : o.intro_frac);
         if (introFrac > 0 && prog < introFrac) {         // fly-in from altitude
           var s = prog / introFrac, e = s * s * (3 - 2 * s);   // smoothstep
@@ -350,7 +1338,7 @@ async def render_animation_async(
     html_path: str,
     output_dir: str | None = None,
     out_path: str = "animation.mp4",
-    camera: Literal["static", "follow", "follow_3d", "orbit", "fit", "cinematic"] = "static",
+    camera: CameraConfig = StaticCamera(),
     fps: int = 30,
     duration: DurationConfig = DurationConfig(),
     width: int = 1280,
@@ -365,20 +1353,6 @@ async def render_animation_async(
     head_ready_timeout_ms: int = 30000,
     crf: int = 18,
     x264_preset: str = "veryfast",  # ultrafast..medium..veryslow
-    subject_index: int = 0,
-    zoom: float | None = None,
-    pitch: float | None = None,
-    bearing: float | None = None,
-    follow_smoothing: float = 0.25,
-    zoom_boost: float = 0.0,
-    heading_lock: bool = False,
-    orbits: float = 1.0,
-    fit_padding: int = 80,
-    lead_frac: float = 0.0,
-    bearing_mode: Literal["rotate", "heading", "fixed"] = "rotate",  # cinematic bearing mode
-    rotate_deg: float = 45.0,  # cinematic "rotate": total bearing sweep over the clip
-    intro_frac: float = 0.12,
-    intro_zoom_out: float = 2.5,
     start_frac: float = 0.0,
     end_frac: float = 1.0,
     verbose: bool = True,
@@ -396,6 +1370,22 @@ async def render_animation_async(
     ext = "jpg" if capture_format == "jpeg" else "png"
     html_uri = html_path.as_uri()
 
+    # Validate keyframe input up front so bad input fails in milliseconds, not
+    # after a browser launch. An *empty* list is not an error: we fall back to
+    # auto-deriving a path from the animation's own data (subject_index track).
+    kf_raw: list[dict] = []
+    kf_auto = False
+    if isinstance(camera, KeyframesCamera):
+        kf_raw = [k.model_dump() if isinstance(k, BaseModel) else dict(k) for k in (camera.keyframes or [])]
+        if not kf_raw and isinstance(camera.source, KeyframesFromFile) and camera.source.keyframes_file:
+            kf_raw = _load_keyframes_file(camera.source.keyframes_file)
+        if len(kf_raw) == 1:
+            raise ValueError(
+                "camera='keyframes' needs at least 2 keyframes, got 1. "
+                "Add more keyframes, or leave the list empty to auto-derive a camera path from the data."
+            )
+        kf_auto = len(kf_raw) == 0
+
     def log(*a):
         if verbose:
             print(*a, file=sys.stderr, flush=True)
@@ -405,7 +1395,7 @@ async def render_animation_async(
 
     def progress(_idx):
         done["n"] += 1
-        if verbose and (done["n"] % 10 == 0 or done["n"] == n_frames):
+        if verbose and (done["n"] % 100 == 0 or done["n"] == n_frames):
             el = time.time() - t_wall
             log(f"[render] {done['n']}/{n_frames} frames  " f"({el:.1f}s, {done['n']/max(el,1e-6):.1f} fps)")
 
@@ -454,22 +1444,49 @@ async def render_animation_async(
 
             t_lo, t_hi = span * start_frac, span * end_frac
             times = [t_lo + (t_hi - t_lo) * (i / (n_frames - 1) if n_frames > 1 else 1.0) for i in range(n_frames)]
+
+            resolved_keyframes = None
+            keyframe_subject = (
+                camera.source.subject
+                if isinstance(camera, KeyframesCamera) and isinstance(camera.source, KeyframesFromSubject)
+                else None
+            )
+            if isinstance(camera, KeyframesCamera):
+                if kf_auto:
+                    log(
+                        "[render] camera=keyframes but no keyframes were provided; auto-deriving a camera "
+                        f"path from the animation data (subject={keyframe_subject!r}). "
+                        "Set `keyframes` or `source` to control the path."
+                    )
+                else:
+                    resolved_keyframes = _resolve_keyframes(kf_raw, base_view)
+                    log(
+                        f"[render] camera=keyframes: {len(resolved_keyframes)} keyframes, "
+                        f"easing={camera.keyframe_easing}"
+                    )
+
             opts = {
-                "preset": camera,
-                "subject_index": subject_index,
-                "zoom": zoom,
-                "pitch": pitch,
-                "bearing": bearing,
-                "follow_smoothing": follow_smoothing,
-                "heading_lock": heading_lock,
-                "orbits": orbits,
-                "fit_padding": fit_padding,
-                "zoom_boost": zoom_boost,
-                "lead_frac": lead_frac,
-                "intro_frac": intro_frac,
-                "bearing_mode": bearing_mode,
-                "rotate_deg": rotate_deg,
-                "intro_zoom_out": intro_zoom_out,
+                "preset": camera.type_,
+                "subject_index": getattr(camera, "subject_index", 0),
+                "subjects": getattr(camera, "subjects", "single"),
+                "zoom": getattr(camera, "zoom", None),
+                "pitch": getattr(camera, "pitch", None),
+                "bearing": getattr(camera, "bearing", None),
+                "follow_smoothing": getattr(camera, "follow_smoothing", 0.25),
+                "heading_lock": getattr(camera, "heading_lock", False),
+                "orbits": getattr(camera, "orbits", 1.0),
+                "fit_padding": getattr(camera, "fit_padding", 80),
+                "zoom_boost": getattr(camera, "zoom_boost", 0.0),
+                "lead_frac": getattr(camera, "lead_frac", 0.0),
+                "intro_frac": getattr(camera, "intro_frac", 0.12),
+                "bearing_mode": getattr(camera, "bearing_mode", "rotate"),
+                "rotate_deg": getattr(camera, "rotate_deg", 45.0),
+                "intro_zoom_out": getattr(camera, "intro_zoom_out", 2.5),
+                "keyframes": resolved_keyframes,
+                "keyframe_easing": getattr(camera, "keyframe_easing", "smooth"),
+                "subject": keyframe_subject,
+                "auto_keyframes": kf_auto,
+                "auto_keyframe_count": 12,
                 "width": width,
                 "height": height,
             }
@@ -564,13 +1581,15 @@ def render_animation(
     output_dir: str | None = None,
     out_path: str = "animation.mp4",
     camera: Annotated[
-        Literal["static", "follow", "follow_3d", "orbit", "fit", "cinematic"],
+        CameraConfig,
         AdvancedField(
-            default="static",
-            description="Camera mode. 'static' keeps the initial view; 'follow'/'follow_3d' tracks a subject; "
-            "'orbit' circles the scene; 'fit' zooms to show all visited points; 'cinematic' does a smooth fly-through.",
+            default=StaticCamera(),
+            description="Camera behavior for the clip. Pick a type — StaticCamera (initial view), FollowCamera/"
+            "Follow3DCamera (tracks a subject), OrbitCamera (circles the scene), FitCamera (zooms to show all "
+            "visited points), CinematicCamera (smooth fly-through), or KeyframesCamera (flies through waypoints) "
+            "— then configure that type's fields.",
         ),
-    ] = "static",
+    ] = StaticCamera(),
     fps: Annotated[int, AdvancedField(default=30, gt=0, description="Output video frame rate.")] = 30,
     duration: Annotated[
         DurationConfig,
@@ -651,97 +1670,6 @@ def render_animation(
             description="x264 encoding speed preset (ultrafast → veryslow).",
         ),
     ] = "veryfast",
-    subject_index: Annotated[
-        int,
-        AdvancedField(
-            default=0,
-            ge=0,
-            description="Index of the subject to follow or use as reference in follow/cinematic/fit modes.",
-        ),
-    ] = 0,
-    zoom: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(default=None, description="Override the map zoom level. None → use the scene's initial zoom."),
-    ] = None,
-    pitch: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            description="Override the camera tilt in degrees (0 = top-down). None → use the scene's initial pitch.",
-        ),
-    ] = None,
-    bearing: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            description="Override the camera heading in degrees (0 = north). None → use the scene's initial bearing.",
-        ),
-    ] = None,
-    follow_smoothing: Annotated[
-        float,
-        AdvancedField(
-            default=0.25,
-            ge=0,
-            le=1,
-            description="Interpolation factor for follow/cinematic camera movement (0 = instant snap, 1 = no lag).",
-        ),
-    ] = 0.25,
-    zoom_boost: Annotated[
-        float,
-        AdvancedField(default=0.0, description="Zoom levels added on top of the base zoom. Positive = closer in."),
-    ] = 0.0,
-    heading_lock: Annotated[
-        bool,
-        AdvancedField(
-            default=False, description="In follow_3d mode, rotate the camera to match the subject's travel direction."
-        ),
-    ] = False,
-    orbits: Annotated[
-        float, AdvancedField(default=1.0, description="Number of full rotations to complete in 'orbit' camera mode.")
-    ] = 1.0,
-    fit_padding: Annotated[
-        int,
-        AdvancedField(
-            default=80, ge=0, description="Pixel padding around the bounds when fitting the viewport to visited points."
-        ),
-    ] = 80,
-    lead_frac: Annotated[
-        float,
-        AdvancedField(
-            default=0.0,
-            ge=0,
-            le=1,
-            description="In cinematic mode, fraction of the total time span to look ahead of the subject.",
-        ),
-    ] = 0.0,
-    bearing_mode: Annotated[
-        Literal["rotate", "heading", "fixed"],
-        AdvancedField(
-            default="rotate",
-            description="Cinematic bearing mode: 'rotate' sweeps at a constant rate;",
-        ),
-    ] = "rotate",
-    rotate_deg: Annotated[
-        float,
-        AdvancedField(
-            default=45.0, description="Total bearing sweep in degrees over the clip when bearing_mode is 'rotate'."
-        ),
-    ] = 45.0,
-    intro_frac: Annotated[
-        float,
-        AdvancedField(
-            default=0.12,
-            ge=0,
-            le=1,
-            description="Fraction of the clip used for the cinematic fly-in intro. 0 = no intro.",
-        ),
-    ] = 0.12,
-    intro_zoom_out: Annotated[
-        float,
-        AdvancedField(
-            default=2.5, description="Zoom levels to pull back during the cinematic intro before flying into the scene."
-        ),
-    ] = 2.5,
     start_frac: Annotated[
         float,
         AdvancedField(
@@ -789,20 +1717,6 @@ def render_animation(
         head_ready_timeout_ms=head_ready_timeout_ms,
         crf=crf,
         x264_preset=x264_preset,
-        subject_index=subject_index,
-        zoom=zoom,
-        pitch=pitch,
-        bearing=bearing,
-        follow_smoothing=follow_smoothing,
-        zoom_boost=zoom_boost,
-        heading_lock=heading_lock,
-        orbits=orbits,
-        fit_padding=fit_padding,
-        lead_frac=lead_frac,
-        bearing_mode=bearing_mode,
-        rotate_deg=rotate_deg,
-        intro_frac=intro_frac,
-        intro_zoom_out=intro_zoom_out,
         start_frac=start_frac,
         end_frac=end_frac,
         verbose=verbose,
