@@ -13,7 +13,7 @@ from pyproj import Transformer
 import concurrent.futures as cf
 from pydantic import BaseModel, Field
 from shapely.geometry import LineString
-from typing import Annotated, Literal, cast
+from typing import Annotated, ClassVar, Literal, cast
 from pydantic.json_schema import SkipJsonSchema
 from ecoscope_workflows_core.decorators import task
 from ecoscope.base.utils import hex_to_rgba  # type: ignore[import-untyped]
@@ -104,18 +104,18 @@ class ScenegraphLayerDefinition(BaseModel):
     model_pitch: Annotated[
         float,
         AdvancedField(
-            default=90.0,
+            default=0.0,
             description="Tilt of the MODEL itself (deg), independent of the camera. "
             "Use to correct a model authored nose-up/down; NOT the view pitch.",
         ),
-    ] = 90.0
+    ] = 0.0
     model_roll: Annotated[
         float,
         AdvancedField(
-            default=0.0,
+            default=90.0,
             description="Bank of the MODEL itself (deg), independent of the camera.",
         ),
-    ] = 0.0
+    ] = 90.0
     smooth_samples: Annotated[
         int,
         AdvancedField(
@@ -143,22 +143,31 @@ class ScenegraphLayerDefinition(BaseModel):
     ] = 1.0
     min_move_m: Annotated[
         float,
-        AdvancedField(
+        Field(
             default=3.0,
+            exclude=True,
             description="If the subject moves less than this (m) across the smoothing "
             "window, hold the last heading and keep the model level -- stops it spinning "
-            "or tipping while milling in place.",
+            "or tipping while milling in place. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
         ),
     ] = 3.0
     pbr_lighting: Annotated[
         bool,
-        AdvancedField(default=True, description="Physically-based lighting ('pbr'); False -> flat shading."),
+        Field(
+            default=True,
+            exclude=True,
+            description="Physically-based lighting ('pbr'); False -> flat shading. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
+        ),
     ] = True
     tint: Annotated[
         list[int] | SkipJsonSchema[None],
-        AdvancedField(
+        Field(
             default=None,
-            description="Optional RGB tint over the model as [R, G, B]. None -> the model's own materials.",
+            exclude=True,
+            description="Optional RGB tint over the model as [R, G, B]. None -> the model's own materials. "
+            "Not user-configurable; set via a workflow's spec.yaml if a non-default value is needed.",
         ),
     ] = [220, 220, 255]
     use_track_color: Annotated[
@@ -221,7 +230,7 @@ class TimelineAnimation(BaseModel):
     )
     history_opacity: float = Field(default=0.85, ge=0, le=1, description="Opacity of the historic track.")
     fade_history: bool = Field(
-        default=False,
+        default=True,
         description="If True the historic track also fades by opacity along its length; "
         "if False it stays a solid line all the way back to the start.",
     )
@@ -1351,7 +1360,7 @@ def create_timeline_animation(
     history_opacity: Annotated[float, AdvancedField(default=0.85, ge=0, le=1)] = 0.85,
     fade_history: Annotated[bool, AdvancedField(default=False)] = False,
     show_head: Annotated[bool, AdvancedField(default=True)] = True,
-    head_radius: Annotated[float, AdvancedField(default=6.0, gt=0)] = 6.0,
+    head_radius: Annotated[float, AdvancedField(default=2.0, gt=0)] = 2.0,
     head_color: Annotated[
         tuple[int, int, int] | None, AdvancedField(default=None, json_schema_extra={"items": {"type": "integer"}})
     ] = None,
