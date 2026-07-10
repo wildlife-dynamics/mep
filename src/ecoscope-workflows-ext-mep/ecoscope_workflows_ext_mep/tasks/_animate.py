@@ -19,6 +19,7 @@ from ecoscope_workflows_core.decorators import task
 from ecoscope.base.utils import hex_to_rgba  # type: ignore[import-untyped]
 from ecoscope_workflows_ext_ecoscope.schemas import TrajectoryGDF
 from ecoscope_workflows_core.annotations import AdvancedField, AnyGeoDataFrame
+from ecoscope_workflows_core.skip import SkippedDependencyFallback, SkipSentinel
 from ecoscope_workflows_ext_custom.tasks.results._map import (
     PydeckAnnotation,
     PydeckString,
@@ -810,6 +811,38 @@ def normalize_timestamps(df: AnyGeoDataFrame, target_span: int | None = None) ->
         lambda raw: ((np.array(raw) - global_min) / time_range * common_span).tolist()
     )
     return df
+
+
+def _fallback_to_none(obj):
+    """Fallback function to convert SkipSentinel to None."""
+    return None if isinstance(obj, SkipSentinel) else obj
+
+
+@task
+def append_optional_layer(
+    base_layers: Annotated[
+        LayerDefinition | list[LayerDefinition],
+        Field(description="Required base layer(s), e.g. the TripsLayer.", exclude=True),
+    ],
+    optional_layer: Annotated[
+        LayerDefinition | SkipJsonSchema[None],
+        Field(
+            default=None,
+            description="An optional extra layer to append, e.g. from a skippable upstream overlay task. "
+            "Omitted from the result if None or skipped.",
+            exclude=True,
+        ),
+        SkippedDependencyFallback(_fallback_to_none),
+    ] = None,
+) -> list[LayerDefinition]:
+    """Append an optional map layer onto a required list of base layers.
+
+    Lets an overlay layer that may be conditionally skipped (via a task's `skipif`)
+    flow into a `geo_layers` list without breaking downstream layer handling, which
+    doesn't tolerate `None`/skip-sentinel entries mixed into the list.
+    """
+    base = base_layers if isinstance(base_layers, list) else [base_layers]
+    return base if optional_layer is None else [*base, optional_layer]
 
 
 @task

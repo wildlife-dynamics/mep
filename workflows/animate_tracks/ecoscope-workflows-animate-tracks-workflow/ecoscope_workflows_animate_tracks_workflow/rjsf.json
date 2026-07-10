@@ -276,6 +276,32 @@
                 "type_": "static"
               },
               "title": "Camera"
+            },
+            "duration": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/DurationConfig"
+                }
+              ],
+              "default": {
+                "auto": true,
+                "seconds": 75.0
+              },
+              "title": "Duration"
+            },
+            "resolution": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PresetResolution"
+                },
+                {
+                  "$ref": "#/$defs/CustomResolution"
+                }
+              ],
+              "default": {
+                "preset": "720p"
+              },
+              "title": "Resolution"
             }
           },
           "required": [],
@@ -489,6 +515,54 @@
       "title": "CinematicCamera",
       "type": "object"
     },
+    "CustomResolution": {
+      "description": "Output video resolution at an exact width/height.",
+      "properties": {
+        "preset": {
+          "const": "custom",
+          "default": "custom",
+          "enum": [
+            "custom"
+          ],
+          "title": "Resolution",
+          "type": "string"
+        },
+        "width": {
+          "default": 1280,
+          "description": "Custom video width in pixels.",
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "default": 720,
+          "description": "Custom video height in pixels.",
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        }
+      },
+      "title": "Custom",
+      "type": "object"
+    },
+    "DurationConfig": {
+      "properties": {
+        "auto": {
+          "default": true,
+          "description": "Match the animation's own playback length. Uncheck to set a fixed duration.",
+          "title": "Auto",
+          "type": "boolean"
+        },
+        "seconds": {
+          "default": 75.0,
+          "description": "Video duration in seconds.",
+          "title": "Seconds",
+          "type": "number"
+        }
+      },
+      "title": "DurationConfig",
+      "type": "object"
+    },
     "FitCamera": {
       "description": "Camera zooms to keep every point visited so far in frame.\n\nZoom is always computed from the visited bounds (there's no zoom\noverride); pitch and bearing can still be fixed.",
       "properties": {
@@ -565,10 +639,10 @@
           "ecoscope:advanced": true,
           "oneOf": [
             {
-              "$ref": "#/$defs/KeyframesFromFile"
+              "$ref": "#/$defs/KeyframesFromSubject"
             },
             {
-              "$ref": "#/$defs/KeyframesFromSubject"
+              "$ref": "#/$defs/KeyframesFromFile"
             }
           ],
           "title": "Source"
@@ -670,6 +744,24 @@
       "title": "OrbitCamera",
       "type": "object"
     },
+    "PresetResolution": {
+      "description": "Output video resolution from a common preset.",
+      "properties": {
+        "preset": {
+          "default": "720p",
+          "description": "Common output video resolution preset.",
+          "enum": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "title": "Resolution",
+          "type": "string"
+        }
+      },
+      "title": "Preset",
+      "type": "object"
+    },
     "StaticCamera": {
       "description": "Camera holds the scene's initial view for the whole clip.\n\nNo motion, no overrides -- whatever view the map/animation was authored\nwith is what renders. Pick one of the other camera types for movement.",
       "properties": {
@@ -719,7 +811,14 @@
       "ui:order": [
         "video_output_path",
         "create_animation"
-      ]
+      ],
+      "create_animation": {
+        "ui:order": [
+          "camera",
+          "duration",
+          "resolution"
+        ]
+      }
     },
     "ui:order": [
       "workflow_details",

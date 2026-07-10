@@ -14,7 +14,7 @@ from ecoscope_workflows_core.annotations import AdvancedField
 from ecoscope_workflows_core.skip import SKIP_SENTINEL, SkipSentinel
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 from playwright.async_api import async_playwright
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.json_schema import SkipJsonSchema
 
 _browsers_ensured = False
@@ -53,6 +53,50 @@ class DurationConfig(BaseModel):
             description="Video duration in seconds.",
         ),
     ] = 75.0
+
+
+_RESOLUTION_PRESETS = {
+    "720p": (1280, 720),
+    "1080p": (1920, 1080),
+    "4k": (3840, 2160),
+}
+
+
+class PresetResolution(BaseModel):
+    """Output video resolution from a common preset."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Preset"})
+    preset: Annotated[
+        Literal["720p", "1080p", "4k"],
+        Field(default="720p", title="Resolution", description="Common output video resolution preset."),
+    ] = "720p"
+
+
+class CustomResolution(BaseModel):
+    """Output video resolution at an exact width/height."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Custom"})
+    preset: Annotated[Literal["custom"], Field(default="custom", title="Resolution")] = "custom"
+    width: Annotated[
+        int,
+        Field(default=1280, gt=0, title="Width", description="Custom video width in pixels."),
+    ] = 1280
+    height: Annotated[
+        int,
+        Field(default=720, gt=0, title="Height", description="Custom video height in pixels."),
+    ] = 720
+
+
+ResolutionConfig = Annotated[
+    PresetResolution | CustomResolution,
+    Field(discriminator="preset"),
+]
+
+
+def _resolve_resolution(resolution: ResolutionConfig) -> tuple[int, int]:
+    if isinstance(resolution, CustomResolution):
+        return resolution.width, resolution.height
+    return _RESOLUTION_PRESETS[resolution.preset]
 
 
 class CameraKeyframe(BaseModel):
@@ -1246,7 +1290,9 @@ async def _prepare_page(browser, html_uri, *, width, height, device_scale_factor
     await page.evaluate("() => window.__tripsAnim.pause()")
     await page.wait_for_function("() => window.__tripsAnim.headReady", timeout=head_ready_timeout_ms)
     await page.add_script_tag(content=_CAM_HELPER)
-    await page.add_style_tag(content="#SaveImageWidget { display: none !important; }")
+    # The "Save as Image" widget (a camera icon, top-right) has no `id` in the rendered
+    # DOM -- #SaveImageWidget never matched. Hide it by its actual deck.gl widget class.
+    await page.add_style_tag(content=".deck-widget-save-image { display: none !important; }")
     return page, pending
 
 
@@ -1341,8 +1387,7 @@ async def render_animation_async(
     camera: CameraConfig = StaticCamera(),
     fps: int = 30,
     duration: DurationConfig = DurationConfig(),
-    width: int = 1280,
-    height: int = 720,
+    resolution: ResolutionConfig = PresetResolution(),
     device_scale_factor: int = 1,
     gl: str = "auto",  # "auto"/"angle" = GPU; "software" only if no GPU
     workers: int = 1,  # parallel browser pages
@@ -1358,6 +1403,7 @@ async def render_animation_async(
     verbose: bool = True,
 ) -> str:
     """Async core. ``await`` this directly inside a notebook if you prefer."""
+    width, height = _resolve_resolution(resolution)
     html_path = Path(html_path).resolve()
     if not html_path.exists():
         raise FileNotFoundError(html_path)
@@ -1598,8 +1644,14 @@ def render_animation(
             description="Video duration. 'auto' derives length from the animation's own playback time.",
         ),
     ] = DurationConfig(),
-    width: Annotated[int, AdvancedField(default=1280, gt=0, description="Video width in pixels.")] = 1280,
-    height: Annotated[int, AdvancedField(default=720, gt=0, description="Video height in pixels.")] = 720,
+    resolution: Annotated[
+        ResolutionConfig,
+        AdvancedField(
+            default=PresetResolution(),
+            description="Output video resolution. Pick a common preset (720p/1080p/4K), or 'custom' to set an "
+            "exact width/height.",
+        ),
+    ] = PresetResolution(),
     device_scale_factor: Annotated[
         int, AdvancedField(default=1, gt=0, description="Browser device pixel ratio. 2 = HiDPI/Retina output.")
     ] = 1,
@@ -1705,8 +1757,7 @@ def render_animation(
         camera=camera,
         fps=fps,
         duration=duration,
-        width=width,
-        height=height,
+        resolution=resolution,
         device_scale_factor=device_scale_factor,
         gl=gl,
         workers=workers,

@@ -7,7 +7,15 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, confloat, conint
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveFloat,
+    PositiveInt,
+    confloat,
+    conint,
+)
 
 
 class WorkflowDetails(BaseModel):
@@ -184,6 +192,31 @@ class CinematicCamera(BaseModel):
     type_: Literal["cinematic"] = Field("cinematic", title="Type ")
 
 
+class Preset(str, Enum):
+    custom = "custom"
+
+
+class CustomResolution(BaseModel):
+    preset: Literal["custom"] = Field("custom", title="Resolution")
+    width: Optional[PositiveInt] = Field(
+        1280, description="Custom video width in pixels.", title="Width"
+    )
+    height: Optional[PositiveInt] = Field(
+        720, description="Custom video height in pixels.", title="Height"
+    )
+
+
+class DurationConfig(BaseModel):
+    auto: Optional[bool] = Field(
+        True,
+        description="Match the animation's own playback length. Uncheck to set a fixed duration.",
+        title="Auto",
+    )
+    seconds: Optional[float] = Field(
+        75.0, description="Video duration in seconds.", title="Seconds"
+    )
+
+
 class Type1(str, Enum):
     fit = "fit"
 
@@ -250,6 +283,18 @@ class Type7(str, Enum):
 
 class OrbitCamera(BaseModel):
     type_: Literal["orbit"] = Field("orbit", title="Type ")
+
+
+class Preset1(str, Enum):
+    field_720p = "720p"
+    field_1080p = "1080p"
+    field_4k = "4k"
+
+
+class PresetResolution(BaseModel):
+    preset: Optional[Preset1] = Field(
+        "720p", description="Common output video resolution preset.", title="Resolution"
+    )
 
 
 class Type8(str, Enum):
@@ -330,8 +375,8 @@ class DrawAnimation(BaseModel):
 
 class KeyframesCamera(BaseModel):
     type_: Literal["keyframes"] = Field("keyframes", title="Type ")
-    source: Optional[Union[KeyframesFromFile, KeyframesFromSubject]] = Field(
-        default_factory=lambda: KeyframesFromFile.model_validate(
+    source: Optional[Union[KeyframesFromSubject, KeyframesFromFile]] = Field(
+        default_factory=lambda: KeyframesFromSubject.model_validate(
             {"type_": "subject", "subject": None}
         ),
         description="How to build the camera path when `keyframes` is empty: upload a file, or auto-derive one by following a subject. Ignored when `keyframes` is provided directly.",
@@ -377,6 +422,16 @@ class CreateAnimation(BaseModel):
     ] = Field(
         default_factory=lambda: StaticCamera.model_validate({"type_": "static"}),
         title="Camera",
+    )
+    duration: Optional[DurationConfig] = Field(
+        default_factory=lambda: DurationConfig.model_validate(
+            {"auto": True, "seconds": 75.0}
+        ),
+        title="Duration",
+    )
+    resolution: Optional[Union[PresetResolution, CustomResolution]] = Field(
+        default_factory=lambda: PresetResolution.model_validate({"preset": "720p"}),
+        title="Resolution",
     )
 
 
