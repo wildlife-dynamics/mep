@@ -738,7 +738,7 @@ draw_animation = (
         unpack_depth=1,
     )
     .partial(
-        geo_layers=[trips_layer],
+        geo_layers=trips_layer,
         tile_layers=[terrain_layer],
         static=False,
         max_zoom=15,
@@ -825,6 +825,8 @@ video_output_path = (
 
 create_animation_params = dict(
     camera=...,
+    duration=...,
+    resolution=...,
 )
 
 # %%
@@ -846,9 +848,6 @@ create_animation = (
         output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
         out_path="animation.mp4",
         fps=30,
-        duration={"auto": False, "seconds": 60.0},
-        width=1280,
-        height=720,
         device_scale_factor=1,
         gl="auto",
         workers=1,

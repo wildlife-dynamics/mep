@@ -500,7 +500,7 @@ def main(params: Params):
             unpack_depth=1,
         )
         .partial(
-            geo_layers=[trips_layer],
+            geo_layers=trips_layer,
             tile_layers=[terrain_layer],
             static=False,
             max_zoom=15,
@@ -566,9 +566,6 @@ def main(params: Params):
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             out_path="animation.mp4",
             fps=30,
-            duration={"auto": False, "seconds": 60.0},
-            width=1280,
-            height=720,
             device_scale_factor=1,
             gl="auto",
             workers=1,

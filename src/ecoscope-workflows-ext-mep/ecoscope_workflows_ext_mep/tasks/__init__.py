@@ -44,6 +44,7 @@ from ._animate import (
     create_elevation_decoder,
     create_timeline_animation,
     compute_view_state_from_gdf,
+    append_optional_layer,
 )
 from ._render_animation import (
     configure_video_export, render_animation,
@@ -102,5 +103,6 @@ __all__ = [
     "configure_video_export",
     "render_animation",
     "compute_view_state_from_gdf",
-    "derive_camera_keyframes"
+    "derive_camera_keyframes",
+    "append_optional_layer",
 ]
