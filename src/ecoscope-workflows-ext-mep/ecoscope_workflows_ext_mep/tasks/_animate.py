@@ -915,10 +915,10 @@ def append_optional_layer(
         Field(description="Required base layer(s), e.g. the TripsLayer.", exclude=True),
     ],
     optional_layer: Annotated[
-        LayerDefinition | SkipJsonSchema[None],
+        LayerDefinition | list[LayerDefinition] | SkipJsonSchema[None],
         Field(
             default=None,
-            description="An optional extra layer to append, e.g. from a skippable upstream overlay task. "
+            description="An optional extra layer(s) to append, e.g. from a skippable upstream overlay task. "
             "Omitted from the result if None or skipped.",
             exclude=True,
         ),
@@ -929,10 +929,14 @@ def append_optional_layer(
 
     Lets an overlay layer that may be conditionally skipped (via a task's `skipif`)
     flow into a `geo_layers` list without breaking downstream layer handling, which
-    doesn't tolerate `None`/skip-sentinel entries mixed into the list.
+    doesn't tolerate `None`/skip-sentinel entries mixed into the list. The overlay may
+    itself resolve to a list (e.g. a task that produces multiple layers).
     """
     base = base_layers if isinstance(base_layers, list) else [base_layers]
-    return base if optional_layer is None else [*base, optional_layer]
+    if optional_layer is None:
+        return base
+    extra = optional_layer if isinstance(optional_layer, list) else [optional_layer]
+    return [*base, *extra]
 
 
 @task
