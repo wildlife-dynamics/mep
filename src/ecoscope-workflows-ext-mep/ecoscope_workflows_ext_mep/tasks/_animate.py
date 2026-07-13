@@ -11,7 +11,7 @@ from PIL import Image
 import geopandas as gpd
 from pyproj import Transformer
 import concurrent.futures as cf
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from shapely.geometry import LineString
 from typing import Annotated, ClassVar, Literal, cast
 from pydantic.json_schema import SkipJsonSchema
@@ -260,6 +260,102 @@ class TimelineAnimation(BaseModel):
     ] = 0.0
 
 
+class _BasemapFields(BaseModel):
+    """Shared fields available on every basemap option (Default and Custom alike)."""
+
+    elevation_decoder: Annotated[
+        dict | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="RGB->elevation decoder. None -> Terrarium default. Feed "
+            "create_elevation_decoder's output here to apply vertical exaggeration; the same "
+            "decoder is used both to render the terrain mesh and to sample trip elevations.",
+        ),
+    ] = None
+
+
+class DefaultBasemap(_BasemapFields):
+    """Standard basemap: AWS Terrarium elevation tiles draped with ArcGIS World Imagery."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Default"})
+    preset: Annotated[Literal["default"], Field(default="default", title="Basemap")] = "default"
+
+
+class CustomBasemap(_BasemapFields):
+    """Provide your own elevation and/or texture tile URL templates."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Custom"})
+    preset: Annotated[Literal["custom"], Field(default="custom", title="Basemap")] = "custom"
+    tile_urls: Annotated[
+        dict | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="Custom elevation/texture tile URLs. None -> defaults. Feed "
+            "set_custom_basemap_urls's output here.",
+        ),
+    ] = None
+
+
+BasemapOption = Annotated[DefaultBasemap | CustomBasemap, Field(discriminator="preset")]
+
+
+@task
+def set_custom_basemap_urls(
+    elevation_data: Annotated[
+        PydeckString,
+        AdvancedField(
+            default=DEFAULT_TERRAIN_URL,
+            description="URL template (or single image) for the RGB-encoded elevation tiles.",
+        ),
+    ] = DEFAULT_TERRAIN_URL,
+    texture: Annotated[
+        PydeckString | SkipJsonSchema[None],
+        AdvancedField(default=SURFACE, description="URL template for tiles draped over the terrain."),
+    ] = SURFACE,
+) -> dict:
+    """Advanced elevation/texture tile URLs for a custom basemap.
+
+    Feed this task's return value into set_basemap_option's `basemap.tile_urls` field (only
+    used when `preset: custom`) so these surface as their own advanced, collapsed fields on
+    the config form instead of being bundled directly into the Custom basemap variant.
+    """
+    return {"elevation_data": elevation_data, "texture": texture}
+
+
+def _resolve_basemap(basemap: DefaultBasemap | CustomBasemap) -> tuple[str, str | None, dict]:
+    """Resolve a basemap option to (elevation_data, texture, elevation_decoder).
+
+    Both create_terrain_layer and trajectory_to_trips call this so the rendered mesh and the
+    sampled trip elevations always agree -- wire both tasks to the SAME basemap value (e.g. via
+    a shared set_basemap_option step in the workflow spec) to guarantee that in practice.
+    """
+    decoder = basemap.elevation_decoder or dict(TERRARIUM_ELEVATION_DECODER)
+    if isinstance(basemap, CustomBasemap):
+        urls = basemap.tile_urls or {}
+        return (
+            urls.get("elevation_data", DEFAULT_TERRAIN_URL),
+            urls.get("texture", SURFACE),
+            decoder,
+        )
+    return DEFAULT_TERRAIN_URL, SURFACE, decoder
+
+
+@task
+def set_basemap_option(
+    basemap: Annotated[
+        BasemapOption,
+        Field(
+            description="Elevation + texture tile source (+ optional elevation decoder). Set this "
+            "once and reuse its return value for both create_terrain_layer's basemap and "
+            "trajectory_to_trips' terrain.basemap, so the rendered mesh and the sampled trip "
+            "elevations always agree."
+        ),
+    ] = DefaultBasemap(),
+) -> Annotated[BasemapOption, Field()]:
+    """Pass through a basemap selection so multiple tasks can share one workflow step."""
+    return basemap
+
+
 class TerrainLayerDefinition(BaseModel):
     """A 3D terrain layer built from RGB-encoded elevation tiles, optionally draped with a texture.
     See https://deck.gl/docs/api-reference/geo-layers/terrain-layer for more info."""
@@ -313,16 +409,11 @@ class TerrainSampling(BaseModel):
 
     offset: float = Field(default=30.0, description="Metres added above the sampled ground at every vertex.")
     zoom: int = Field(default=15, description="Terrarium tile zoom used for elevation sampling.")
-    elevation_data: str = Field(
-        default=DEFAULT_TERRAIN_URL,
-        description="Elevation tile URL template. Must match the TerrainLayer's elevation_data.",
-    )
-    elevation_decoder: dict | None = Field(
-        default=TERRARIUM_ELEVATION_DECODER,
-        description=(
-            "RGB->elevation decoder. Must match the TerrainLayer's elevation_decoder so "
-            "sampled z aligns with the rendered mesh. None -> Terrarium default."
-        ),
+    basemap: BasemapOption = Field(
+        default=DefaultBasemap(),
+        description="Elevation tile source (+ optional decoder). Pass the SAME value used for "
+        "create_terrain_layer's basemap (e.g. both referencing one set_basemap_option step) so "
+        "sampled z aligns with the rendered mesh.",
     )
     ground_elevation: float = Field(default=1000.0, description="Constant ground used only if DEM sampling fails.")
     cache_dir: str | None = Field(
@@ -332,29 +423,27 @@ class TerrainSampling(BaseModel):
 
 @task
 def create_terrain_layer(
-    elevation_data: Annotated[
-        str, Field(description="URL template for RGB-encoded elevation tiles.")
-    ] = DEFAULT_TERRAIN_URL,
-    texture: Annotated[
-        str | SkipJsonSchema[None],
-        Field(description="URL template for tiles draped over the terrain."),
-    ] = SURFACE,
+    basemap: Annotated[
+        BasemapOption,
+        Field(
+            description="Elevation + texture tile source. Default uses AWS Terrarium elevation "
+            "tiles draped with ArcGIS World Imagery; choose Custom to supply your own tile URL "
+            "templates."
+        ),
+    ] = DefaultBasemap(),
     wireframe: Annotated[bool, AdvancedField(default=False)] = False,
     min_zoom: Annotated[int, AdvancedField(default=0)] = 0,
     max_zoom: Annotated[int, AdvancedField(default=15)] = 15,
-    elevation_decoder: Annotated[
-        dict | SkipJsonSchema[None],
-        AdvancedField(default=None, description="RGB->elevation decoder. Defaults to Terrarium."),
-    ] = None,
 ) -> Annotated[TerrainLayerDefinition, Field()]:
     """Creates a terrain layer definition from elevation tiles (+ optional texture)."""
+    elevation_data, texture, elevation_decoder = _resolve_basemap(basemap)
     return TerrainLayerDefinition(
         elevation_data=elevation_data,
         texture=texture,
         min_zoom=min_zoom,
         max_zoom=max_zoom,
         wireframe=wireframe,
-        elevation_decoder=elevation_decoder or dict(TERRARIUM_ELEVATION_DECODER),
+        elevation_decoder=elevation_decoder,
     )
 
 
@@ -729,11 +818,12 @@ def trajectory_to_trips(
     # --- One batched elevation sample for the entire job ----------------------------
     if terrain is not None and all_lonlats:
         try:
+            elevation_data, _texture, elevation_decoder = _resolve_basemap(terrain.basemap)
             elevs = sample_elevations(
                 all_lonlats,
                 zoom=terrain.zoom,
-                url=terrain.elevation_data,
-                decoder=terrain.elevation_decoder,
+                url=elevation_data,
+                decoder=elevation_decoder,
                 cache_dir=terrain.cache_dir,
             )
             zs_all = [e + terrain.offset for e in elevs]

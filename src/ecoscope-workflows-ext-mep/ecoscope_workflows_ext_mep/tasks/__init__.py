@@ -34,6 +34,8 @@ from ._tabular_ops import (
 )
 from ._tabular_file import get_local_tabular_path, load_local_tabular_file
 from ._predation_context import generate_predation_report
+from ._gate import gate_earthranger_client
+from ._mep_spatial_features import get_mep_spatial_features, get_mep_featureset
 from ._animate import (
     create_terrain_layer,
     create_trips_layer,
@@ -45,6 +47,8 @@ from ._animate import (
     create_timeline_animation,
     compute_view_state_from_gdf,
     append_optional_layer,
+    set_basemap_option,
+    set_custom_basemap_urls,
 )
 from ._render_animation import (
     configure_video_export, render_animation,
@@ -105,4 +109,9 @@ __all__ = [
     "compute_view_state_from_gdf",
     "derive_camera_keyframes",
     "append_optional_layer",
+    "set_basemap_option",
+    "set_custom_basemap_urls",
+    "gate_earthranger_client",
+    "get_mep_spatial_features",
+    "get_mep_featureset",
 ]
