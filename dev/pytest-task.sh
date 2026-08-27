@@ -3,7 +3,7 @@
 python_version=$1
 
 command="pixi run \
---manifest-path ${manifest_path} \
+--manifest-path src/ecoscope-workflows-ext-mep/pyproject.toml \
 --environment test-py${python_version} \
 pytest src/ecoscope-workflows-ext-mep/tests -vv"
 
