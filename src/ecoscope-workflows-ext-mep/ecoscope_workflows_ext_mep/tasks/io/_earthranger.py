@@ -4,6 +4,7 @@ from typing import Annotated
 from ecoscope.platform.connections import EarthRangerClient
 from ecoscope.platform.annotations import AdvancedField, AnyDataFrame
 
+
 @register()
 def get_subjects(
     client: EarthRangerClient,

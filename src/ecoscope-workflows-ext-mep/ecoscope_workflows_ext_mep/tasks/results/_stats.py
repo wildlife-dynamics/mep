@@ -3,7 +3,8 @@ from ecoscope.platform.tasks import analysis
 from wt_registry import register
 import pandas as pd
 from typing import cast
-from ecoscope.platform.annotations import AnyDataFrame,AnyGeoDataFrame
+from ecoscope.platform.annotations import AnyDataFrame, AnyGeoDataFrame
+
 
 @register()
 def compute_subject_stats(
@@ -17,11 +18,10 @@ def compute_subject_stats(
     # Ensure single subject
     non_null_ids = traj_gdf["groupby_col"].dropna().unique()
     if len(non_null_ids) == 0:
-        raise ValueError(f"No non-null values found in 'groupby_col'.")
+        raise ValueError("No non-null values found in 'groupby_col'.")
     if len(non_null_ids) > 1:
         raise ValueError(
-            f"Multiple subjects present in 'groupby_col' (found {len(non_null_ids)}). "
-            "Provide a single-subject GDF."
+            f"Multiple subjects present in 'groupby_col' (found {len(non_null_ids)}). " "Provide a single-subject GDF."
         )
     subject_id = non_null_ids[0]
 

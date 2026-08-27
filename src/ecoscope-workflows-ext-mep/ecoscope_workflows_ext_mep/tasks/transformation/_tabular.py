@@ -5,6 +5,7 @@ from ecoscope.platform.annotations import AnyDataFrame
 
 ColumnName = Annotated[str, Field(description="Column to aggregate")]
 
+
 @register()
 def dataframe_column_unique(
     df: AnyDataFrame,

@@ -1,5 +1,5 @@
 from ._earthranger import get_subjects
 
-__all__=[
+__all__ = [
     "get_subjects",
 ]

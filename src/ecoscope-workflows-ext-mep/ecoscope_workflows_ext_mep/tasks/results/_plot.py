@@ -1,19 +1,20 @@
-import pandas as pd 
+import pandas as pd
 import numpy as np
 import ecoscope
 import plotly.graph_objs as go  # type: ignore[import-untyped]
 from wt_registry import register
+from pydantic import Field
 from ecoscope.trajectory import Trajectory
 from ecoscope.relocations import Relocations
-from typing import Union, Annotated, Optional,Field
+from typing import Union, Annotated, Optional
 from ecoscope.platform.schemas import RelocationsGDFSchema
 from ecoscope.platform.tasks.results._ecoplot import ExportArgs
 from ecoscope.platform.annotations import AnyGeoDataFrame, AnyDataFrame
 
 
 DEFAULT_SEASON_COLORS = {
-    "wet": "rgba(30, 144, 255, 0.18)",   # blue
-    "dry": "rgba(30, 144, 255, 0.05)",   # amber
+    "wet": "rgba(30, 144, 255, 0.18)",  # blue
+    "dry": "rgba(30, 144, 255, 0.05)",  # amber
 }
 FALLBACK_COLOR = "rgba(120, 120, 120, 0.10)"
 
@@ -39,8 +40,10 @@ def nsd(
 
     # Resolve which column labels the traces
     if legend_column is not None and legend_column not in relocations.columns:
-        print(f"legend_column '{legend_column}' not found; using 'groupby_col'. "
-              f"Available: {list(relocations.columns)}")
+        print(
+            f"legend_column '{legend_column}' not found; using 'groupby_col'. "
+            f"Available: {list(relocations.columns)}"
+        )
         legend_column = None
     label_col = legend_column or "groupby_col"
 
@@ -77,6 +80,7 @@ def nsd(
     fig.update_xaxes(range=[gdf["fixtime"].min(), gdf["fixtime"].max()])
     return fig
 
+
 def add_seasons_square(
     fig: go.Figure,
     season_df: AnyDataFrame,
@@ -104,7 +108,7 @@ def add_seasons_square(
             start_dt = pd.to_datetime(row["start"])
             end_dt = pd.to_datetime(row["end"])
         except Exception as e:
-            print(f"Skipping season row {idx}: unparseable dates ({e})")
+            print(f"Skipping season row {idx}: unparsable dates ({e})")
             continue
         if pd.isna(start_dt) or pd.isna(end_dt) or end_dt <= start_dt:
             print(f"Skipping season row {idx}: invalid interval {row['start']!r} -> {row['end']!r}")
@@ -115,8 +119,11 @@ def add_seasons_square(
 
         fig.add_shape(
             type="rect",
-            x0=start_dt, x1=end_dt,
-            y0=0, y1=1, yref="paper",
+            x0=start_dt,
+            x1=end_dt,
+            y0=0,
+            y1=1,
+            yref="paper",
             fillcolor=fillcolor,
             line_width=0,
             layer="below",
@@ -125,7 +132,9 @@ def add_seasons_square(
         if show_labels:
             fig.add_annotation(
                 x=start_dt + (end_dt - start_dt) / 2,
-                y=0.5, yref="paper", yanchor="middle",
+                y=0.5,
+                yref="paper",
+                yanchor="middle",
                 text=season_type or "?",
                 textangle=-90,
                 showarrow=False,
@@ -137,7 +146,8 @@ def add_seasons_square(
             seen_seasons.add(season_type)
             fig.add_trace(
                 go.Scatter(
-                    x=[None], y=[None],
+                    x=[None],
+                    y=[None],
                     mode="markers",
                     marker=dict(size=12, color=fillcolor, symbol="square"),
                     name=season_type.capitalize(),
@@ -148,12 +158,13 @@ def add_seasons_square(
 
     return fig
 
+
 @register()
 def draw_season_nsd_plot(
     relocations_gdf: AnyGeoDataFrame,
     seasons_df: AnyDataFrame,
-    legend_column: Union[str|None]=None,
-    season_colors: Union[dict[str,str]|None]=None,
+    legend_column: Union[str | None] = None,
+    season_colors: Union[dict[str, str] | None] = None,
     widget_id: Annotated[
         str | None,
         Field(
@@ -165,16 +176,13 @@ def draw_season_nsd_plot(
         ),
     ] = None,
 ) -> Annotated[str, Field()]:
-    #relocations_gdf = Relocations.from_gdf(relocations_gdf)
-    figure = nsd(relocations=relocations_gdf,legend_column=legend_column)
+    # relocations_gdf = Relocations.from_gdf(relocations_gdf)
+    figure = nsd(relocations=relocations_gdf, legend_column=legend_column)
     figure = add_seasons_square(
-        fig =figure, 
-        season_df = seasons_df,
-        show_labels=False,
-        colors=season_colors,
-        show_legend=False
+        fig=figure, season_df=seasons_df, show_labels=False, colors=season_colors, show_legend=False
     )
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
+
 
 def speed(trajectory: ecoscope.Trajectory) -> go.Figure:
     times = np.column_stack(
@@ -207,11 +215,12 @@ def speed(trajectory: ecoscope.Trajectory) -> go.Figure:
     )
     return fig
 
+
 @register()
 def draw_season_speed_plot(
     relocations_gdf: AnyGeoDataFrame,
     seasons_df: AnyDataFrame,
-    season_colors: Union[dict[str,str]|None]=None,
+    season_colors: Union[dict[str, str] | None] = None,
     widget_id: Annotated[
         str | None,
         Field(
@@ -229,11 +238,7 @@ def draw_season_speed_plot(
     trajs_gdf = Trajectory.from_relocations(relocations_gdf)
     figure = speed(trajs_gdf)
     figure = add_seasons_square(
-        fig =figure, 
-        season_df = seasons_df,
-        show_labels=False,
-        colors=season_colors,
-        show_legend=False
+        fig=figure, season_df=seasons_df, show_labels=False, colors=season_colors, show_legend=False
     )
     figure.update_xaxes(range=[x_min, x_max])
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
@@ -241,6 +246,7 @@ def draw_season_speed_plot(
 
 def mcp(relocations: ecoscope.Relocations) -> go.Figure:
     import shapely
+
     relocations.gdf.to_crs(relocations.gdf.estimate_utm_crs(), inplace=True)
     areas = []
     times = []
@@ -268,11 +274,12 @@ def mcp(relocations: ecoscope.Relocations) -> go.Figure:
     )
     return fig
 
+
 @register()
 def draw_season_mcp_plot(
     relocations_gdf: AnyGeoDataFrame,
     seasons_df: AnyDataFrame,
-    season_colors: Union[dict[str,str]|None]=None,
+    season_colors: Union[dict[str, str] | None] = None,
     widget_id: Annotated[
         str | None,
         Field(
@@ -292,14 +299,11 @@ def draw_season_mcp_plot(
     relocations_gdf = Relocations.from_gdf(relocations_gdf)
     figure = mcp(relocations_gdf)
     figure = add_seasons_square(
-        fig =figure, 
-        season_df = seasons_df,
-        show_labels=False,
-        colors=season_colors,
-        show_legend=False
+        fig=figure, season_df=seasons_df, show_labels=False, colors=season_colors, show_legend=False
     )
     figure.update_xaxes(range=[x_min, x_max])
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
+
 
 def collar_event_timeline_plot(
     geodataframe: AnyGeoDataFrame,
@@ -368,12 +372,13 @@ def collar_event_timeline_plot(
     )
     return fig
 
+
 @register()
 def draw_season_collared_plot(
     events_gdf: AnyDataFrame,
     relocations_gdf: AnyGeoDataFrame,
     seasons_df: AnyDataFrame,
-    season_colors: Union[dict[str,str]|None]=None,
+    season_colors: Union[dict[str, str] | None] = None,
     widget_id: Annotated[
         str | None,
         Field(
@@ -398,11 +403,7 @@ def draw_season_collared_plot(
     x_max = relocations_gdf["fixtime"].max()
     figure = collar_event_timeline_plot(relocations_gdf, events_gdf)
     figure = add_seasons_square(
-            fig =figure, 
-            season_df = seasons_df,
-            show_labels=False,
-            colors=season_colors,
-            show_legend=False
-        )
+        fig=figure, season_df=seasons_df, show_labels=False, colors=season_colors, show_legend=False
+    )
     figure.update_xaxes(range=[x_min, x_max])
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))

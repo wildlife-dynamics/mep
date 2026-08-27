@@ -1,12 +1,14 @@
-import os 
-import ecoscope 
+import os
+import ecoscope
 import hashlib
-import pandas as pd 
-from pathlib import Path 
+import pandas as pd
+from pathlib import Path
 from wt_registry import register
-from typing import Optional,Union,Annotated,Field,Dict
+from pydantic import Field
+from typing import Optional, Union, Annotated, Dict
 from ecoscope.platform.annotations import AnyDataFrame
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
+
 
 def safe_string(
     value: Annotated[str, Field(description="String to make safe for use as a filename")],
@@ -17,6 +19,7 @@ def safe_string(
     safe = re.sub(r"[^\w\s-]", "", value)
     safe = re.sub(r"\s+", "_", safe)
     return safe.lower().strip("_")
+
 
 @register()
 def persist_subject_photo(

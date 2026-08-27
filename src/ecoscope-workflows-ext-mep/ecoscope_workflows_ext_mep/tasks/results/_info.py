@@ -1,10 +1,11 @@
 import math
 import html
-import pandas as pd 
-from typing import cast,Dict
+import pandas as pd
+from typing import cast, Dict
 from datetime import datetime
 from wt_registry import register
 from ecoscope.platform.annotations import AnyDataFrame
+
 
 def safe_strip(x) -> str:
     """Return '' for None/NaN, else the stripped string."""
@@ -15,6 +16,7 @@ def safe_strip(x) -> str:
     s = str(x).strip()
     return "" if s.lower() in ("nan", "none", "nat") else s
 
+
 def scalar(row: pd.Series, key: str, default=""):
     """Get a scalar from a row even when duplicate column names make row[key] a Series."""
     value = row.get(key, default)
@@ -22,6 +24,7 @@ def scalar(row: pd.Series, key: str, default=""):
         non_null = value.dropna()
         value = non_null.iloc[0] if not non_null.empty else default
     return value
+
 
 def truncate_at_sentence(text: str, maxlen: int, min_sentence_pos: int = 40) -> str:
     if len(text) <= maxlen:
@@ -31,6 +34,7 @@ def truncate_at_sentence(text: str, maxlen: int, min_sentence_pos: int = 40) -> 
     if dot >= min_sentence_pos:
         return cut[: dot + 1]
     return cut.rstrip() + "..."
+
 
 def format_date(date_str) -> str:
     s = safe_strip(date_str)
@@ -50,12 +54,21 @@ def format_date(date_str) -> str:
             continue
     return s
 
+
 OUTPUT_COLUMNS = [
-    "subject_name", "dob", "sex", "country", "notes",
-    "status", "status_raw", "bio", "distribution",
+    "subject_name",
+    "dob",
+    "sex",
+    "country",
+    "notes",
+    "status",
+    "status_raw",
+    "bio",
+    "distribution",
 ]
 
 STATUS_COLORS = {"active": "green"}  # everything else -> red
+
 
 @register()
 def process_subject_information(
@@ -72,10 +85,7 @@ def process_subject_information(
 
         status_value = safe_strip(scalar(row, "status"))
         status_color = STATUS_COLORS.get(status_value.lower(), "red")
-        status_html = (
-            f'<span style="color: {status_color};">{html.escape(status_value)}</span>'
-            if status_value else ""
-        )
+        status_html = f'<span style="color: {status_color};">{html.escape(status_value)}</span>' if status_value else ""
 
         return {
             "subject_name": safe_strip(scalar(row, "subject_name")).title(),

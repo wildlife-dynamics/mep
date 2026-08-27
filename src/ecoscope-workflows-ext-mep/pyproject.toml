@@ -4,6 +4,9 @@ dynamic = ["version"]
 requires-python = ">=3.10"
 description = "Extension tasks and connections for the template repo."
 readme = "README.md"
+dependencies = [
+    "wt-registry",
+]
 classifiers = [
     "Development Status :: 1 - Planning",
     "Operating System :: OS Independent",
@@ -13,7 +16,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 license = { text = "BSD-3-Clause" }
-[project.entry-points."ecoscope_workflows"]
+[project.entry-points."wt_registry"]
 tasks = "ecoscope_workflows_ext_mep.tasks"
 
 
@@ -43,16 +46,13 @@ channels = [
     "conda-forge",
 ]
 
-platforms = ["linux-64", "osx-arm64", "win-64"]
+platforms = ["linux-64", "osx-arm64", "win-64", "osx-64"]
+channel-priority = "disabled"
 
 [tool.pixi.pypi-dependencies]
 ecoscope-workflows-ext-mep = { path = ".", editable = true }
 
 [tool.pixi.dependencies]
-# restating dependencies from ecoscope-workflows.core to ensure they are included
-# todo: ensure exact 1:1 synchronization with ecoscope-workflows.core
-# note: if depending on a conda release of ecoscope-workflows, restatement should not be necessary
-# perhaps possible to demonstrate this here by making the restatement specific to a 'dev' environment
 jinja2 = "*"
 pandera = ">0.20.0"
 pydantic = "<2.9.0"
@@ -64,13 +64,8 @@ tomli-w = "*"
 geopandas="*"
 shapely = "*"
 numpy="2,<2.1"
-ecoscope-workflows-ext-mnc = "*"
-ecoscope-workflows-ext-lion-guardians = "0.0.6.*"
-ecoscope-workflows-ext-ste = "0.0.22.*"
-ecoscope-workflows-ext-big-life = "0.0.11.*"
-ecoscope-workflows-core =">=0.22.17"
-ecoscope-workflows-ext-ecoscope=">=0.22.17"
-ecoscope-workflows-ext-custom = "0.0.57.*"
+ecoscope-workflows-ext-custom = "0.1.0rc14.*"
+ecoscope-workflows-ext-ste = "0.0.0rc1.*"
 docxtpl="*"
 playwright="*"
 setuptools="81.0.0.*"

@@ -1,8 +1,9 @@
 from shapely.geometry import Polygon, MultiPolygon
-from typing import cast,Dict,Union,List
-import pandas as pd 
+from typing import cast, Dict, Union, List
+import pandas as pd
 from wt_registry import register
-from ecoscope.platform.annotations import AnyGeoDataFrame,AnyDataFrame
+from ecoscope.platform.annotations import AnyGeoDataFrame, AnyDataFrame
+
 
 @register()
 def build_ldx_template_region_lookup(
@@ -12,7 +13,7 @@ def build_ldx_template_region_lookup(
     Build a lookup dictionary grouping region IDs by category type.
     """
     gdf = gdf.reset_index()
-    categories ={
+    categories = {
         "national_pa_use": [
             "National Park",
             "National Reserve",
@@ -24,7 +25,7 @@ def build_ldx_template_region_lookup(
     }
 
     # Default static UUIDs
-    static_ids ={
+    static_ids = {
         "crop_raid_percent": ["2d3f6392-700c-495f-8bc5-087538f6f125"],
         "kenya_use": ["7895ded1-df29-4ca1-8e34-ebc8e3cbb24e"],
     }
@@ -35,18 +36,19 @@ def build_ldx_template_region_lookup(
     result.update(static_ids)
     return result
 
+
 @register()
 def compute_template_regions(
-    geodataframe: AnyGeoDataFrame, 
-    template_lookup: Dict[str, list[str]], 
-    crs: str
+    geodataframe: AnyGeoDataFrame, template_lookup: Dict[str, list[str]], crs: str
 ) -> Dict[str, Polygon | MultiPolygon]:
-    return {
-        template: geodataframe.query("globalid in @gids").to_crs(crs).union_all()
-        for template, gids in template_lookup.items()
-    }
+    result = {}
+    for template, gids in template_lookup.items():
+        union = geodataframe.query("globalid in @gids").to_crs(crs).union_all()
+        result[template] = union if not union.is_empty else Polygon()
+    return result
 
-@register() 
+
+@register()
 def compute_subject_occupancy(
     subjects_df: AnyDataFrame,
     crs: str,
@@ -56,7 +58,7 @@ def compute_subject_occupancy(
     subject_id = subjects_df["subject_name"].iloc[0]
     # Get home range at 99.9th percentile and convert to target CRS
     try:
-        percentile_mask = etd_gdf["percentile"] == 99.999
+        percentile_mask = etd_gdf["percentile"] == 99.9
         if not percentile_mask.any():
             raise ValueError(
                 f"`compute_subject_occupancy`:No 99.9th percentile found for subject '{subject_id}'. "
