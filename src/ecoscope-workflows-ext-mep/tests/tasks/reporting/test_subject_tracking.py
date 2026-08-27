@@ -18,7 +18,6 @@ from __future__ import annotations
 import math
 
 import pandas as pd
-import pytest
 from docxtpl import DocxTemplate, InlineImage
 
 from ecoscope_workflows_ext_mep.tasks.reporting._subject_tracking import (
@@ -180,9 +179,7 @@ class TestBuildSubjectContext:
         pd.DataFrame(
             [{"subject_name": subject_name, "dob": "01 Jan 2020", "sex": "Female", "country": "Kenya"}]
         ).to_csv(tmp_path / f"{subject_name}_subject_info.csv", index=False)
-        pd.DataFrame([{"mcp": 12.3, "etd": 4.5}]).to_csv(
-            tmp_path / f"{subject_name}_subject_stats.csv", index=False
-        )
+        pd.DataFrame([{"mcp": 12.3, "etd": 4.5}]).to_csv(tmp_path / f"{subject_name}_subject_stats.csv", index=False)
         pd.DataFrame([{"national_pa_use": 50.0}]).to_csv(
             tmp_path / f"{subject_name}_subject_occupancy.csv", index=False
         )
@@ -242,13 +239,16 @@ class TestPrepareContext:
 
         assert result["profile_photo"] is None
 
-    def test_empty_image_path_becomes_none(self, tmp_path, make_docx_template):
+    def test_empty_image_path_is_left_unchanged(self, tmp_path, make_docx_template):
+        # Unlike the missing-file/invalid-image branches (which overwrite
+        # the field with None), the empty-path branch just logs and
+        # `continue`s -- the original falsy value passes through as-is.
         template = DocxTemplate(str(make_docx_template(["{{ profile_photo }}"])))
         context = {"profile_photo": ""}
 
         result = prepare_context(context, template)
 
-        assert result["profile_photo"] is None
+        assert result["profile_photo"] == ""
 
     def test_non_image_fields_are_passed_through_unchanged(self, tmp_path, make_docx_template):
         template = DocxTemplate(str(make_docx_template(["{{ name }}"])))
@@ -274,9 +274,7 @@ class TestPrepareContext:
 
 
 class TestGenerateSubjectReport:
-    def test_renders_and_saves_a_docx_with_subject_fields(
-        self, tmp_path, make_png, make_docx_template, read_docx_text
-    ):
+    def test_renders_and_saves_a_docx_with_subject_fields(self, tmp_path, make_png, make_docx_template, read_docx_text):
         subject_name = "Cherop"
         pd.DataFrame([{"subject_name": subject_name, "dob": "01 Jan 2020"}]).to_csv(
             tmp_path / f"{subject_name}_subject_info.csv", index=False
@@ -286,9 +284,7 @@ class TestGenerateSubjectReport:
 
         df = pd.DataFrame({"subject_name": [subject_name]})
 
-        result_path = generate_subject_report(
-            df=df, output_dir=str(tmp_path), template_path=str(template_path)
-        )
+        result_path = generate_subject_report(df=df, output_dir=str(tmp_path), template_path=str(template_path))
 
         assert result_path == str(tmp_path / "cherop.docx")
         texts = read_docx_text(result_path)
@@ -300,9 +296,7 @@ class TestGenerateSubjectReport:
         df = pd.DataFrame({"subject_name": [subject_name]})
         template_path = make_docx_template(["{{ name }}"])
 
-        result_path = generate_subject_report(
-            df=df, output_dir=str(tmp_path), template_path=str(template_path)
-        )
+        result_path = generate_subject_report(df=df, output_dir=str(tmp_path), template_path=str(template_path))
 
         assert result_path == str(tmp_path / "cherop_the_elephant.docx")
 
@@ -310,9 +304,7 @@ class TestGenerateSubjectReport:
         df = pd.DataFrame({"subject_name": ["Ghost"]})
         template_path = make_docx_template(["{{ name }}"])
 
-        result_path = generate_subject_report(
-            df=df, output_dir=str(tmp_path), template_path=str(template_path)
-        )
+        result_path = generate_subject_report(df=df, output_dir=str(tmp_path), template_path=str(template_path))
 
         assert result_path is not None
         from pathlib import Path

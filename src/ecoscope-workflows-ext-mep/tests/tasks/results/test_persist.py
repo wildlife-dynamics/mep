@@ -65,9 +65,7 @@ class TestSafeString:
 
 class TestPersistSubjectPhoto:
     def test_downloads_photo_named_after_filename_column(self, tmp_path, _fake_download_file):
-        subject_df = pd.DataFrame(
-            {"photo": ["https://example.com/a.png"], "subject_name": ["Cherop"]}
-        )
+        subject_df = pd.DataFrame({"photo": ["https://example.com/a.png"], "subject_name": ["Cherop"]})
 
         result = persist_subject_photo(
             subject_df=subject_df,
