@@ -282,7 +282,7 @@
         "data_source"
       ],
       "type": "object",
-      "title": "Connect to earth ranger"
+      "title": "Connect to EarthRanger"
     },
     "gee_project_name": {
       "additionalProperties": false,
@@ -297,7 +297,7 @@
         "data_source"
       ],
       "type": "object",
-      "title": "Connect to earth engine"
+      "title": "Connect to EarthEngine"
     },
     "Subject Group": {
       "type": "object",
@@ -321,78 +321,55 @@
         }
       }
     },
-    "retrieve_ldx_db": {
-      "additionalProperties": false,
-      "properties": {
-        "input_method": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DownloadFile"
-            },
-            {
-              "$ref": "#/$defs/LocalFile"
-            }
-          ],
-          "title": "Input Method"
-        }
-      },
-      "required": [
-        "input_method"
-      ],
-      "type": "object",
-      "title": "Load landDx database"
-    },
     "custom_trajs_filter": {
       "additionalProperties": false,
       "properties": {
         "min_length_meters": {
           "default": 0.001,
           "title": "Min Length Meters",
-          "type": "number"
+          "type": "number",
+          "description": "Minimum segment length in meters.",
+          "ecoscope:advanced": true
         },
         "max_length_meters": {
           "default": 5000,
           "title": "Max Length Meters",
-          "type": "number"
+          "type": "number",
+          "description": "Maximum segment length in meters.",
+          "ecoscope:advanced": true
         },
         "min_time_secs": {
           "default": 1,
           "title": "Min Time Secs",
-          "type": "number"
+          "type": "number",
+          "description": "Minimum segment duration in seconds.",
+          "ecoscope:advanced": true
         },
         "max_time_secs": {
           "default": 21600,
           "title": "Max Time Secs",
-          "type": "number"
+          "type": "number",
+          "description": "Maximum segment duration in seconds.",
+          "ecoscope:advanced": true
         },
         "min_speed_kmhr": {
           "default": 0.01,
           "title": "Min Speed Kmhr",
-          "type": "number"
+          "type": "number",
+          "description": "Minimum segment speed in km/h.",
+          "ecoscope:advanced": true
         },
         "max_speed_kmhr": {
           "default": 9.0,
           "title": "Max Speed Kmhr",
-          "type": "number"
+          "type": "number",
+          "description": "Maximum segment speed in km/h.",
+          "ecoscope:advanced": true
         }
       },
       "type": "object",
       "required": [],
       "title": "Trajectory Segment Filter"
-    },
-    "gdf_bounding_extent": {
-      "additionalProperties": false,
-      "properties": {
-        "expansion_factor": {
-          "default": 1.05,
-          "title": "Expansion Factor",
-          "type": "number",
-          "description": "Factor to expand the bounding box (e.g., 1.2 = 20% larger)"
-        }
-      },
-      "required": [],
-      "type": "object",
-      "title": "Zoom to gdf extent"
     }
   },
   "$defs": {
@@ -450,34 +427,6 @@
       "title": "GoogleEarthEngineConnection",
       "type": "object"
     },
-    "DownloadFile": {
-      "properties": {
-        "url": {
-          "description": "URL to download a file",
-          "title": "URL",
-          "type": "string"
-        }
-      },
-      "required": [
-        "url"
-      ],
-      "title": "Download from URL",
-      "type": "object"
-    },
-    "LocalFile": {
-      "properties": {
-        "file_path": {
-          "description": "Path to a local file",
-          "title": "Local file path",
-          "type": "string"
-        }
-      },
-      "required": [
-        "file_path"
-      ],
-      "title": "Use local file",
-      "type": "object"
-    },
     "ValueGrouper": {
       "properties": {
         "index_name": {
@@ -523,9 +472,7 @@
       "er_client_name",
       "gee_project_name",
       "Subject Group",
-      "retrieve_ldx_db",
-      "custom_trajs_filter",
-      "gdf_bounding_extent"
+      "custom_trajs_filter"
     ]
   },
   "additionalProperties": false

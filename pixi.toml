@@ -17,18 +17,20 @@ rattler-build = "*"
 yq = "*"
 hatch = "*"
 pip="*"
-hatch-vcs = "*"
-virtualenv = "20.39.0.*"
+hatch-vcs="*"
+setuptools="*"
+playwright = ">=1.58.2,<2"
+wt-compiler = "==0.8.0"
+graphviz = "*"
 imageio-ffmpeg="*"
 
 [feature.compile.dependencies]
 ecoscope-workflows-ext-mep = "*"
-ecoscope-workflows-ext-lion-guardians = "0.0.6.*"
-ecoscope-workflows-ext-mnc = "0.0.9.*"
-ecoscope-workflows-ext-ste = "0.0.22.*"
-ecoscope-workflows-ext-big-life = "0.0.11.*"
-ecoscope-workflows-core = "0.22.17.*"
-ecoscope-workflows-ext-custom = "0.0.57.*"
+ecoscope-workflows-ext-ste ="0.0.0rc1.*"
+ecoscope-workflows-ext-custom = "0.1.0rc14.*"
+
+graphviz = "*"
+wt-compiler = "==0.8.0"
 
 [environments]
 compile = { features = ["compile"], no-default-feature = true }

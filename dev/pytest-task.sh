@@ -2,12 +2,8 @@
 
 python_version=$1
 
-manifest_path=src/ecoscope-workflows-ext-mep/pyproject.toml
-
-pixi update --manifest-path $manifest_path
-
 command="pixi run \
---manifest-path ${manifest_path} \
+--manifest-path src/ecoscope-workflows-ext-mep/pyproject.toml \
 --environment test-py${python_version} \
 pytest src/ecoscope-workflows-ext-mep/tests -vv"
 

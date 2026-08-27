@@ -12,8 +12,20 @@ echo "Building recipes: ${RECIPES[@]}"
 
 pixi clean cache --yes
 
-rm -rf /tmp/ecoscope-workflows-custom/release/artifacts
-mkdir -p /tmp/ecoscope-workflows-custom/release/artifacts
+# Setup output directory
+OUTPUT_DIR="/tmp/ecoscope-workflows-custom/release/artifacts"
+
+if [ -d "$OUTPUT_DIR" ]; then
+    echo "Output directory exists, cleaning up old files..."
+    # Delete all files starting with ecoscope-workflows-ext-mep or ecoscope-workflows-ext-custom
+    rm -f "$OUTPUT_DIR"/noarch/ecoscope-workflows-ext-mep*
+    rm -f "$OUTPUT_DIR"/noarch/ecoscope-workflows-ext-custom*
+    # Delete repodata.json if it exists
+    rm -f "$OUTPUT_DIR/noarch/repodata.json"
+else
+    echo "Creating output directory: $OUTPUT_DIR"
+    mkdir -p "$OUTPUT_DIR"
+fi
 
 for rec in "${RECIPES[@]}"; do
     echo "Building $rec"
