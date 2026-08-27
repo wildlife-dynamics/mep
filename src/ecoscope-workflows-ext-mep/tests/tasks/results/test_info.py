@@ -183,14 +183,14 @@ class TestProcessSubjectInformation:
 
         result = process_subject_information(subject_df)
 
-        assert 'color: green' in result.iloc[0]["status"]
+        assert "color: green" in result.iloc[0]["status"]
 
     def test_inactive_status_is_rendered_red(self):
         subject_df = pd.DataFrame([{"status": "deceased"}])
 
         result = process_subject_information(subject_df)
 
-        assert 'color: red' in result.iloc[0]["status"]
+        assert "color: red" in result.iloc[0]["status"]
 
     def test_missing_status_produces_empty_status_html(self):
         subject_df = pd.DataFrame([{"subject_name": "cherop"}])
@@ -239,9 +239,7 @@ class TestProcessSubjectInformation:
         assert list(result.columns) == OUTPUT_COLUMNS
 
     def test_multiple_rows_are_each_processed(self):
-        subject_df = pd.DataFrame(
-            [{"subject_name": "cherop"}, {"subject_name": "esposito"}]
-        )
+        subject_df = pd.DataFrame([{"subject_name": "cherop"}, {"subject_name": "esposito"}])
 
         result = process_subject_information(subject_df)
 

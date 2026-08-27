@@ -193,17 +193,13 @@ class TestDrawSeasonCollaredPlot:
             }
         )
 
-        html = draw_season_collared_plot(
-            events_gdf=events_gdf, relocations_gdf=relocs_gdf, seasons_df=seasons_df
-        )
+        html = draw_season_collared_plot(events_gdf=events_gdf, relocations_gdf=relocs_gdf, seasons_df=seasons_df)
 
         assert isinstance(html, str)
         assert "<div" in html
 
     def test_none_events_still_returns_html(self, relocs_gdf, seasons_df):
-        html = draw_season_collared_plot(
-            events_gdf=None, relocations_gdf=relocs_gdf, seasons_df=seasons_df
-        )
+        html = draw_season_collared_plot(events_gdf=None, relocations_gdf=relocs_gdf, seasons_df=seasons_df)
 
         assert isinstance(html, str)
         assert "<div" in html
@@ -219,8 +215,6 @@ class TestDrawSeasonCollaredPlot:
         )
 
         # Should not raise even though no events match this subject.
-        html = draw_season_collared_plot(
-            events_gdf=events_gdf, relocations_gdf=relocs_gdf, seasons_df=seasons_df
-        )
+        html = draw_season_collared_plot(events_gdf=events_gdf, relocations_gdf=relocs_gdf, seasons_df=seasons_df)
 
         assert isinstance(html, str)

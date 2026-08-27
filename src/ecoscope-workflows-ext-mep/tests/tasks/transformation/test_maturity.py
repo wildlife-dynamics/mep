@@ -33,9 +33,7 @@ class TestComputeSubjectMaturity:
             ]
         )
 
-        result = compute_subject_maturity(
-            subjects_df=subjects_df, relocations_gdf=relocations_gdf, months_duration=6
-        )
+        result = compute_subject_maturity(subjects_df=subjects_df, relocations_gdf=relocations_gdf, months_duration=6)
 
         assert bool(result.loc[result["groupby_col"] == "s1", "mature"].iloc[0]) is True
 
@@ -48,9 +46,7 @@ class TestComputeSubjectMaturity:
             ]
         )
 
-        result = compute_subject_maturity(
-            subjects_df=subjects_df, relocations_gdf=relocations_gdf, months_duration=6
-        )
+        result = compute_subject_maturity(subjects_df=subjects_df, relocations_gdf=relocations_gdf, months_duration=6)
 
         assert bool(result.loc[result["groupby_col"] == "s1", "mature"].iloc[0]) is False
 
@@ -73,9 +69,7 @@ class TestComputeSubjectMaturity:
             ]
         )
 
-        result = compute_subject_maturity(
-            subjects_df=subjects_df, relocations_gdf=relocations_gdf, months_duration=6
-        )
+        result = compute_subject_maturity(subjects_df=subjects_df, relocations_gdf=relocations_gdf, months_duration=6)
 
         assert bool(result.loc[result["groupby_col"] == "s1", "mature"].iloc[0]) is True
 

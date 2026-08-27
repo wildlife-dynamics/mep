@@ -181,18 +181,14 @@ class TestComputeSubjectOccupancy:
         etd_gdf = self._etd_gdf(_square(0, 0, size=10), percentile=95.0)
 
         with pytest.raises(ValueError, match="No 99.9th percentile"):
-            compute_subject_occupancy(
-                subjects_df=subjects_df, crs="EPSG:32737", etd_gdf=etd_gdf, regions_gdf={}
-            )
+            compute_subject_occupancy(subjects_df=subjects_df, crs="EPSG:32737", etd_gdf=etd_gdf, regions_gdf={})
 
     def test_empty_home_range_geometry_raises(self):
         subjects_df = pd.DataFrame({"subject_name": ["Cherop"]})
         etd_gdf = self._etd_gdf(Polygon())
 
         with pytest.raises(ValueError, match="Home range geometry is empty"):
-            compute_subject_occupancy(
-                subjects_df=subjects_df, crs="EPSG:32737", etd_gdf=etd_gdf, regions_gdf={}
-            )
+            compute_subject_occupancy(subjects_df=subjects_df, crs="EPSG:32737", etd_gdf=etd_gdf, regions_gdf={})
 
     def test_zero_area_home_range_raises(self):
         subjects_df = pd.DataFrame({"subject_name": ["Cherop"]})
@@ -201,9 +197,7 @@ class TestComputeSubjectOccupancy:
         etd_gdf = self._etd_gdf(degenerate)
 
         with pytest.raises(ValueError, match="zero area"):
-            compute_subject_occupancy(
-                subjects_df=subjects_df, crs="EPSG:32737", etd_gdf=etd_gdf, regions_gdf={}
-            )
+            compute_subject_occupancy(subjects_df=subjects_df, crs="EPSG:32737", etd_gdf=etd_gdf, regions_gdf={})
 
     def test_region_intersection_error_falls_back_to_zero(self):
         subjects_df = pd.DataFrame({"subject_name": ["Cherop"]})
