@@ -8,6 +8,7 @@ from ecoscope.platform.annotations import AnyDataFrame
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 from ecoscope_workflows_ext_ste.tasks.transformation._tabular import safe_string
 
+
 def resolve_subject_file_paths(directory: str, subject_name: str) -> Dict[str, Optional[str]]:
     """
     Resolve on-disk paths for a subject's report assets using the
@@ -28,10 +29,8 @@ def resolve_subject_file_paths(directory: str, subject_name: str) -> Dict[str, O
         "subject_stats_table_path": f"{subject_name}_subject_stats.csv",
         "subject_occupancy_table_path": f"{subject_name}_subject_occupancy.csv",
     }
-    return {
-        key: (str(base / fname) if (base / fname).exists() else None)
-        for key, fname in suffix_map.items()
-    }
+    return {key: (str(base / fname) if (base / fname).exists() else None) for key, fname in suffix_map.items()}
+
 
 def _safe_get(df: Optional[pd.DataFrame], column: str, default: Any = "Undefined") -> Any:
     """Return the first value of a column, or `default` if the frame/column/value is empty/missing."""
@@ -42,11 +41,13 @@ def _safe_get(df: Optional[pd.DataFrame], column: str, default: Any = "Undefined
         return default
     return value
 
+
 def _read_csv(path: Optional[str]) -> Optional[pd.DataFrame]:
     """Read a CSV if the path exists, otherwise return None."""
     if path and Path(path).exists():
         return pd.read_csv(path)
     return None
+
 
 def is_valid_image(path: str) -> bool:
     """Check the file has a valid PNG or JPEG header (magic bytes)."""
@@ -56,6 +57,7 @@ def is_valid_image(path: str) -> bool:
         return header[:8] == b"\x89PNG\r\n\x1a\n" or header[:3] == b"\xff\xd8\xff"
     except Exception:
         return False
+
 
 def create_inline_image_inch(
     template: DocxTemplate,
@@ -70,6 +72,7 @@ def create_inline_image_inch(
         width=Inches(width_cm),
         height=Inches(height_cm),
     )
+
 
 def build_subject_context(df: pd.DataFrame, output_dir: str) -> Dict[str, Any]:
     """
@@ -125,6 +128,7 @@ def build_subject_context(df: pd.DataFrame, output_dir: str) -> Dict[str, Any]:
         "unprotected": _safe_get(subject_occupancy, "unprotected", 0),
     }
 
+
 IMAGE_FIELD_MAPPING = {
     "collar_event_timeline": {"height": 1.58, "width": 10.54},
     "nsd_plot": {"height": 2.61, "width": 10.58},
@@ -135,6 +139,7 @@ IMAGE_FIELD_MAPPING = {
     "overview_map": {"height": 7.06, "width": 5.4},
     "profile_photo": {"height": 3.69, "width": 3.54},
 }
+
 
 def prepare_context(context: Dict[str, Any], template: DocxTemplate) -> Dict[str, Any]:
     """Convert image paths in the context into InlineImage objects."""
@@ -166,6 +171,7 @@ def prepare_context(context: Dict[str, Any], template: DocxTemplate) -> Dict[str
             print(f"Failed to create InlineImage for {field_name}: {e}")
     return rendered_context
 
+
 @register()
 def generate_subject_report(
     df: AnyDataFrame,
@@ -185,7 +191,7 @@ def generate_subject_report(
     """
     template_path = remove_file_scheme(template_path)
     output_dir = remove_file_scheme(output_dir)
-    
+
     subject_name = df["subject_name"].iloc[0]
     subject_name = safe_string(value=subject_name)
     output_path = str(Path(output_dir) / f"{subject_name}.docx")
