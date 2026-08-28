@@ -60,215 +60,6 @@
       "description": "Choose the period of time to analyze.",
       "title": "Define analysis time range"
     },
-    "configure_base_maps": {
-      "additionalProperties": false,
-      "properties": {
-        "base_maps": {
-          "default": [
-            {
-              "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-              "opacity": 1,
-              "max_zoom": 20
-            },
-            {
-              "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-              "opacity": 0.5,
-              "max_zoom": 20
-            }
-          ],
-          "items": {
-            "title": "Base Layer",
-            "anyOf": [
-              {
-                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
-                "properties": {
-                  "url": {
-                    "default": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                    "title": "Preset Layer URL",
-                    "type": "string",
-                    "const": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                    "enum": [
-                      "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    ]
-                  },
-                  "opacity": {
-                    "default": 1,
-                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
-                    "maximum": 1.0,
-                    "minimum": 0.0,
-                    "title": "Layer Opacity",
-                    "type": "number"
-                  }
-                },
-                "title": "Open Street Map",
-                "type": "object"
-              },
-              {
-                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
-                "properties": {
-                  "url": {
-                    "default": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-                    "title": "Preset Layer URL",
-                    "type": "string",
-                    "const": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-                    "enum": [
-                      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
-                    ]
-                  },
-                  "opacity": {
-                    "default": 1,
-                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
-                    "maximum": 1.0,
-                    "minimum": 0.0,
-                    "title": "Layer Opacity",
-                    "type": "number"
-                  }
-                },
-                "title": "Roadmap",
-                "type": "object"
-              },
-              {
-                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
-                "properties": {
-                  "url": {
-                    "default": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                    "title": "Preset Layer URL",
-                    "type": "string",
-                    "const": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                    "enum": [
-                      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                    ]
-                  },
-                  "opacity": {
-                    "default": 1,
-                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
-                    "maximum": 1.0,
-                    "minimum": 0.0,
-                    "title": "Layer Opacity",
-                    "type": "number"
-                  }
-                },
-                "title": "Satellite",
-                "type": "object"
-              },
-              {
-                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
-                "properties": {
-                  "url": {
-                    "default": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-                    "title": "Preset Layer URL",
-                    "type": "string",
-                    "const": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-                    "enum": [
-                      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
-                    ]
-                  },
-                  "opacity": {
-                    "default": 1,
-                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
-                    "maximum": 1.0,
-                    "minimum": 0.0,
-                    "title": "Layer Opacity",
-                    "type": "number"
-                  }
-                },
-                "title": "Terrain",
-                "type": "object"
-              },
-              {
-                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
-                "properties": {
-                  "url": {
-                    "default": "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}",
-                    "title": "Preset Layer URL",
-                    "type": "string",
-                    "const": "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}",
-                    "enum": [
-                      "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}"
-                    ]
-                  },
-                  "opacity": {
-                    "default": 1,
-                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
-                    "maximum": 1.0,
-                    "minimum": 0.0,
-                    "title": "Layer Opacity",
-                    "type": "number"
-                  }
-                },
-                "title": "LandDx",
-                "type": "object"
-              },
-              {
-                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
-                "properties": {
-                  "url": {
-                    "default": "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
-                    "title": "Preset Layer URL",
-                    "type": "string",
-                    "const": "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
-                    "enum": [
-                      "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"
-                    ]
-                  },
-                  "opacity": {
-                    "default": 1,
-                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
-                    "maximum": 1.0,
-                    "minimum": 0.0,
-                    "title": "Layer Opacity",
-                    "type": "number"
-                  }
-                },
-                "title": "USGS Hillshade",
-                "type": "object"
-              },
-              {
-                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
-                "properties": {
-                  "url": {
-                    "default": "https://example.tiles.com/{z}/{x}/{y}.png",
-                    "description": "The URL of a publicly accessible tiled raster service.",
-                    "pattern": "https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}([-a-zA-Z0-9()@:%_\\+.~#?&//=\\{\\}]*)",
-                    "title": "Custom Layer URL",
-                    "type": "string"
-                  },
-                  "opacity": {
-                    "default": 1,
-                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
-                    "maximum": 1.0,
-                    "minimum": 0.0,
-                    "title": "Custom Layer Opacity",
-                    "type": "number"
-                  },
-                  "max_zoom": {
-                    "default": 20,
-                    "description": "Set the maximum zoom level to fetch tiles for.",
-                    "title": "Custom Layer Max Zoom",
-                    "type": "integer"
-                  },
-                  "min_zoom": {
-                    "default": 0,
-                    "description": "Set the minimum zoom level to fetch tiles for.",
-                    "title": "Custom Layer Min Zoom",
-                    "type": "integer"
-                  }
-                },
-                "title": "Custom Layer (Advanced)",
-                "type": "object"
-              }
-            ]
-          },
-          "title": " ",
-          "type": "array",
-          "description": "Select tile layers to use as base layers in map outputs. The first layer in the list will be the bottommost layer displayed.",
-          "ecoscope:advanced": true
-        }
-      },
-      "type": "object",
-      "required": [],
-      "title": "Configure base map layers"
-    },
     "er_client_name": {
       "additionalProperties": false,
       "properties": {
@@ -297,6 +88,56 @@
       ],
       "type": "object",
       "title": ""
+    },
+    "set_previous_period": {
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresetPreviousPeriod"
+            },
+            {
+              "$ref": "#/$defs/CustomPreviousPeriod"
+            },
+            {
+              "$ref": "#/$defs/CalendarPreviousPeriod"
+            }
+          ],
+          "title": "Offset",
+          "description": "How to compute the start of the comparison period."
+        }
+      },
+      "required": [
+        "offset"
+      ],
+      "type": "object",
+      "title": ""
+    },
+    "generate_word_report": {
+      "additionalProperties": false,
+      "properties": {
+        "org_logo_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Org Logo Path"
+        }
+      },
+      "required": [
+        "org_logo_path"
+      ],
+      "type": "object",
+      "title": "Generate Collar Voltage Word Report"
     }
   },
   "$defs": {
@@ -340,6 +181,81 @@
       ],
       "title": "EarthRangerConnection",
       "type": "object"
+    },
+    "CalendarPreviousPeriod": {
+      "properties": {
+        "since": {
+          "description": "Select the start date for the comparison period.",
+          "format": "date-time",
+          "title": "Since",
+          "type": "string"
+        }
+      },
+      "required": [
+        "since"
+      ],
+      "title": "Calendar",
+      "type": "object"
+    },
+    "CustomPreviousPeriod": {
+      "properties": {
+        "years": {
+          "default": 0,
+          "title": "Years",
+          "type": "integer"
+        },
+        "months": {
+          "default": 0,
+          "title": "Months",
+          "type": "integer"
+        },
+        "weeks": {
+          "default": 0,
+          "title": "Weeks",
+          "type": "integer"
+        },
+        "days": {
+          "default": 0,
+          "title": "Days",
+          "type": "integer"
+        },
+        "hours": {
+          "default": 0,
+          "title": "Hours",
+          "type": "integer"
+        },
+        "minutes": {
+          "default": 0,
+          "title": "Minutes",
+          "type": "integer"
+        },
+        "seconds": {
+          "default": 0,
+          "title": "Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "Custom",
+      "type": "object"
+    },
+    "PresetPreviousPeriod": {
+      "properties": {
+        "preset": {
+          "default": "1 month back",
+          "description": "Choose a predefined time offset.",
+          "enum": [
+            "Same as current period",
+            "1 month back",
+            "3 months back",
+            "6 months back",
+            "1 year back"
+          ],
+          "title": "Preset",
+          "type": "string"
+        }
+      },
+      "title": "Preset",
+      "type": "object"
     }
   },
   "uiSchema": {
@@ -360,9 +276,10 @@
     "ui:order": [
       "workflow_details",
       "time_range",
-      "configure_base_maps",
       "er_client_name",
-      "subject_group_var"
+      "subject_group_var",
+      "set_previous_period",
+      "generate_word_report"
     ]
   },
   "additionalProperties": false

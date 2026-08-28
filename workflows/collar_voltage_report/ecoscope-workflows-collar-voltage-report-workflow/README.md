@@ -5,32 +5,29 @@
 
 ```yaml
 # fingerprint:
-artifacts_sha256_basic: 7c0c76a2821e8669f553821f0093f8fe2c1ac4353a88e9af8a7bcf58b39237d0
-artifacts_sha256_strict: 2f0f95c7c86ef1d6d8df22a8c653eea192c7378b15a54e336a0323827125855c
+artifacts_sha256_basic: 98e94a969d90972cf63f424120717b89d29ce3c3abad1326a744badb4d06f479
+artifacts_sha256_strict: fdd7cf895e7ad731b5254690a9a0f5d1eee776943470081def3e1a6922cf38a8
 installed_requirements:
 - channel: https://repo.prefix.dev/ecoscope-workflows/
-  name: ecoscope-workflows-core
-  version: {version: ==0.22.17}
-- channel: https://repo.prefix.dev/ecoscope-workflows/
-  name: ecoscope-workflows-ext-ecoscope
-  version: {version: ==0.22.17}
+  name: ecoscope-platform
+  version: {version: ==2.15.1}
 - channel: https://repo.prefix.dev/ecoscope-workflows-custom/
   name: ecoscope-workflows-ext-custom
-  version: {version: ==0.0.39}
+  version: {version: ==0.1.0rc14}
 - channel: https://repo.prefix.dev/ecoscope-workflows-custom/
   name: ecoscope-workflows-ext-ste
-  version: {version: ==0.0.18}
-- channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-  name: ecoscope-workflows-ext-mnc
-  version: {version: ==0.0.7}
-- channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-  name: ecoscope-workflows-ext-big-life
-  version: {version: ==0.0.8}
+  version: {version: ==0.0.0rc1}
 - channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
   name: ecoscope-workflows-ext-mep
-  version: {version: ==0.0.13.dev0+gfa96d6450.d20260413}
-params_sha256: 72d960473dae1b0b9d09b8976e987d22ea60ae7a295e079969db69248d2f84fb
-spec_sha256: c78ffa0d1d3f5bcc9a95e6d5aef381131301717c560505e0b216d27aa83137bd
+  version: {version: ==1.0.1.dev0+gae11a9381.d20260828}
+- channel: conda-forge
+  name: pydeck
+  version: {version: ==0.9.2}
+- channel: conda-forge
+  name: opentelemetry-sdk
+  version: {version: ==1.44.0}
+params_sha256: e6066dba76f3cf94aef4d4886aa0a1adfd26c84592e3fe28ecd3538f3d198fc3
+spec_sha256: b2dec2cc5c2edd3d99b2d7a959f4f0854c34bbb5d2716f47ab3b9f85fd027072
 
 ```
 
