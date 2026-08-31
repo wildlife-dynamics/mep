@@ -1,52 +1,55 @@
 id: mep_monthly_report
 requirements:
-  - name: ecoscope-workflows-core
-    version: "0.22.17.*"
-    channel: https://repo.prefix.dev/ecoscope-workflows/
-
-  - name: ecoscope-workflows-ext-ecoscope
-    version: "0.22.17.*"
+  - name: ecoscope-platform
+    version: ">=2.15.0, <2.16.0"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.40.*"
+    version: "0.1.0rc14.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.18.*"
-    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-
-  - name: ecoscope-workflows-ext-mnc
-    version: "0.0.7.*"
-    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-
-  - name: ecoscope-workflows-ext-big-life
-    version: "0.0.8.*"
+    version: "0.0.0rc1.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mep
     version: "*"
     channel: "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
+    
+  - name: pydeck
+    version: 0.9.2
+    channel: conda-forge
+
+  - name: opentelemetry-sdk
+    version: ">=1.20.0,<2.0.0"
+    channel: conda-forge
+
+task-instance-defaults:
+  skipif:
+    conditions: 
+      - any_is_empty_df 
+      - any_dependency_skipped
 
 rjsf-overrides:
-  properties:
+  properties: 
     Subject Group.properties.subject_group_var.properties.var.title: Subject Group Name
     Subject Group.properties.subject_group_var.properties.var.default: Elephants
-    
+    Previous Period.properties.set_previous_period.properties.offset.description: "Choose how to calculate the comparison period's Start Date. In every mode, the comparison period ends on your selected time range's Start Date (so it never overlaps with the current period) — only the Start Date changes."
+
 
 workflow:
   # set workflow details
-  - name: Set workflow details
+  - name: Set Workflow Details
     id: workflow_details
     task: set_workflow_details
 
   # define time range
-  - name: Define analysis time range
+  - name: Time Range
     id: time_range
     task: set_time_range
 
   # set groupers -- limiting this to subject_name
-  - name: Configure grouping strategy
+  - name: Configure Grouping Strategy
     id: groupers
     task: set_groupers
     partial:
@@ -54,23 +57,19 @@ workflow:
         - index_name: "name"
 
   # set basemaps
-  - name: Configure base map layers
+  - name: Configure Base Map Layers
     id: configure_base_maps
     task: set_base_maps_pydeck
 
   # connect to earthranger
-  - name: Connect to earth ranger
+  - name: Connect to EarthRanger
     id: er_client_name
     task: set_er_connection
 
   # get events -- elephant sighting and persist file
-  - name: Retrieve all events
+  - name: Retrieve Events
     id: get_events_data
     task: get_events
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       client: ${{ workflow.er_client_name.return }}
       time_range: ${{ workflow.time_range.return }}
@@ -90,56 +89,46 @@ workflow:
       include_related_events: false
       include_null_geometry: false
       include_display_values: false
+      force_point_geometry: true 
 
-  - name: Exclude geom outliers from events
-    id: exclude_mep_outliers
-    task: exclude_geom_outliers
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+  - name: Normalize event details 
+    id: normalize_event_details
+    task: normalize_json_column
     partial:
+      column: event_details
       df: ${{ workflow.get_events_data.return }}
-      z_threshold: 3
+      skip_if_not_exists: true 
+      sort_columns: true
 
-  - name: Remove invalid event  points
-    id: remove_mep_invalid_geoms
-    task: ecoscope_workflows_ext_custom.tasks.transformation.drop_null_geometry
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+  - name: Persist events as csv
+    id: persist_events_csv
+    task: persist_df
     partial:
-      gdf: ${{ workflow.exclude_mep_outliers.return }}
-      geometry_column: geometry
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filetype: csv
+      filename: events
+      df: ${{ workflow.normalize_event_details.return }}
 
   - name: Apply colormap to events 
     id: apply_event_colormap 
     task: apply_color_map
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial: 
-      df: ${{ workflow.remove_mep_invalid_geoms.return }}
+      df: ${{ workflow.normalize_event_details.return }}
       input_column_name: event_type 
       output_column_name: event_type_colors 
       colormap: tab20
 
   - name: Generate events point layers
-    id: generate_mb_layers
-    task: create_scatterplot_layer
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+    id: generate_ev_layers
+    task: ecoscope_workflows_ext_custom.tasks.results.create_scatterplot_layer
     partial:
+      data_url: null
       layer_style:
         get_fill_color: event_type_colors
         get_line_color: event_type_colors
         get_line_width: 0.55
         get_radius: 3.55
-        opacity: 0.75
+        opacity: 0.55
         stroked: true
       legend:
         title: Legend
@@ -149,26 +138,18 @@ workflow:
         label_suffix: null 
       geodataframe: ${{ workflow.apply_event_colormap.return }}
 
-  # global zoom value
-  - name: Events zoom value
-    id: sighting_zoom_value
-    task: view_state_deck_gdf
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+  - name: Zoom view to gdf extent
+    id: events_image_extent
+    task: ecoscope_workflows_ext_ste.tasks.spatial_operations.compute_view_state_from_gdf
     partial:
       pitch: 0
       bearing: 0
-      gdf: ${{ workflow.remove_mep_invalid_geoms.return }}
+      max_zoom: 15
+      gdf: ${{ workflow.apply_event_colormap.return }}
 
-  - name: Draw elephant sightings map
+  - name: Draw events map
     id: draw_sightings_map
-    task: draw_map
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+    task: ecoscope_workflows_ext_custom.tasks.results.draw_map
     partial:
       tile_layers: ${{ workflow.configure_base_maps.return }}
       static: false
@@ -176,20 +157,17 @@ workflow:
       max_zoom: 10
       legend_style:
         placement: "bottom-right"
-      geo_layers: ${{ workflow.generate_mb_layers.return }}
-      view_state: ${{ workflow.sighting_zoom_value.return }}
+      geo_layers: ${{ workflow.generate_ev_layers.return }}
+      view_state: ${{ workflow.events_image_extent.return }}
 
-  - name: Persist elephant sightings map
+  - name: Persist events sightings map
     id: persist_sightings_urls
     task: persist_text
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       text: ${{ workflow.draw_sightings_map.return }}
       filename: elephant_sightings_map.html # -- convert this to png
+      filename_suffix: null
 
   # get relocations  -- collar voltages for subjects and persist file
   - title: Subject Group
@@ -203,10 +181,6 @@ workflow:
   - name: Get subject group observations
     id: subject_observations
     task: get_subjectgroup_observations
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       filter: clean
       client: ${{ workflow.er_client_name.return }}
@@ -215,6 +189,21 @@ workflow:
       raise_on_empty: false
       include_details: true
       include_subjectsource_details: true
+
+  - name: Get timezone from time range
+    id: get_timezone
+    task: get_timezone_from_time_range
+    partial:
+      time_range: ${{ workflow.time_range.return }}
+
+  - name: Convert relocs to timezone
+    id: convert_relocs_timezone
+    task: convert_values_to_timezone
+    partial:
+      df: ${{ workflow.subject_observations.return }}
+      timezone: ${{ workflow.get_timezone.return }}
+      columns:
+        - fixtime
 
   - name: Transform observations to relocations
     id: subject_reloc
@@ -243,37 +232,47 @@ workflow:
         - x: 1.000000
           y: 1.000000
 
-  - name: Get previous period
-    id: get_custom_previous_period
-    task: get_previous_period
-    partial:
-      time_range: ${{ workflow.time_range.return }}
+  - title: Previous Period
+    type: task-group
+    description: >-
+      Define the comparison ("previous") period to contrast against your selected time range.
+      Every option below computes a period that ends on the same End Date as your time range, then
+      works backward to determine its Start Date. Choose Custom to enter your own Years / Months /
+      Weeks / Days offset (defaults to 1 month back), Preset for a common lookback (e.g. 1, 3 or 6
+      months, or 1 year back), or Calendar to pick an exact Start Date.
+    tasks: 
+      - name: null
+        id: set_previous_period
+        task: ecoscope_workflows_ext_ste.tasks.filter.flexible_previous_period
+        partial:
+          timerange: ${{ workflow.time_range.return }}
 
-  - name: Get subject group observations for previous relocs
+  - name: Get subject group observations
     id: previous_subject_observations
     task: get_subjectgroup_observations
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       filter: clean
       client: ${{ workflow.er_client_name.return }}
-      time_range: ${{ workflow.get_custom_previous_period.return }}
+      time_range: ${{ workflow.set_previous_period.return }}
       subject_group_name: ${{ workflow.subject_group_var.return }}
       raise_on_empty: false
       include_details: true
       include_subjectsource_details: true
 
+  - name: Convert previous relocs to timezone
+    id: convert_prev_relocs_timezone
+    task: convert_values_to_timezone
+    partial:
+      df: ${{ workflow.previous_subject_observations.return }}
+      timezone: ${{ workflow.get_timezone.return }}
+      columns:
+        - fixtime
+
   - name: Transform previous observations to relocations
     id: previous_subject_reloc
     task: process_relocations
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
-      observations: ${{ workflow.previous_subject_observations.return }}
+      observations: ${{ workflow.convert_prev_relocs_timezone.return }}
       relocs_columns:
         - groupby_col
         - fixtime
@@ -296,29 +295,185 @@ workflow:
         - x: 1.000000
           y: 1.000000
 
-  - name: Create collared charts for all subjects
-    id: process_subject_charts
-    task: process_collar_voltage_charts
+  - name: Sort relocs by fixtime 
+    id: sort_curr_relocs 
+    task: sort_values 
+    partial: 
+      df: ${{ workflow.subject_reloc.return }}
+      column_name: fixtime 
+      ascending: true 
+      na_position: last 
+  
+  - name: Persist relocations as geoparquet
+    id: persist_relocs_geoparquet
+    task: persist_df
+    partial:
+      df: ${{ workflow.sort_curr_relocs.return }}
+      filetype: geoparquet
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: relocations
+
+  - name: Sort previous relocs by fixtime 
+    id: sort_prev_relocs
+    task: sort_values 
+    partial: 
+      df: ${{ workflow.previous_subject_reloc.return }}
+      column_name: fixtime 
+      ascending: true 
+      na_position: last 
+  
+  - name: Persist previous period relocations as geoparquet
+    id: persist_prev_relocs_geoparquet
+    task: persist_df
+    partial:
+      df: ${{ workflow.sort_prev_relocs.return }}
+      filetype: geoparquet
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: previous_period_relocations
+
+  - name: Extract voltage from current relocs 
+    id: extract_current_voltage 
+    task: extract_value_from_json_column 
+    partial: 
+      df: ${{ workflow.sort_curr_relocs.return }}
+      column_name: observation_details
+      field_name_options: ["battery", "mainVoltage", "batt", "power"]
+      output_type: float
+      output_column_name: voltage
+
+  - name: Extract voltage from previous relocs
+    id: extract_previous_voltage
+    task: extract_value_from_json_column
+    partial:
+      df: ${{ workflow.sort_prev_relocs.return }}
+      column_name: observation_details
+      field_name_options: ["battery", "mainVoltage", "batt", "power"]
+      output_type: float
+      output_column_name: voltage
+
+  - name: Split current reloc groups 
+    id: split_current_relocs 
+    task: split_groups 
+    partial: 
+      df: ${{ workflow.extract_current_voltage.return }}
+      groupers: ${{ workflow.groupers.return }}
+
+  - name: Split previous reloc groups 
+    id: split_previous_relocs 
+    task: split_groups 
+    partial: 
+      df: ${{ workflow.extract_previous_voltage.return }}
+      groupers: ${{ workflow.groupers.return }}
+
+  - name: Get first subject name for filenames
+    id: unique_subject_name
+    task: column_first_unique_value
+    partial:
+      column_name: "name"
+    mapvalues:
+      argnames: df
+      argvalues: ${{ workflow.split_current_relocs.return }}
+
+  - name: Safe-string subject name for filenames
+    id: safe_subject_name
+    task: ecoscope_workflows_ext_ste.tasks.transformation.safe_string
+    mapvalues:
+      argnames: value
+      argvalues: ${{ workflow.unique_subject_name.return }}
+
+  - name: Build voltage chart filename 
+    id: voltage_filename 
+    task: prefix_string_var
+    partial: 
+      var: _historic_voltage.html 
+    mapvalues:
+      argnames: prefix 
+      argvalues: ${{ workflow.safe_subject_name.return }}
+
+  - name: Zip current relocs and previous relocs 
+    id: zip_current_prev_name
+    task: groupbykey 
+    partial: 
+      iterables: 
+        - ${{ workflow.split_current_relocs.return }}
+        - ${{ workflow.split_previous_relocs.return }}
+
+  - name: Plot Historic Voltage chart 
+    id: draw_historic_voltage
+    task: plot_historic_voltage
+    partial: 
+      column: voltage
+    mapvalues: 
+      argnames: 
+        - current_relocs 
+        - previous_relocs 
+      argvalues: ${{ workflow.zip_current_prev_name.return }}
+
+  - name: Combine historic voltage filename with text
+    id: historic_voltage_text
     skipif:
       conditions:
-        - any_is_empty_df
         - any_dependency_skipped
+        - any_keyed_iterables_are_skips
+      unpack_depth: 1
+    task: groupbykey
     partial:
-      relocs: ${{ workflow.subject_observations.return }}
-      previous_relocs: ${{ workflow.previous_subject_observations.return }}
-      time_range: ${{ workflow.time_range.return }}
-      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }} # convert outputs to png
+      iterables:
+        - ${{ workflow.voltage_filename.return }}
+        - ${{ workflow.draw_historic_voltage.return }}
+
+  - name: Persist collar voltage text as html 
+    id: persist_collar_html
+    task: persist_text 
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename_suffix: null
+    mapvalues:
+      argnames: 
+        - filename
+        - text
+      argvalues: ${{ workflow.historic_voltage_text.return }}
+  
+  - name: Create widget for collar voltage plot
+    id: collared_voltage_widget
+    task: create_map_widget_single_view
+    skipif:
+      conditions: 
+        - never
+    partial:
+      title: Collar Voltage
+    map:
+      argnames:
+        - view 
+        - data
+      argvalues: ${{ workflow.persist_collar_html.return }}
+
+  - name: Merge collar voltage plot widgets 
+    id: grouped_collared_widget
+    task: merge_widget_views
+    partial:
+      widgets: ${{ workflow.collared_voltage_widget.return }}
+
+  - name: Convert collar voltage charts to png 
+    id: convert_collar_png 
+    task: html_to_png 
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues: 
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_collar_html.return }}
 
   # relocs to trajectories -- speedmap and persist file
-  - name: Convert relocations to trajectories
-    id: convert_to_trajectories
-    task: relocations_to_trajectory
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
-    partial:
-      relocations: ${{ workflow.subject_reloc.return }}
+  - name: Convert relocations to trajectories 
+    id: convert_to_trajectories 
+    task: relocations_to_trajectory 
+    partial: 
+      relocations: ${{ workflow.sort_curr_relocs.return }}
       trajectory_segment_filter:
         min_length_meters: 0.001
         max_length_meters: 5000
@@ -327,27 +482,19 @@ workflow:
         min_speed_kmhr: 0.01
         max_speed_kmhr: 9
 
-  - name: Add temporal index to trajectories
-    id: add_temporal_index_to_traj
+  - name: Add temporal index to trajectories 
+    id: add_temporal_index_to_traj 
     task: add_temporal_index
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
-    partial:
+    partial: 
       df: ${{ workflow.convert_to_trajectories.return }}
-      time_col: segment_start
+      time_col: segment_start 
       groupers: ${{ workflow.groupers.return }}
-      cast_to_datetime: true
-      format: mixed
+      cast_to_datetime: true 
+      format: mixed 
 
   - name: Classify trajectories by speed
     id: classify_trajectories_speed_bins
     task: apply_classification
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       df: ${{ workflow.add_temporal_index_to_traj.return }}
       input_column_name: speed_kmhr
@@ -363,10 +510,6 @@ workflow:
   - name: Sort trajectories by speed bins
     id: sort_trajs_by_speed
     task: sort_values
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       column_name: speed_bins
       na_position: first
@@ -376,10 +519,6 @@ workflow:
   - name: Apply colormap to speed bins
     id: apply_speed_colormap
     task: apply_color_map
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       input_column_name: speed_bins
       output_column_name: speed_bins_colormap
@@ -394,11 +533,7 @@ workflow:
 
   - name: Exclude unnecessary columns from speedmap gdf
     id: filter_speed_cols
-    task: filter_df_cols
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+    task: subset_columns
     partial:
       columns:
         - dist_meters
@@ -406,16 +541,15 @@ workflow:
         - geometry
         - speed_kmhr
         - speed_bins
+      exclude: null 
+      strict: false
       df: ${{ workflow.apply_speed_colormap.return }}
 
   - name: Generate speedmap layers
     id: generate_speedmap_layers
-    task: create_path_layer
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+    task: ecoscope_workflows_ext_custom.tasks.results.create_path_layer
     partial:
+      data_url: null
       layer_style:
         get_color: speed_bins_colormap
         get_width: 2.85
@@ -436,65 +570,47 @@ workflow:
         label_suffix: null
       geodataframe: ${{ workflow.filter_speed_cols.return }}
 
-  - name: Zoom to gdf extent
-    id: zoom_speed_gdf_extent
-    task: view_state_deck_gdf
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+  - name: Zoom view to gdf speed extent
+    id: speed_image_extent
+    task: ecoscope_workflows_ext_ste.tasks.spatial_operations.compute_view_state_from_gdf
     partial:
       pitch: 0
       bearing: 0
+      max_zoom: 15
       gdf: ${{ workflow.filter_speed_cols.return }}
 
   - name: Draw speedmap
     id: draw_speedmap
-    task: draw_map
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+    task: ecoscope_workflows_ext_custom.tasks.results.draw_map
     partial:
       tile_layers: ${{ workflow.configure_base_maps.return }}
       static: false
       title: null
       max_zoom: 10
       legend_style:
-        placement: bottom-right
+        placement: "bottom-right"
       geo_layers: ${{ workflow.generate_speedmap_layers.return }}
-      view_state: ${{ workflow.zoom_speed_gdf_extent.return }}
+      view_state: ${{ workflow.speed_image_extent.return }}
 
   - name: Persist speedmap html
     id: persist_speedmap_html
     task: persist_text
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      filename_suffix: speedmap
+      filename_suffix: null
+      filename: elephant_speedmap.html
       text: ${{ workflow.draw_speedmap.return }}
 
   # generate sitrep report -- persist df
   - name: Get sitrep config
     id: get_sitrep_config
     task: get_sitrep_event_config
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       region_column: region
 
   - name: Generate sitrep report
     id: generate_sitrep_df
     task: compile_sitrep
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       er_io: ${{ workflow.er_client_name.return }}
       event_details: ${{ workflow.get_sitrep_config.return }}
@@ -503,10 +619,6 @@ workflow:
   - name: Persist sitrep as csv
     id: persist_sitrep_csv
     task: persist_df
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filetype: csv
@@ -516,10 +628,6 @@ workflow:
   - name: Retrieve vehicle patrols
     id: vehicle_patrols
     task: get_patrol_observations
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       client: ${{ workflow.er_client_name.return }}
       time_range: ${{ workflow.time_range.return }}
@@ -531,10 +639,6 @@ workflow:
   - name: Transform observations to relocations
     id: vehicle_patrol_reloc
     task: process_relocations
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       observations: ${{ workflow.vehicle_patrols.return }}
       relocs_columns:
@@ -563,10 +667,6 @@ workflow:
   - name: Transform relocations to trajectories
     id: vehicle_patrol_traj
     task: relocations_to_trajectory
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       relocations: ${{ workflow.vehicle_patrol_reloc.return }}
       trajectory_segment_filter:
@@ -580,10 +680,6 @@ workflow:
   - name: Persist vehicle patrol trajectories
     id: persist_vehicle_traj
     task: persist_df
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       df: ${{ workflow.vehicle_patrol_traj.return }}
       filetype: geoparquet
@@ -593,36 +689,26 @@ workflow:
   - name: Vehicle patrol trajectories colormap
     id: vehicle_traj_colormap
     task: apply_color_map
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       df: ${{ workflow.vehicle_patrol_traj.return }}
       colormap: viridis
       input_column_name: extra__patrol_type__value
       output_column_name: patrol_type_colormap
 
-  - name: Vehicle patrols zoom value
-    id: vehicle_zoom_value
-    task: view_state_deck_gdf
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+  - name: Zoom view to gdf vehicle extent
+    id: vehicle_extent
+    task: ecoscope_workflows_ext_ste.tasks.spatial_operations.compute_view_state_from_gdf
     partial:
       pitch: 0
       bearing: 0
+      max_zoom: 15
       gdf: ${{ workflow.vehicle_traj_colormap.return }}
 
   - name: Create vehicle patrol layers
     id: vehicle_patrol_path_layer
-    task: create_path_layer
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+    task: ecoscope_workflows_ext_custom.tasks.results.create_path_layer
     partial:
+      data_url: null
       layer_style:
         get_color: patrol_type_colormap
         get_width: 2.85
@@ -645,11 +731,7 @@ workflow:
 
   - name: Draw vehicle patrols map
     id: draw_vehicles_map
-    task: draw_map
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+    task: ecoscope_workflows_ext_custom.tasks.results.draw_map
     partial:
       tile_layers: ${{ workflow.configure_base_maps.return }}
       static: false
@@ -658,28 +740,21 @@ workflow:
       legend_style:
         placement: "bottom-right"
       geo_layers: ${{ workflow.vehicle_patrol_path_layer.return }}
-      view_state: ${{ workflow.vehicle_zoom_value.return }}
+      view_state: ${{ workflow.vehicle_extent.return }}
 
   - name: Persist vehicle patrols as text
     id: vehicle_patrol_map
     task: persist_text
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: vehicle_patrols_map.html
+      filename_suffix: null
       text: ${{ workflow.draw_vehicles_map.return }} # convert this to png
 
   # foot patrols
   - name: Retrieve foot patrols
     id: foot_patrols
     task: get_patrol_observations
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       client: ${{ workflow.er_client_name.return }}
       time_range: ${{ workflow.time_range.return }}
@@ -691,10 +766,6 @@ workflow:
   - name: Transform observations to relocations
     id: foot_patrol_reloc
     task: process_relocations
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       observations: ${{ workflow.foot_patrols.return }}
       relocs_columns:
@@ -723,10 +794,6 @@ workflow:
   - name: Transform relocations to trajectories
     id: foot_patrol_traj
     task: relocations_to_trajectory
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       relocations: ${{ workflow.foot_patrol_reloc.return }}
       trajectory_segment_filter:
@@ -740,10 +807,6 @@ workflow:
   - name: Persist foot patrol trajectories
     id: persist_foot_traj
     task: persist_df
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       df: ${{ workflow.foot_patrol_traj.return }}
       filetype: geoparquet
@@ -753,36 +816,26 @@ workflow:
   - name: Foot patrol trajectories colormap
     id: foot_traj_colormap
     task: apply_color_map
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       df: ${{ workflow.foot_patrol_traj.return }}
       colormap: viridis
       input_column_name: extra__patrol_type__value
       output_column_name: patrol_type_colormap
 
-  - name: Foot patrols zoom value
-    id: foot_zoom_value
-    task: view_state_deck_gdf
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+  - name: Zoom view to gdf speed extent
+    id: foot_image_extent
+    task: ecoscope_workflows_ext_ste.tasks.spatial_operations.compute_view_state_from_gdf
     partial:
       pitch: 0
       bearing: 0
+      max_zoom: 15
       gdf: ${{ workflow.foot_traj_colormap.return }}
 
   - name: Create foot patrol layers
     id: foot_patrol_path_layer
-    task: create_path_layer
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+    task: ecoscope_workflows_ext_custom.tasks.results.create_path_layer
     partial:
+      data_url: null
       layer_style:
         get_color: patrol_type_colormap
         get_width: 2.85
@@ -805,11 +858,7 @@ workflow:
 
   - name: Draw foot patrols map
     id: draw_foot_map
-    task: draw_map
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
+    task: ecoscope_workflows_ext_custom.tasks.results.draw_map
     partial:
       tile_layers: ${{ workflow.configure_base_maps.return }}
       static: false
@@ -818,99 +867,64 @@ workflow:
       legend_style:
         placement: "bottom-right"
       geo_layers: ${{ workflow.foot_patrol_path_layer.return }}
-      view_state: ${{ workflow.foot_zoom_value.return }}
+      view_state: ${{ workflow.foot_image_extent.return }}
 
   - name: Persist foot patrols as text
     id: foot_patrol_map
     task: persist_text
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: foot_patrols_map.html
+      filename_suffix: null
       text: ${{ workflow.draw_foot_map.return }} # convert this to png
 
   # html to png
   - name: Convert elephant sighting events html to png
     id: convert_sightings_png
     task: html_to_png
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       html_path: ${{ workflow.persist_sightings_urls.return }}
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10 #40000
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
 
   - name: Convert elephant speedmap html to png
     id: convert_speedmap_png
     task: html_to_png
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       html_path: ${{ workflow.persist_speedmap_html.return }}
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10 #40000
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
 
   - name: Convert vehicle patrol html to png
     id: convert_vehicle_png
     task: html_to_png
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       html_path: ${{ workflow.vehicle_patrol_map.return }}
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10 #40000
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
 
   - name: Convert foot patrol html to png
     id: convert_foot_png
     task: html_to_png
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
     partial:
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       html_path: ${{ workflow.foot_patrol_map.return }}
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10 #40000
-        max_concurrent_pages: 1
-
-  - name: Convert collared plot html to png
-    id: convert_collared_png
-    task: html_to_png
-    skipif:
-      conditions:
-        - any_is_empty_df
-        - any_dependency_skipped
-    partial:
-      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      html_path: ${{ workflow.process_subject_charts.return }}
-      config:
-        full_page: false
-        device_scale_factor: 2.0
-        wait_for_timeout: 10
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
 
   - name: Download monthly cover page template
@@ -933,52 +947,116 @@ workflow:
       retries: 3
       unzip: false
 
-  - name: Create cover template context
-    id: create_cover_tpl_context
-    task: create_monthly_ctx_cover
+  - name: Download mep logo
+    id: download_logo
+    task: ecoscope_workflows_ext_ste.tasks.io.fetch_and_persist_file
     partial:
+      url: https://www.dropbox.com/scl/fi/se63iljd7h9zdi4szv2pt/MEP-logo-dark-linear.png?rlkey=usqs76f4ejd2nyqrpmwxmks0o&st=0z2jfaif&dl=0
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      overwrite_existing: false
+      unzip: false
+      retries: 2
+
+  - name: Create cover page context 
+    id: cover_page_context 
+    task: prepare_cover_metadata 
+    partial: 
+      org_logo_path: ${{ workflow.download_logo.return }}
       report_period: ${{ workflow.time_range.return }}
       prepared_by: "Ecoscope"
+      extra_fields: null
+      time_generated_format: "%Y-%m-%d %H:%M:%S"
 
-  - name: Persist cover page context
-    id: persist_cover_context
-    task: create__mep_context_page
+  - name: Persist cover page
+    id: persist_cover_page
+    skipif:
+      conditions:
+        - any_dependency_skipped
+      unpack_depth: 1
+    task: create_context_page
     partial:
       template_path: ${{ workflow.download_cover_page.return }}
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      context: ${{ workflow.create_cover_tpl_context.return }}
-      filename: mep_cover_page.docx
+      context: ${{ workflow.cover_page_context.return }}
+      filename: "mep_monthly_cover_page.docx"
 
-  - name: Create monthly report
-    id: create_monthly_ctx
-    task: create_mep_monthly_context
-    partial:
-      filename: mep_context.docx
+
+  - name: Create mep monthly report 
+    id: create_monthly_report 
+    task: create_mep_monthly_report
+    partial: 
       template_path: ${{ workflow.download_content_page.return }}
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      elephant_sightings_map_path: ${{ workflow.convert_sightings_png.return }}
-      speedmap_path: ${{ workflow.convert_speedmap_png.return }}
-      foot_patrols_map_path: ${{ workflow.convert_foot_png.return }}
-      vehicle_patrol_map_path: ${{ workflow.convert_vehicle_png.return }}
-      subject_group: ${{ workflow.subject_group_var.return }} 
-      collared_elephant_plot_paths: ${{ workflow.convert_collared_png.return }}
-      sitrep_df_path: ${{ workflow.persist_sitrep_csv.return }}
+      filename: "overall_report.docx"
 
-  - name: Merge mep word docs
-    id: merge_mep_docx
-    task: merge_mapbook_files
+  - name: Create sightings map widget
+    id: sightings_map_widget
+    task: create_map_widget_single_view
     partial:
-      cover_page_path: ${{ workflow.persist_cover_context.return }}
-      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      context_page_items:
-        - ${{ workflow.create_monthly_ctx.return }}
-      filename: "overall_mep_monthly_report.docx"
+      title: "Elephant Sightings Map"
+      data: ${{ workflow.persist_sightings_urls.return }}
+
+  - name: Create speedmap widget
+    id: speedmap_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Speed Map"
+      data: ${{ workflow.persist_speedmap_html.return }}
+
+  - name: Create vehicle patrol map widget
+    id: vehicle_map_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Vehicle Patrols Map"
+      data: ${{ workflow.vehicle_patrol_map.return }}
+
+  - name: Create foot patrol map widget
+    id: foot_map_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Foot Patrols Map"
+      data: ${{ workflow.foot_patrol_map.return }}
+
+  - name: Draw sitrep report table
+    id: draw_sitrep_table
+    task: draw_table
+    partial:
+      dataframe: ${{ workflow.generate_sitrep_df.return }}
+      columns: null
+      table_config:
+        enable_sorting: true
+        enable_filtering: true
+        enable_download: false
+        hide_header: false
+      widget_id: "Sitrep Report"
+
+  - name: Persist sitrep table as html
+    id: persist_sitrep_table_html
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      text: ${{ workflow.draw_sitrep_table.return }}
+      filename: sitrep_report_table.html
+      filename_suffix: null
+
+  - name: Create sitrep report widget
+    id: sitrep_table_widget
+    task: create_table_widget_single_view
+    partial:
+      title: "Sitrep Report"
+      data: ${{ workflow.persist_sitrep_table_html.return }}
 
   - name: MEP monthly report  dashboard
     id: mep_monthly_dashboard
     task: gather_dashboard
     partial:
       details: ${{ workflow.workflow_details.return}}
-      widgets: []
+      widgets:
+        - ${{ workflow.grouped_collared_widget.return }}
+        - ${{ workflow.sightings_map_widget.return }}
+        - ${{ workflow.speedmap_widget.return }}
+        - ${{ workflow.vehicle_map_widget.return }}
+        - ${{ workflow.foot_map_widget.return }}
+        - ${{ workflow.sitrep_table_widget.return }}
       time_range: ${{ workflow.time_range.return}}
       groupers: ${{ workflow.groupers.return }}

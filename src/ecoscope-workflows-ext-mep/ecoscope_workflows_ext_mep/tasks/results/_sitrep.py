@@ -2,11 +2,11 @@ import pandas as pd
 from datetime import datetime
 import geopandas as gpd
 from typing import Dict, Any, List
-from ecoscope_workflows_core.decorators import task
-from ecoscope_workflows_core.tasks.filter._filter import TimeRange
-from ecoscope_workflows_core.annotations import AnyDataFrame
-from ecoscope_workflows_ext_ecoscope.connections import EarthRangerClient
-from ecoscope_workflows_ext_ecoscope.tasks.transformation._normalize import normalize_json_column
+from wt_registry import register
+from ecoscope.platform.tasks.filter._filter import TimeRange
+from ecoscope.platform.annotations import AnyDataFrame
+from ecoscope.platform.connections import EarthRangerClient
+from ecoscope.platform.tasks.transformation._normalize import normalize_json_column
 
 
 # Sitrep formatting functions
@@ -109,7 +109,7 @@ def sitrep_arrests(x: pd.Series) -> str:
     return ", ".join(details_string)
 
 
-@task
+@register()
 def get_sitrep_event_config(region_column: str = "region") -> Dict[str, Dict[str, Any]]:
     """
     Get configuration for sitrep event types.
@@ -237,7 +237,7 @@ def _download_all_events(
                 print(f"No events found for {event_key}")
 
         except Exception as e:
-            print(f"Failed to download events for {event_key}: {e}", exc_info=True)
+            print(f"Failed to download events for {event_key}: {e}")
             continue
 
     return downloaded_events
@@ -295,7 +295,7 @@ def _compile_and_format_sitrep(
     return sitrep_df
 
 
-@task
+@register()
 def compile_sitrep(
     er_io: EarthRangerClient,
     event_details: Dict[str, Any],

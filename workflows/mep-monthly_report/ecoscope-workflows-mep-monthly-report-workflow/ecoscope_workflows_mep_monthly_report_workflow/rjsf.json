@@ -18,7 +18,7 @@
       ],
       "type": "object",
       "description": "Add information that will help to differentiate this workflow from another.",
-      "title": "Set workflow details"
+      "title": "Set Workflow Details"
     },
     "time_range": {
       "additionalProperties": false,
@@ -58,7 +58,7 @@
       ],
       "type": "object",
       "description": "Choose the period of time to analyze.",
-      "title": "Define analysis time range"
+      "title": "Time Range"
     },
     "configure_base_maps": {
       "additionalProperties": false,
@@ -267,7 +267,7 @@
       },
       "type": "object",
       "required": [],
-      "title": "Configure base map layers"
+      "title": "Configure Base Map Layers"
     },
     "er_client_name": {
       "additionalProperties": false,
@@ -282,7 +282,7 @@
         "data_source"
       ],
       "type": "object",
-      "title": "Connect to earth ranger"
+      "title": "Connect to EarthRanger"
     },
     "get_events_data": {
       "additionalProperties": false,
@@ -300,7 +300,7 @@
         "event_types"
       ],
       "type": "object",
-      "title": "Retrieve all events"
+      "title": "Retrieve Events"
     },
     "Subject Group": {
       "type": "object",
@@ -318,6 +318,38 @@
           },
           "required": [
             "var"
+          ],
+          "type": "object",
+          "title": ""
+        }
+      }
+    },
+    "Previous Period": {
+      "type": "object",
+      "description": "Define the comparison (\"previous\") period to contrast against your selected time range. Every option below computes a period that ends on the same End Date as your time range, then works backward to determine its Start Date. Choose Custom to enter your own Years / Months / Weeks / Days offset (defaults to 1 month back), Preset for a common lookback (e.g. 1, 3 or 6 months, or 1 year back), or Calendar to pick an exact Start Date.",
+      "ecoscope:task_group": true,
+      "properties": {
+        "set_previous_period": {
+          "additionalProperties": false,
+          "properties": {
+            "offset": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PresetPreviousPeriod"
+                },
+                {
+                  "$ref": "#/$defs/CustomPreviousPeriod"
+                },
+                {
+                  "$ref": "#/$defs/CalendarPreviousPeriod"
+                }
+              ],
+              "title": "Offset",
+              "description": "Choose how to calculate the comparison period's Start Date. In every mode, the comparison period ends on your selected time range's Start Date (so it never overlaps with the current period) \u2014 only the Start Date changes."
+            }
+          },
+          "required": [
+            "offset"
           ],
           "type": "object",
           "title": ""
@@ -440,6 +472,81 @@
       ],
       "title": "EarthRangerConnection",
       "type": "object"
+    },
+    "CalendarPreviousPeriod": {
+      "properties": {
+        "since": {
+          "description": "Select the start date for the comparison period.",
+          "format": "date-time",
+          "title": "Since",
+          "type": "string"
+        }
+      },
+      "required": [
+        "since"
+      ],
+      "title": "Calendar",
+      "type": "object"
+    },
+    "CustomPreviousPeriod": {
+      "properties": {
+        "years": {
+          "default": 0,
+          "title": "Years",
+          "type": "integer"
+        },
+        "months": {
+          "default": 0,
+          "title": "Months",
+          "type": "integer"
+        },
+        "weeks": {
+          "default": 0,
+          "title": "Weeks",
+          "type": "integer"
+        },
+        "days": {
+          "default": 0,
+          "title": "Days",
+          "type": "integer"
+        },
+        "hours": {
+          "default": 0,
+          "title": "Hours",
+          "type": "integer"
+        },
+        "minutes": {
+          "default": 0,
+          "title": "Minutes",
+          "type": "integer"
+        },
+        "seconds": {
+          "default": 0,
+          "title": "Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "Custom",
+      "type": "object"
+    },
+    "PresetPreviousPeriod": {
+      "properties": {
+        "preset": {
+          "default": "1 month back",
+          "description": "Choose a predefined time offset.",
+          "enum": [
+            "Same as current period",
+            "1 month back",
+            "3 months back",
+            "6 months back",
+            "1 year back"
+          ],
+          "title": "Preset",
+          "type": "string"
+        }
+      },
+      "title": "Preset",
+      "type": "object"
     }
   },
   "uiSchema": {
@@ -476,6 +583,7 @@
       "er_client_name",
       "get_events_data",
       "Subject Group",
+      "Previous Period",
       "vehicle_patrols",
       "foot_patrols"
     ]

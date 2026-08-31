@@ -1,70 +1,69 @@
 id: collar_voltage_report
 requirements:
-  - name: ecoscope-workflows-core
-    version: "0.22.17.*"
-    channel: https://repo.prefix.dev/ecoscope-workflows/
-
-  - name: ecoscope-workflows-ext-ecoscope
-    version: "0.22.17.*"
+  - name: ecoscope-platform
+    version: ">=2.15.0, <2.16.0"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.0.40.*"
+    version: "0.1.0rc14.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.18.*"
-    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-
-  - name: ecoscope-workflows-ext-mnc
-    version: "0.0.7.*"
-    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-
-  - name: ecoscope-workflows-ext-big-life
-    version: "0.0.8.*"
+    version: "0.0.0rc1.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mep
     version: "*"
     channel: "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
-
-rjsf-overrides:
-  properties:
-    Subject Group.properties.subject_group_var.properties.var.title: Subject Group Name
-    Subject Group.properties.subject_group_var.properties.var.default: Elephants
     
+  - name: pydeck
+    version: 0.9.2
+    channel: conda-forge
+
+  - name: opentelemetry-sdk
+    version: ">=1.20.0,<2.0.0"
+    channel: conda-forge
+
 task-instance-defaults:
   skipif:
-    conditions:
-      - any_is_empty_df
+    conditions: 
+      - any_is_empty_df 
       - any_dependency_skipped
 
+rjsf-overrides:
+  properties: 
+    Subject Group.properties.subject_group_var.properties.var.title: Subject Group Name
+    Subject Group.properties.subject_group_var.properties.var.default: Elephants
+    Previous Period.properties.set_previous_period.properties.offset.description: "Choose how to calculate the comparison period's Start Date. In every mode, the comparison period ends on your selected time range's Start Date (so it never overlaps with the current period) — only the Start Date changes."
+    # Report Logo (now part of the Generate Word Doc Report task-group)
+    Generate Word Doc Report.properties.logo_path.properties.input_method.description: "Provide the organization logo to display on the report cover page (PNG or JPG recommended). Required when 'Generate Word Doc Report' is enabled; leave blank otherwise."
+
+  $defs:
+    # Restrict category options to Subject Name ,Subject Sex and Subject Subtype
+    ValueGrouper.properties.index_name.oneOf:
+      - const: subject_name
+        title: Subject Name
 workflow:
   # set workflow details
-  - name: Set workflow details
+  - name: Set Workflow Details
     id: workflow_details
     task: set_workflow_details
 
   # define time range
-  - name: Define analysis time range
+  - name: Time Range
     id: time_range
     task: set_time_range
 
   # set groupers -- limiting this to subject_name
-  - name: Configure grouping strategy
+  - name: Configure Grouping Strategy
     id: groupers
     task: set_groupers
     partial:
       groupers:
-        - index_name: "extra__subject__name"
-
-  # set basemaps
-  - name: Configure base map layers
-    id: configure_base_maps
-    task: set_base_maps_pydeck
+        - index_name: "name"
 
   # connect to earthranger
-  - name: Connect to earth ranger
+  - name: Connect to EarthRanger
     id: er_client_name
     task: set_er_connection
 
@@ -89,11 +88,26 @@ workflow:
       include_details: true
       include_subjectsource_details: true
 
+  - name: Get timezone from time range
+    id: get_timezone
+    task: get_timezone_from_time_range
+    partial:
+      time_range: ${{ workflow.time_range.return }}
+
+  - name: Convert relocs to timezone
+    id: convert_relocs_timezone
+    task: convert_values_to_timezone
+    partial:
+      df: ${{ workflow.subject_observations.return }}
+      timezone: ${{ workflow.get_timezone.return }}
+      columns:
+        - fixtime
+
   - name: Transform observations to relocations
     id: subject_reloc
     task: process_relocations
     partial:
-      observations: ${{ workflow.subject_observations.return }}
+      observations: ${{ workflow.convert_relocs_timezone.return }}
       relocs_columns:
         - groupby_col
         - fixtime
@@ -116,29 +130,47 @@ workflow:
         - x: 1.000000
           y: 1.000000
 
-  - name: Get previous period
-    id: get_custom_previous_period
-    task: get_previous_period
-    partial:
-      time_range: ${{ workflow.time_range.return }}
+  - title: Previous Period
+    type: task-group
+    description: >-
+      Define the comparison ("previous") period to contrast against your selected time range.
+      Every option below computes a period that ends on the same End Date as your time range, then
+      works backward to determine its Start Date. Choose Custom to enter your own Years / Months /
+      Weeks / Days offset (defaults to 1 month back), Preset for a common lookback (e.g. 1, 3 or 6
+      months, or 1 year back), or Calendar to pick an exact Start Date.
+    tasks: 
+      - name: null
+        id: set_previous_period
+        task: ecoscope_workflows_ext_ste.tasks.filter.flexible_previous_period
+        partial: 
+          timerange: ${{ workflow.time_range.return }}
 
-  - name: Get subject group observations for previous relocs
+  - name: Get subject group observations
     id: previous_subject_observations
     task: get_subjectgroup_observations
     partial:
       filter: clean
       client: ${{ workflow.er_client_name.return }}
-      time_range: ${{ workflow.get_custom_previous_period.return }}
-      subject_group_name: ${{ workflow.subject_group_var.return }}
+      time_range: ${{ workflow.set_previous_period.return }}
+      subject_group_name: ${{ workflow.subject_group_var.return }} # pass this to word doc
       raise_on_empty: false
       include_details: true
       include_subjectsource_details: true
+
+  - name: Convert previous relocs to timezone
+    id: convert_prev_relocs_timezone
+    task: convert_values_to_timezone
+    partial:
+      df: ${{ workflow.previous_subject_observations.return }}
+      timezone: ${{ workflow.get_timezone.return }}
+      columns:
+        - fixtime
 
   - name: Transform previous observations to relocations
     id: previous_subject_reloc
     task: process_relocations
     partial:
-      observations: ${{ workflow.previous_subject_observations.return }}
+      observations: ${{ workflow.convert_prev_relocs_timezone.return }}
       relocs_columns:
         - groupby_col
         - fixtime
@@ -161,18 +193,62 @@ workflow:
         - x: 1.000000
           y: 1.000000
 
-  - name: Extract current voltage columns 
-    id: extract_current_voltage
-    task: extract_voltage_columns 
+  - name: Sort relocs by fixtime 
+    id: sort_curr_relocs 
+    task: sort_values 
     partial: 
-      relocs: ${{ workflow.subject_observations.return }}
-      
-  - name: Extract previous voltage columns 
-    id: extract_previous_voltage
-    task: extract_voltage_columns 
-    partial: 
-      relocs: ${{ workflow.previous_subject_observations.return }}
+      df: ${{ workflow.subject_reloc.return }}
+      column_name: fixtime 
+      ascending: true 
+      na_position: last 
   
+  - name: Persist relocations as geoparquet
+    id: persist_relocs_geoparquet
+    task: persist_df
+    partial:
+      df: ${{ workflow.sort_curr_relocs.return }}
+      filetype: geoparquet
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: relocations
+
+  - name: Sort previous relocs by fixtime 
+    id: sort_prev_relocs
+    task: sort_values 
+    partial: 
+      df: ${{ workflow.previous_subject_reloc.return }}
+      column_name: fixtime 
+      ascending: true 
+      na_position: last 
+  
+  - name: Persist previous period relocations as geoparquet
+    id: persist_prev_relocs_geoparquet
+    task: persist_df
+    partial:
+      df: ${{ workflow.sort_prev_relocs.return }}
+      filetype: geoparquet
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: previous_period_relocations
+
+  - name: Extract voltage from current relocs 
+    id: extract_current_voltage 
+    task: extract_value_from_json_column 
+    partial: 
+      df: ${{ workflow.sort_curr_relocs.return }}
+      column_name: observation_details
+      field_name_options: ["battery", "mainVoltage", "batt", "power"]
+      output_type: float
+      output_column_name: voltage
+
+  - name: Extract voltage from previous relocs
+    id: extract_previous_voltage
+    task: extract_value_from_json_column
+    partial:
+      df: ${{ workflow.sort_prev_relocs.return }}
+      column_name: observation_details
+      field_name_options: ["battery", "mainVoltage", "batt", "power"]
+      output_type: float
+      output_column_name: voltage
+
   - name: Split current reloc groups 
     id: split_current_relocs 
     task: split_groups 
@@ -187,54 +263,74 @@ workflow:
       df: ${{ workflow.extract_previous_voltage.return }}
       groupers: ${{ workflow.groupers.return }}
 
-  - name: Get unique subject name 
-    id: get_unique_subject_name 
-    task: dataframe_column_first_unique_str
+  - name: Get first subject name for filenames
+    id: unique_subject_name
+    task: column_first_unique_value
     partial:
-      column_name: "extra__subject__name"
+      column_name: "name"
     mapvalues:
       argnames: df
       argvalues: ${{ workflow.split_current_relocs.return }}
 
-  - name: Zip values 
-    id: zip_current_prev_name
-    task: zip_groupbykey 
+  - name: Safe-string subject name for filenames
+    id: safe_subject_name
+    task: ecoscope_workflows_ext_ste.tasks.transformation.safe_string
+    mapvalues:
+      argnames: value
+      argvalues: ${{ workflow.unique_subject_name.return }}
+
+  - name: Build voltage chart filename 
+    id: voltage_filename 
+    task: prefix_string_var
     partial: 
-      sequences: 
+      var: _historic_voltage.html 
+    mapvalues:
+      argnames: prefix 
+      argvalues: ${{ workflow.safe_subject_name.return }}
+
+  - name: Zip current relocs and previous relocs 
+    id: zip_current_prev_name
+    task: groupbykey 
+    partial: 
+      iterables: 
         - ${{ workflow.split_current_relocs.return }}
         - ${{ workflow.split_previous_relocs.return }}
-        - ${{ workflow.get_unique_subject_name.return }}
 
-  - name: Generate subject collar voltage 
-    id: generate_subject_voltage 
-    task: generate_subject_voltage_chart 
+  - name: Plot Historic Voltage chart 
+    id: draw_historic_voltage
+    task: plot_historic_voltage
     partial: 
-      time_range: ${{ workflow.time_range.return }}
+      column: voltage
     mapvalues: 
-      argnames:
-        - subject_df 
-        - previous_subject_df 
-        - subject_name 
+      argnames: 
+        - current_relocs 
+        - previous_relocs 
       argvalues: ${{ workflow.zip_current_prev_name.return }}
-  
-  - name: Zip html with unique subject
-    id: zip_html_unique
-    task: zip_groupbykey 
-    partial: 
-      sequences: 
-        - ${{ workflow.generate_subject_voltage.return }}
-        - ${{ workflow.get_unique_subject_name.return }}
+
+  - name: Combine historic voltage filename with text
+    id: historic_voltage_text
+    skipif:
+      conditions:
+        - any_dependency_skipped
+        - any_keyed_iterables_are_skips
+      unpack_depth: 1
+    task: groupbykey
+    partial:
+      iterables:
+        - ${{ workflow.voltage_filename.return }}
+        - ${{ workflow.draw_historic_voltage.return }}
 
   - name: Persist collar voltage text as html 
     id: persist_collar_html
     task: persist_text 
     partial:
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename_suffix: null
     mapvalues:
       argnames: 
+        - filename
         - text
-        - filename_suffix 
-      argvalues: ${{ workflow.zip_html_unique.return }}
+      argvalues: ${{ workflow.historic_voltage_text.return }}
   
   - name: Create widget for collar voltage plot
     id: collared_voltage_widget
@@ -255,6 +351,51 @@ workflow:
     task: merge_widget_views
     partial:
       widgets: ${{ workflow.collared_voltage_widget.return }}
+
+  - name: Convert collar voltage charts to png 
+    id: convert_collar_png 
+    task: html_to_png 
+    partial:
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      config: 
+        full_page: false
+        device_scale_factor: 2.0
+        wait_for_timeout: 10
+        max_concurrent_pages: 1
+    mapvalues: 
+      argnames: html_path 
+      argvalues: ${{ workflow.persist_collar_html.return }}
+
+  - name: Download collar voltage template 
+    id: persist_collar_template
+    task: ecoscope_workflows_ext_ste.tasks.io.fetch_and_persist_file
+    partial:
+      url: https://www.dropbox.com/scl/fi/ywlnnl3dvnqncrh2uzif0/source_voltage_report.docx?rlkey=2m0dtzr6hf5ll2sn3yaq8z5rt&st=avvjku8o&dl=0
+      output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      overwrite_existing: false
+      retries: 3
+      unzip: false
+
+  - title: Generate Word Doc Report
+    type: task-group
+    description: Configure word report settings
+    tasks:
+      - name: null
+        id: logo_path
+        task: get_file_path
+        partial:
+          output_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+
+  - name: Generate Collar Voltage Word Report 
+    id: generate_word_report
+    task: generate_source_voltage_report 
+    partial: 
+      org_logo_path: ${{ workflow.logo_path.return }}
+      report_period: ${{ workflow.time_range.return }}
+      prepared_by: "Ecoscope"
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      template_path: ${{ workflow.persist_collar_template.return }}
+      filename: "overall_report.docx"
 
   - name: Collar Voltage widget
     id: collar_voltage_dashboard
