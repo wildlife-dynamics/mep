@@ -46,14 +46,19 @@ def generate_source_voltage_report(
         if not resolved_logo_path.strip():
             raise ValueError("org_logo_path is empty after normalization")
         
-    images_found: Dict[str, str] = {}
+    voltage_chart_suffix = "_historic_voltage"
+    images_found: list[tuple[str, str]] = []
     for root, _, files in os.walk(output_dir):
-        for f in files:
+        for f in sorted(files):
             p = Path(root) / f
             if p.suffix.lower() in IMAGE_EXTS:
-                parts = p.stem.split("_")
-                key = parts[1] if len(parts) > 1 else p.stem
-                images_found[key] = str(p)
+                stem = p.stem
+                subject_name = (
+                    stem[: -len(voltage_chart_suffix)]
+                    if stem.endswith(voltage_chart_suffix)
+                    else stem
+                )
+                images_found.append((subject_name, str(p)))
 
     print(f"Found {len(images_found)} image file(s)")
     tpl = DocxTemplate(template_path)
@@ -63,7 +68,7 @@ def generate_source_voltage_report(
             "source_voltage_image": InlineImage(tpl, path, width=Inches(6.58), height=Inches(3.85)),
             "subject": subject_name,
         }
-        for subject_name, path in images_found.items()
+        for subject_name, path in images_found
     ]
     
     if resolved_logo_path:

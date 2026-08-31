@@ -15,6 +15,7 @@ from ecoscope.platform.tasks.groupby import split_groups as split_groups
 from ecoscope.platform.tasks.io import (
     get_subjectgroup_observations as get_subjectgroup_observations,
 )
+from ecoscope.platform.tasks.io import persist_df as persist_df
 from ecoscope.platform.tasks.io import persist_text as persist_text
 from ecoscope.platform.tasks.io import set_er_connection as set_er_connection
 from ecoscope.platform.tasks.preprocessing import (
@@ -53,6 +54,7 @@ from ecoscope_workflows_ext_ste.tasks.filter import (
 from ecoscope_workflows_ext_ste.tasks.io import (
     fetch_and_persist_file as fetch_and_persist_file,
 )
+from ecoscope_workflows_ext_ste.tasks.io import get_file_path as get_file_path
 from ecoscope_workflows_ext_ste.tasks.transformation import (
     column_first_unique_value as column_first_unique_value,
 )
@@ -383,6 +385,29 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    persist_relocs_geoparquet = (
+        task(persist_df)
+        .validate()
+        .set_task_instance_id("persist_relocs_geoparquet")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=sort_curr_relocs,
+            filetype="geoparquet",
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            filename="relocations",
+            **(params.get("persist_relocs_geoparquet") or {}),
+        )
+        .call()
+    )
+
     sort_prev_relocs = (
         task(sort_values)
         .validate()
@@ -402,6 +427,29 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             ascending=True,
             na_position="last",
             **(params.get("sort_prev_relocs") or {}),
+        )
+        .call()
+    )
+
+    persist_prev_relocs_geoparquet = (
+        task(persist_df)
+        .validate()
+        .set_task_instance_id("persist_prev_relocs_geoparquet")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=sort_prev_relocs,
+            filetype="geoparquet",
+            root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            filename="previous_period_relocations",
+            **(params.get("persist_prev_relocs_geoparquet") or {}),
         )
         .call()
     )
@@ -716,6 +764,26 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    logo_path = (
+        task(get_file_path)
+        .validate()
+        .set_task_instance_id("logo_path")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            output_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            **(params.get("logo_path") or {}),
+        )
+        .call()
+    )
+
     generate_word_report = (
         task(generate_source_voltage_report)
         .validate()
@@ -730,6 +798,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
+            org_logo_path=logo_path,
             report_period=time_range,
             prepared_by="Ecoscope",
             output_dir=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],

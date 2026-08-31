@@ -45,17 +45,17 @@ rjsf-overrides:
         title: Subject Name
 workflow:
   # set workflow details
-  - name: Set workflow details
+  - name: Set Workflow Details
     id: workflow_details
     task: set_workflow_details
 
   # define time range
-  - name: Define analysis time range
+  - name: Time Range
     id: time_range
     task: set_time_range
 
   # set groupers -- limiting this to subject_name
-  - name: Configure grouping strategy
+  - name: Configure Grouping Strategy
     id: groupers
     task: set_groupers
     partial:
@@ -63,7 +63,7 @@ workflow:
         - index_name: "name"
 
   # connect to earthranger
-  - name: Connect to earth ranger
+  - name: Connect to EarthRanger
     id: er_client_name
     task: set_er_connection
 
@@ -202,6 +202,15 @@ workflow:
       ascending: true 
       na_position: last 
   
+  - name: Persist relocations as geoparquet
+    id: persist_relocs_geoparquet
+    task: persist_df
+    partial:
+      df: ${{ workflow.sort_curr_relocs.return }}
+      filetype: geoparquet
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: relocations
+
   - name: Sort previous relocs by fixtime 
     id: sort_prev_relocs
     task: sort_values 
@@ -211,6 +220,15 @@ workflow:
       ascending: true 
       na_position: last 
   
+  - name: Persist previous period relocations as geoparquet
+    id: persist_prev_relocs_geoparquet
+    task: persist_df
+    partial:
+      df: ${{ workflow.sort_prev_relocs.return }}
+      filetype: geoparquet
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: previous_period_relocations
+
   - name: Extract voltage from current relocs 
     id: extract_current_voltage 
     task: extract_value_from_json_column 
@@ -372,7 +390,7 @@ workflow:
     id: generate_word_report
     task: generate_source_voltage_report 
     partial: 
-      org_logo_path: ${{ worflow.logo_path.return }}
+      org_logo_path: ${{ workflow.logo_path.return }}
       report_period: ${{ workflow.time_range.return }}
       prepared_by: "Ecoscope"
       output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}

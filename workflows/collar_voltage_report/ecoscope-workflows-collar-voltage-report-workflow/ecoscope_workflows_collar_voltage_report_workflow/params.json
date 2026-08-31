@@ -18,7 +18,7 @@
       ],
       "type": "object",
       "description": "Add information that will help to differentiate this workflow from another.",
-      "title": "Set workflow details"
+      "title": "Set Workflow Details"
     },
     "time_range": {
       "additionalProperties": false,
@@ -58,7 +58,7 @@
       ],
       "type": "object",
       "description": "Choose the period of time to analyze.",
-      "title": "Define analysis time range"
+      "title": "Time Range"
     },
     "er_client_name": {
       "additionalProperties": false,
@@ -73,7 +73,7 @@
         "data_source"
       ],
       "type": "object",
-      "title": "Connect to earth ranger"
+      "title": "Connect to EarthRanger"
     },
     "subject_group_var": {
       "additionalProperties": false,
@@ -114,30 +114,26 @@
       "type": "object",
       "title": ""
     },
-    "generate_word_report": {
+    "logo_path": {
       "additionalProperties": false,
       "properties": {
-        "org_logo_path": {
+        "input_method": {
           "anyOf": [
             {
-              "type": "string"
+              "$ref": "#/$defs/DownloadFile"
             },
             {
-              "format": "path",
-              "type": "string"
-            },
-            {
-              "type": "null"
+              "$ref": "#/$defs/LocalFile"
             }
           ],
-          "title": "Org Logo Path"
+          "default": null,
+          "title": "Input Method",
+          "description": "How to obtain the file: download from a URL or use a local file path"
         }
       },
-      "required": [
-        "org_logo_path"
-      ],
       "type": "object",
-      "title": "Generate Collar Voltage Word Report"
+      "required": [],
+      "title": ""
     }
   },
   "$defs": {
@@ -256,6 +252,34 @@
       },
       "title": "Preset",
       "type": "object"
+    },
+    "DownloadFile": {
+      "properties": {
+        "url": {
+          "description": "URL to download a file",
+          "title": "URL",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "Download from URL",
+      "type": "object"
+    },
+    "LocalFile": {
+      "properties": {
+        "file_path": {
+          "description": "Path to a local file",
+          "title": "Local file path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_path"
+      ],
+      "title": "Use local file",
+      "type": "object"
     }
   },
   "uiSchema": {
@@ -279,7 +303,7 @@
       "er_client_name",
       "subject_group_var",
       "set_previous_period",
-      "generate_word_report"
+      "logo_path"
     ]
   },
   "additionalProperties": false
