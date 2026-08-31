@@ -407,5 +407,3 @@ def draw_season_collared_plot(
     )
     figure.update_xaxes(range=[x_min, x_max])
     return figure.to_html(**ExportArgs(div_id=widget_id).model_dump(exclude_none=True))
-
-

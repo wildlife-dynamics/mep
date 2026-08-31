@@ -1,5 +1,5 @@
 from wt_registry import register
-from typing import Annotated, List
+from typing import Annotated
 from pydantic import Field
 from wt_task.skip import SkippedDependencyFallback
 from ecoscope.platform.tasks import transformation
@@ -20,6 +20,7 @@ from ecoscope.platform.tasks.results._ecoplot import (
     draw_historic_timeseries,
 )
 
+
 @register()
 def plot_historic_voltage(
     current_relocs: AnyGeoDataFrame,
@@ -29,7 +30,7 @@ def plot_historic_voltage(
         SkippedDependencyFallback(skip_gdf_fallback_to_none),
     ],
     column: str = "voltage",
-)->str:
+) -> str:
     """Plot current collar voltage against a historic min/max/mean band.
 
     Args:
@@ -66,9 +67,7 @@ def plot_historic_voltage(
         dataframe_column_min(current_relocs, column),
         "min",
     )
-    lower_y = apply_arithmetic_operation(
-        lower_y, apply_arithmetic_operation(lower_y, 0.15, "multiply"), "subtract"
-    )
+    lower_y = apply_arithmetic_operation(lower_y, apply_arithmetic_operation(lower_y, 0.15, "multiply"), "subtract")
 
     # y-axis upper bound: max across history + current, padded 15%
     upper_y = apply_arithmetic_operation(
@@ -76,9 +75,7 @@ def plot_historic_voltage(
         dataframe_column_max(current_relocs, column),
         "max",
     )
-    upper_y = apply_arithmetic_operation(
-        upper_y, apply_arithmetic_operation(upper_y, 0.15, "multiply"), "add"
-    )
+    upper_y = apply_arithmetic_operation(upper_y, apply_arithmetic_operation(upper_y, 0.15, "multiply"), "add")
 
     transformation.assign_value(current_relocs, "max", volt_upper)
     transformation.assign_value(current_relocs, "min", volt_lower)

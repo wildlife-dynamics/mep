@@ -96,9 +96,7 @@ class TestGenerateSourceVoltageReport:
         texts = " ".join(read_docx_text(Path(result_path)))
         assert "HAS_LOGO" in texts
 
-    def test_org_logo_omitted_when_none(
-        self, tmp_path, make_docx_template, read_docx_text, report_period
-    ):
+    def test_org_logo_omitted_when_none(self, tmp_path, make_docx_template, read_docx_text, report_period):
         template_path = _template(make_docx_template)
 
         result_path = generate_source_voltage_report(

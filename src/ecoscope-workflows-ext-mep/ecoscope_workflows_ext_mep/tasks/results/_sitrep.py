@@ -110,9 +110,7 @@ def sitrep_arrests(x: pd.Series) -> str:
 
 
 @register()
-def get_sitrep_event_config(
-    region_column: str = "region"
-    ) -> Dict[str, Dict[str, Any]]:
+def get_sitrep_event_config(region_column: str = "region") -> Dict[str, Dict[str, Any]]:
     """
     Get configuration for sitrep event types.
 

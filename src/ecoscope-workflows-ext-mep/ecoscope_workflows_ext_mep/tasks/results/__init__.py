@@ -8,7 +8,8 @@ from ._plot import (
 )
 from ._stats import compute_subject_stats
 from ._collar_voltage import plot_historic_voltage
-from ._sitrep import compile_sitrep,get_sitrep_event_config
+from ._sitrep import compile_sitrep, get_sitrep_event_config
+
 __all__ = [
     "process_subject_information",
     "persist_subject_photo",
@@ -19,5 +20,5 @@ __all__ = [
     "compute_subject_stats",
     "plot_historic_voltage",
     "compile_sitrep",
-    "get_sitrep_event_config"
+    "get_sitrep_event_config",
 ]

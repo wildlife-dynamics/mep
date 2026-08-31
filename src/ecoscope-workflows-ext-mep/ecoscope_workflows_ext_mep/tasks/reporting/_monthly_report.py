@@ -18,16 +18,19 @@ SINGLE_IMAGE_STEMS = {
 }
 SITREP_CSV_STEM = "sitrep_report"
 
+
 def _read_csv(path: Optional[str]) -> Optional[pd.DataFrame]:
     """Read a CSV if the path exists, otherwise return None."""
     if path and Path(path).exists():
         return pd.read_csv(path)
     return None
 
+
 def _maybe_image(tpl: DocxTemplate, path: Optional[str]) -> Optional[InlineImage]:
     if not path:
         return None  # template must guard with {% if %}
     return InlineImage(tpl, path, width=Inches(6.58), height=Inches(3.85))
+
 
 @register()
 def create_mep_monthly_report(
@@ -94,7 +97,7 @@ def create_mep_monthly_report(
     sitrep = sitrep_df.to_dict(orient="records") if sitrep_df is not None else []
 
     context: Dict[str, Any] = {
-        "elephant_speedmap": _maybe_image(tpl, single_image_paths.get("elephant_speedmap")),# elephant_speedmap
+        "elephant_speedmap": _maybe_image(tpl, single_image_paths.get("elephant_speedmap")),  # elephant_speedmap
         "elephant_sighting_map": _maybe_image(tpl, single_image_paths.get("elephant_sighting_map")),
         "vehicle_patrol_tracks": _maybe_image(tpl, single_image_paths.get("vehicle_patrol_tracks")),
         "foot_patrol_tracks": _maybe_image(tpl, single_image_paths.get("foot_patrol_tracks")),

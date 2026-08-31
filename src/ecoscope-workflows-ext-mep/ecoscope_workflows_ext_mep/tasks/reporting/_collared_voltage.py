@@ -8,7 +8,9 @@ from wt_registry import register
 from ecoscope.platform.tasks.filter._filter import TimeRange
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 from ecoscope_workflows_ext_ste.tasks.reporting._cover_context import get_image_dimensions_from_pixels
+
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp"}
+
 
 @register()
 def generate_source_voltage_report(
@@ -45,7 +47,7 @@ def generate_source_voltage_report(
         resolved_logo_path = remove_file_scheme(str(org_logo_path))
         if not resolved_logo_path.strip():
             raise ValueError("org_logo_path is empty after normalization")
-        
+
     voltage_chart_suffix = "_historic_voltage"
     images_found: list[tuple[str, str]] = []
     for root, _, files in os.walk(output_dir):
@@ -53,11 +55,7 @@ def generate_source_voltage_report(
             p = Path(root) / f
             if p.suffix.lower() in IMAGE_EXTS:
                 stem = p.stem
-                subject_name = (
-                    stem[: -len(voltage_chart_suffix)]
-                    if stem.endswith(voltage_chart_suffix)
-                    else stem
-                )
+                subject_name = stem[: -len(voltage_chart_suffix)] if stem.endswith(voltage_chart_suffix) else stem
                 images_found.append((subject_name, str(p)))
 
     print(f"Found {len(images_found)} image file(s)")
@@ -70,7 +68,7 @@ def generate_source_voltage_report(
         }
         for subject_name, path in images_found
     ]
-    
+
     if resolved_logo_path:
         logo_width, logo_height = get_image_dimensions_from_pixels(
             resolved_logo_path,
