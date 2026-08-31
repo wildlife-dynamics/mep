@@ -244,8 +244,20 @@ workflow:
       - name: null
         id: set_previous_period
         task: ecoscope_workflows_ext_ste.tasks.filter.flexible_previous_period
-        partial: 
+        partial:
           timerange: ${{ workflow.time_range.return }}
+
+  - name: Get subject group observations
+    id: previous_subject_observations
+    task: get_subjectgroup_observations
+    partial:
+      filter: clean
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.set_previous_period.return }}
+      subject_group_name: ${{ workflow.subject_group_var.return }}
+      raise_on_empty: false
+      include_details: true
+      include_subjectsource_details: true
 
   - name: Convert previous relocs to timezone
     id: convert_prev_relocs_timezone
@@ -530,6 +542,7 @@ workflow:
         - speed_kmhr
         - speed_bins
       exclude: null 
+      strict: false
       df: ${{ workflow.apply_speed_colormap.return }}
 
   - name: Generate speedmap layers
@@ -585,7 +598,7 @@ workflow:
     partial:
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename_suffix: null
-      filename: speedmap.html
+      filename: elephant_speedmap.html
       text: ${{ workflow.draw_speedmap.return }}
 
   # generate sitrep report -- persist df
@@ -875,7 +888,7 @@ workflow:
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10 #40000
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
 
   - name: Convert elephant speedmap html to png
@@ -887,7 +900,7 @@ workflow:
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10 #40000
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
 
   - name: Convert vehicle patrol html to png
@@ -899,7 +912,7 @@ workflow:
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10 #40000
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
 
   - name: Convert foot patrol html to png
@@ -911,19 +924,7 @@ workflow:
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10 #40000
-        max_concurrent_pages: 1
-
-  - name: Convert collared plot html to png
-    id: convert_collared_png
-    task: html_to_png
-    partial:
-      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-      html_path: ${{ workflow.process_subject_charts.return }}
-      config:
-        full_page: false
-        device_scale_factor: 2.0
-        wait_for_timeout: 10
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
 
   - name: Download monthly cover page template
@@ -980,37 +981,82 @@ workflow:
       filename: "mep_monthly_cover_page.docx"
 
 
+  - name: Create mep monthly report 
+    id: create_monthly_report 
+    task: create_mep_monthly_report
+    partial: 
+      template_path: ${{ workflow.download_content_page.return }}
+      output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: "overall_report.docx"
 
-  # - name: Create monthly report
-  #   id: create_monthly_ctx
-  #   task: create_mep_monthly_context
-  #   partial:
-  #     filename: mep_context.docx
-  #     template_path: ${{ workflow.download_content_page.return }}
-  #     output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-  #     elephant_sightings_map_path: ${{ workflow.convert_sightings_png.return }}
-  #     speedmap_path: ${{ workflow.convert_speedmap_png.return }}
-  #     foot_patrols_map_path: ${{ workflow.convert_foot_png.return }}
-  #     vehicle_patrol_map_path: ${{ workflow.convert_vehicle_png.return }}
-  #     subject_group: ${{ workflow.subject_group_var.return }} 
-  #     collared_elephant_plot_paths: ${{ workflow.convert_collared_png.return }}
-  #     sitrep_df_path: ${{ workflow.persist_sitrep_csv.return }}
+  - name: Create sightings map widget
+    id: sightings_map_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Elephant Sightings Map"
+      data: ${{ workflow.persist_sightings_urls.return }}
 
-  # - name: Merge mep word docs
-  #   id: merge_mep_docx
-  #   task: merge_mapbook_files
-  #   partial:
-  #     cover_page_path: ${{ workflow.persist_cover_context.return }}
-  #     output_dir: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
-  #     context_page_items:
-  #       - ${{ workflow.create_monthly_ctx.return }}
-  #     filename: "overall_mep_monthly_report.docx"
+  - name: Create speedmap widget
+    id: speedmap_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Speed Map"
+      data: ${{ workflow.persist_speedmap_html.return }}
+
+  - name: Create vehicle patrol map widget
+    id: vehicle_map_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Vehicle Patrols Map"
+      data: ${{ workflow.vehicle_patrol_map.return }}
+
+  - name: Create foot patrol map widget
+    id: foot_map_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Foot Patrols Map"
+      data: ${{ workflow.foot_patrol_map.return }}
+
+  - name: Draw sitrep report table
+    id: draw_sitrep_table
+    task: draw_table
+    partial:
+      dataframe: ${{ workflow.generate_sitrep_df.return }}
+      columns: null
+      table_config:
+        enable_sorting: true
+        enable_filtering: true
+        enable_download: false
+        hide_header: false
+      widget_id: "Sitrep Report"
+
+  - name: Persist sitrep table as html
+    id: persist_sitrep_table_html
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      text: ${{ workflow.draw_sitrep_table.return }}
+      filename: sitrep_report_table.html
+      filename_suffix: null
+
+  - name: Create sitrep report widget
+    id: sitrep_table_widget
+    task: create_table_widget_single_view
+    partial:
+      title: "Sitrep Report"
+      data: ${{ workflow.persist_sitrep_table_html.return }}
 
   - name: MEP monthly report  dashboard
     id: mep_monthly_dashboard
     task: gather_dashboard
     partial:
       details: ${{ workflow.workflow_details.return}}
-      widgets: []
+      widgets:
+        - ${{ workflow.grouped_collared_widget.return }}
+        - ${{ workflow.sightings_map_widget.return }}
+        - ${{ workflow.speedmap_widget.return }}
+        - ${{ workflow.vehicle_map_widget.return }}
+        - ${{ workflow.foot_map_widget.return }}
+        - ${{ workflow.sitrep_table_widget.return }}
       time_range: ${{ workflow.time_range.return}}
       groupers: ${{ workflow.groupers.return }}

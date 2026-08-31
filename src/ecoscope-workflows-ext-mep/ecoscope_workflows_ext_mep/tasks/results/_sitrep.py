@@ -239,7 +239,7 @@ def _download_all_events(
                 print(f"No events found for {event_key}")
 
         except Exception as e:
-            print(f"Failed to download events for {event_key}: {e}", exc_info=True)
+            print(f"Failed to download events for {event_key}: {e}")
             continue
 
     return downloaded_events
