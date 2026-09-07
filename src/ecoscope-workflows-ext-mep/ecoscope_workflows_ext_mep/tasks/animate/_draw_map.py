@@ -10,7 +10,7 @@ from PIL import Image
 import geopandas as gpd
 from pyproj import Transformer
 import concurrent.futures as cf
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from shapely.geometry import LineString
 from typing import Annotated, Literal, cast
 from pydantic.json_schema import SkipJsonSchema
@@ -46,6 +46,45 @@ DEFAULT_TERRAIN_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{
 SURFACE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 
 TerrainStrategy = Annotated[Literal["best-available", "no-overlap", "never"], PydeckAnnotation]
+
+
+class _BasemapFields(BaseModel):
+    """Shared fields available on every basemap option (Default and Custom alike)."""
+
+    elevation_decoder: Annotated[
+        dict | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="RGB->elevation decoder. None -> Terrarium default. Feed "
+            "create_elevation_decoder's output here to apply vertical exaggeration; the same "
+            "decoder is used both to render the terrain mesh and to sample trip elevations.",
+        ),
+    ] = None
+
+
+class DefaultBasemap(_BasemapFields):
+    """Standard basemap: AWS Terrarium elevation tiles draped with ArcGIS World Imagery."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Default"})
+    preset: Annotated[Literal["default"], Field(default="default", title="Basemap")] = "default"
+
+
+class CustomBasemap(_BasemapFields):
+    """Provide your own elevation and/or texture tile URL templates."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Custom"})
+    preset: Annotated[Literal["custom"], Field(default="custom", title="Basemap")] = "custom"
+    tile_urls: Annotated[
+        dict | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="Custom elevation/texture tile URLs. None -> defaults. Feed "
+            "set_custom_basemap_urls's output here.",
+        ),
+    ] = None
+
+
+BasemapOption = Annotated[DefaultBasemap | CustomBasemap, Field(discriminator="preset")]
 
 
 class ScenegraphLayerDefinition(BaseModel):
@@ -560,7 +599,7 @@ def _build_map_deck(
         widgets=map_widgets,
         initial_view_state=view_state or view_state_from_layers(layers=geo_layers, max_zoom=max_zoom),
         views=pdk.View("MapView", controller=not static, repeat=True),
-        parameters={"depthTest": any(getattr(l, "extruded", False) for l in map_layers)},
+        parameters={"depthTest": any(getattr(layer, "extruded", False) for layer in map_layers)},
         map_style=pdk.map_styles.LIGHT_NO_LABELS,
     )
 
@@ -1095,8 +1134,14 @@ function headAt(feature, i, t) {
     if (g.horiz >= headMinMoveM) { headLastHeading[i] = g.heading; return { heading: g.heading, pitch: g.pitch }; }
     return { heading: headLastHeading[i] || 0, pitch: 0 };   // stationary: hold + level
   }
-  if (t <= T[0])    { const o = orient(headTangent(C, 0, last, k));        return { pos: C[0],    heading: o.heading, pitch: o.pitch }; }
-  if (t >= T[last]) { const o = orient(headTangent(C, last - 1, last, k)); return { pos: C[last], heading: o.heading, pitch: o.pitch }; }
+  if (t <= T[0]) {
+    const o = orient(headTangent(C, 0, last, k));
+    return { pos: C[0], heading: o.heading, pitch: o.pitch };
+  }
+  if (t >= T[last]) {
+    const o = orient(headTangent(C, last - 1, last, k));
+    return { pos: C[last], heading: o.heading, pitch: o.pitch };
+  }
   let j = headCursors[i] || 0;
   if (t < T[j]) j = 0;                 // scrubbed backwards
   while (j < last && T[j + 1] < t) j++;
@@ -1412,6 +1457,7 @@ def create_elevation_decoder(
         "offset": offset * exaggeration,
     }
 
+
 @register()
 def set_basemap_urls(
     elevation_data: Annotated[
@@ -1433,3 +1479,19 @@ def set_basemap_urls(
     the config form instead of being bundled directly into the Custom basemap variant.
     """
     return {"elevation_data": elevation_data, "texture": texture}
+
+
+@register()
+def set_basemap_option(
+    basemap: Annotated[
+        BasemapOption,
+        Field(
+            description="Elevation + texture tile source (+ optional elevation decoder). Set this "
+            "once and reuse its return value for both create_terrain_layer's basemap and "
+            "trajectory_to_trips' terrain.basemap, so the rendered mesh and the sampled trip "
+            "elevations always agree."
+        ),
+    ] = DefaultBasemap(),
+) -> Annotated[BasemapOption, Field()]:
+    """Pass through a basemap selection so multiple tasks can share one workflow step."""
+    return basemap

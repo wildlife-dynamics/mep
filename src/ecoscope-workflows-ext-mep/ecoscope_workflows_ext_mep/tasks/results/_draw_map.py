@@ -214,6 +214,7 @@ class ClusteredLabeledScatterplotLayerStyle(LayerStyleBase):
         AdvancedField(default=ClusterLabelStyle()),
     ] = ClusterLabelStyle()
 
+
 class TripsLayerStyle(LayerStyleBase):
     """
     Trips Layer style kwargs
@@ -279,8 +280,7 @@ class AnimationWidgetStyle(BaseModel):
         float,
         AdvancedField(
             default=0.0,
-            description="Camera rotation speed in degrees/second while playing. "
-            "0 = off; positive = clockwise.",
+            description="Camera rotation speed in degrees/second while playing. " "0 = off; positive = clockwise.",
         ),
     ] = 0.0
 
@@ -341,6 +341,7 @@ LayerStyle = Union[
     ScenegraphLayerStyle,
 ]
 
+
 @register()
 def create_clustered_labeled_scatterplot_layer(
     geodataframe: Annotated[
@@ -391,6 +392,7 @@ def _unwrap(v: Any) -> Any:
     if not isinstance(v, list):
         return v
     return [layer for item in v for layer in (item if isinstance(item, list) else [item])]
+
 
 @register()
 def create_trips_layer(
@@ -500,6 +502,7 @@ def create_head_marker_layer(
         legend=None,
         geodataframe=gdf,
     )
+
 
 @register()
 def draw_map(
@@ -772,6 +775,3 @@ def draw_map(
     )
 
     return m.to_html(as_string=True)
-
-
-

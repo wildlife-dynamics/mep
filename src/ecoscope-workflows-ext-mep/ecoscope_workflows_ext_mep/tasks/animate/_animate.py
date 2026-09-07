@@ -122,9 +122,9 @@ class CameraKeyframe(BaseModel):
     ] = None
     zoom: Annotated[float | None, Field(default=None, description="Zoom level at this keyframe.")] = None
     pitch: Annotated[float | None, Field(default=None, description="Camera tilt in degrees at this keyframe.")] = None
-    bearing: Annotated[
-        float | None, Field(default=None, description="Camera heading in degrees at this keyframe.")
-    ] = None
+    bearing: Annotated[float | None, Field(default=None, description="Camera heading in degrees at this keyframe.")] = (
+        None
+    )
 
 
 _KF_CHANNELS = ("zoom", "pitch", "bearing")
@@ -316,9 +316,7 @@ def keyframes_from_gdf(
         pad = w // 2
         padded = np.pad(pts, ((pad, pad), (0, 0)), mode="edge")
         kernel = np.ones(w) / w
-        pts = np.stack(
-            [np.convolve(padded[:, 0], kernel, "valid"), np.convolve(padded[:, 1], kernel, "valid")], axis=1
-        )
+        pts = np.stack([np.convolve(padded[:, 0], kernel, "valid"), np.convolve(padded[:, 1], kernel, "valid")], axis=1)
 
     bearings: list[float | None] = [None] * n_keyframes
     if bearing_from_travel:
@@ -1110,20 +1108,20 @@ window.__cam = (function () {
     var A = K[s], B = K[Math.min(s + 1, hi)];
     var u = (B.t > A.t) ? (prog - A.t) / (B.t - A.t) : 1;
     u = Math.max(0, Math.min(1, u));
-    var ue = (easing === 'linear' || easing === 'spline') ? u : u * u * (3 - 2 * u); // smoothstep
+    var eased = (easing === 'linear' || easing === 'spline') ? u : u * u * (3 - 2 * u); // smoothstep
     var lon, lat;
     if (easing === 'spline') {                       // Catmull-Rom through lon/lat
       var P0 = K[Math.max(0, s - 1)], P3 = K[Math.min(hi, s + 2)];
       lon = catmullRom(P0.lon, A.lon, B.lon, P3.lon, u);
       lat = catmullRom(P0.lat, A.lat, B.lat, P3.lat, u);
     } else {
-      lon = A.lon + (B.lon - A.lon) * ue;
-      lat = A.lat + (B.lat - A.lat) * ue;
+      lon = A.lon + (B.lon - A.lon) * eased;
+      lat = A.lat + (B.lat - A.lat) * eased;
     }
     return { longitude: lon, latitude: lat,
-             zoom:    A.zoom    + (B.zoom    - A.zoom   ) * ue,
-             pitch:   A.pitch   + (B.pitch   - A.pitch  ) * ue,
-             bearing: A.bearing + (B.bearing - A.bearing) * ue };
+             zoom:    A.zoom    + (B.zoom    - A.zoom   ) * eased,
+             pitch:   A.pitch   + (B.pitch   - A.pitch  ) * eased,
+             bearing: A.bearing + (B.bearing - A.bearing) * eased };
   }
 
   // Build the entire per-frame viewState array in one pass.

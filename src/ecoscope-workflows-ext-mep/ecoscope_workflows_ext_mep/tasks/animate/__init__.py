@@ -8,6 +8,7 @@ from ._draw_map import (
     create_timeline_animation,
     create_elevation_decoder,
     set_basemap_urls,
+    set_basemap_option,
 )
 
 from ._animate import (
@@ -29,4 +30,5 @@ __all__ = [
     "configure_video_export",
     "render_animation",
     "set_basemap_urls",
+    "set_basemap_option",
 ]

@@ -28,7 +28,6 @@ rjsf-overrides:
   properties:
     Subject Group.properties.subject_group_var.properties.var.title: Subject Group Name
     Subject Group.properties.subject_group_var.properties.var.default: Elephants
-    trips_view_state.properties.pitch.default: 0
 task-instance-defaults:
   skipif:
     conditions:
@@ -37,7 +36,7 @@ task-instance-defaults:
 
 workflow:
   # set workflow details
-  - name: Set workflow details
+  - name: Workflow Details
     id: workflow_details
     task: set_workflow_details
 
@@ -46,7 +45,7 @@ workflow:
     task: set_er_connection 
 
   # define time range
-  - name: Define analysis time range
+  - name: Time Range
     id: time_range
     task: set_time_range
 
@@ -104,7 +103,7 @@ workflow:
         - x: 1.000000
           y: 1.000000
 
-  - name: Convert relocations to trajectories 
+  - name: Trajectory Segment Filter 
     id: convert_to_trajs 
     task: relocations_to_trajectory 
     partial: 
@@ -143,7 +142,7 @@ workflow:
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: trajectories
 
-  - name: Configure terrain elevation decoder
+  - name: Terrain Exaggeration
     id: terrain_exaggeration
     task: create_elevation_decoder
     partial:
@@ -152,9 +151,12 @@ workflow:
       b_scaler: 0.00390625 #1/256
       offset: -32768.0
 
-  - name: Configure Tilelayers
+  - name: Configure Basemap URLs
     id: custom_basemap_urls
     task: set_basemap_urls
+    partial:
+      elevation_data: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+      texture: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 
   - name: Configure basemap
     id: basemap_option
@@ -177,7 +179,8 @@ workflow:
         offset: 30
         cache_dir: null
         ground_elevation: 1500
-        basemap: ${{ workflow.basemap_option.return }}
+        elevation_data: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+        elevation_decoder: ${{ workflow.terrain_exaggeration.return }}
 
   - name: Create terrain layer
     id: terrain_layer
@@ -185,8 +188,10 @@ workflow:
     partial:
       min_zoom: 0
       max_zoom: 15
-      basemap: ${{ workflow.basemap_option.return }}
       wireframe: false
+      elevation_data: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+      texture: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+      elevation_decoder: ${{ workflow.terrain_exaggeration.return }}
 
   - title: Map Zoom & Extent
     type: task-group
@@ -198,9 +203,6 @@ workflow:
         partial:
           expansion_factor: 1.05
           gdf: ${{ workflow.trajs_trips.return }}
-        mapvalues: 
-          argnames: gdf 
-          argvalues: ${{ workflow.filter_movement_cols.return }}
   
       - name: Zoom view to gdf extent
         id: trips_view_state
@@ -245,7 +247,7 @@ workflow:
         sort: ascending 
         label_suffix: null 
   
-  - name: Configure animation settings
+  - name: Animation Settings
     id: animation_settings
     task: create_timeline_animation
     partial:
@@ -257,12 +259,12 @@ workflow:
       history_opacity: 1.00
       fade_history: true
       show_head: true
-      # head_radius: 2.25
+      head_radius: 1.75
       head_color: null
-      # head_outline_width: 1.05
+      head_outline_width: 1.00
       auto_rotate_speed: 0.0
 
-  - name: Draw animated map
+  - name: Draw Animation
     id: draw_animation
     task: draw_animated_map
     partial:
