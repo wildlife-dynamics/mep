@@ -5,35 +5,29 @@
 
 ```yaml
 # fingerprint:
-artifacts_sha256_basic: 32888e4d5a0d22bf6be9e7e86bda0aafe36008ae0553995d611c84f42c934a5b
-artifacts_sha256_strict: cc6e552db3abb87dc5195734da04caae1ecbdc3c111adc14a030862db699ed0e
+artifacts_sha256_basic: 0719ca5cf760ee2cef2c844428dd87a4cda3bfee9211de3d3943aeadfaea0c06
+artifacts_sha256_strict: 0561c00fecbd38811f412e464835e34022ef4b74610ce4366d3190333164bb26
 installed_requirements:
 - channel: https://repo.prefix.dev/ecoscope-workflows/
-  name: ecoscope-workflows-core
-  version: {version: ==0.22.17}
-- channel: https://repo.prefix.dev/ecoscope-workflows/
-  name: ecoscope-workflows-ext-ecoscope
-  version: {version: ==0.22.17}
+  name: ecoscope-platform
+  version: {version: ==2.15.1}
+- channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+  name: ecoscope-workflows-ext-custom
+  version: {version: ==0.1.0rc14}
+- channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+  name: ecoscope-workflows-ext-ste
+  version: {version: ==0.0.0rc1}
+- channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
+  name: ecoscope-workflows-ext-mep
+  version: {version: ==1.0.2.dev2+ge0e62c0e6.d20260907}
 - channel: conda-forge
   name: pydeck
   version: {version: ==0.9.2}
-- channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-  name: ecoscope-workflows-ext-custom
-  version: {version: ==0.0.57}
-- channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-  name: ecoscope-workflows-ext-ste
-  version: {version: ==0.0.22}
-- channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-  name: ecoscope-workflows-ext-mnc
-  version: {version: ==0.0.9}
-- channel: https://repo.prefix.dev/ecoscope-workflows-custom/
-  name: ecoscope-workflows-ext-big-life
-  version: {version: ==0.0.11}
-- channel: file:///tmp/ecoscope-workflows-custom/release/artifacts/
-  name: ecoscope-workflows-ext-mep
-  version: {version: ==0.0.29.dev0+g8d6dd4d48.d20260713}
-params_sha256: 3d6b8eb7d45105f98de8219b843e2b06646854228457fbe2208af4bca0ea1ba7
-spec_sha256: 4154eac2c8c0ec662ffc73f57554fd0414745e8fa5e27b8c4f4c5772886fb0a7
+- channel: conda-forge
+  name: opentelemetry-sdk
+  version: {version: ==1.44.0}
+params_sha256: f6ad8d041ce994079d9c94b3066acc61564065116800815cf776b23e3f1af4fc
+spec_sha256: 1bd63fcea9a95a654ebafc8e58b1dc55bbfbe9016a64c87ea6b4dd4eafcfc251
 
 ```
 
