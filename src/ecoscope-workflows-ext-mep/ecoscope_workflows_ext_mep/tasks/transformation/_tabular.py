@@ -4,10 +4,11 @@ from typing import Annotated
 from wt_registry import register
 from ..spatial_operations import overlay_gdf
 from ecoscope.platform.tasks.filter._filter import TimeRange
-from ecoscope.platform.annotations import AnyDataFrame,AnyGeoDataFrame
-from ecoscope_workflows_ext_ste.tasks.spatial_operations._spatial_join import  spatial_join
+from ecoscope.platform.annotations import AnyDataFrame, AnyGeoDataFrame
+from ecoscope_workflows_ext_ste.tasks.spatial_operations._spatial_join import spatial_join
 
 ColumnName = Annotated[str, Field(description="Column to aggregate")]
+
 
 @register()
 def dataframe_column_unique(
@@ -15,6 +16,7 @@ def dataframe_column_unique(
     column_name: ColumnName,
 ) -> Annotated[list, Field(description="The number of unique values in the column")]:
     return df[column_name].unique()
+
 
 @register()
 def reset_dataframe_index(
@@ -39,6 +41,7 @@ def reset_dataframe_index(
 
     df = df.reset_index(drop=drop)
     return df
+
 
 @register()
 def add_time_since_visit(
@@ -73,6 +76,7 @@ def add_time_since_visit(
     df["days_since_visit"] = df["hours_since_visit"] / 24
     return df
 
+
 @register()
 def add_non_null_flag(
     df: AnyDataFrame,
@@ -102,6 +106,7 @@ def add_non_null_flag(
     """
     df[flag_column] = df[source_column].notna()
     return df
+
 
 @register()
 def compute_dwell_time(
@@ -169,6 +174,7 @@ def compute_dwell_time(
     dwell["hours_in_cell"] = dwell["seconds_in_cell"] / 3600
     return dwell
 
+
 @register()
 def operational_days(
     trajs: AnyDataFrame,
@@ -231,6 +237,7 @@ def operational_days(
     op_df["active_days_percentage"] = (op_df["days_on_patrol"] / period_days * 100).round(1)
     print(f"period_days: {period_days}, output shape: {op_df.shape}")
     return op_df
+
 
 @register()
 def compute_patrol_effort_fraction(gdf: AnyGeoDataFrame) -> float:

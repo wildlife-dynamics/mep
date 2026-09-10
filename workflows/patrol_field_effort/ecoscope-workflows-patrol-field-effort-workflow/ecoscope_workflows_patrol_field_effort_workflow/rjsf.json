@@ -383,33 +383,6 @@
       "type": "object",
       "title": "Create Analysis Grid"
     },
-    "patrol_segment_date": {
-      "additionalProperties": false,
-      "properties": {
-        "remove_source": {
-          "default": false,
-          "title": "Remove Source",
-          "type": "boolean",
-          "description": "If True, drops the original datetime column after extraction."
-        },
-        "column_prefix": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Column Prefix",
-          "description": "Custom prefix for generated columns (defaults to datetime_column name)."
-        }
-      },
-      "required": [],
-      "type": "object",
-      "title": "Extract Patrol Date"
-    },
     "Map Zoom & Extent": {
       "type": "object",
       "description": "Calculate the geographic extent of the movement tracks and determine an appropriate zoom level and center point for the map. This ensures that all tracks are visible and well-framed when the map is rendered.",
@@ -799,12 +772,6 @@
         "group_by"
       ]
     },
-    "patrol_segment_date": {
-      "ui:order": [
-        "remove_source",
-        "column_prefix"
-      ]
-    },
     "ui:order": [
       "workflow_details",
       "er_client_name",
@@ -814,7 +781,6 @@
       "get_patrol_obs",
       "patrol_obs_trajs",
       "create_geo_meshgrid",
-      "patrol_segment_date",
       "Map Zoom & Extent"
     ],
     "create_geo_meshgrid": {

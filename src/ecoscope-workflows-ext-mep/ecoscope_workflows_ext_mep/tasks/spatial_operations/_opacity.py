@@ -3,6 +3,7 @@ from typing import Annotated, cast
 from wt_registry import register
 from ecoscope.platform.annotations import AnyGeoDataFrame
 
+
 @register()
 def set_spatial_features_opacity(
     gdf: Annotated[

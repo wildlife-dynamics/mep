@@ -5,7 +5,7 @@ import pandas as pd
 from matplotlib import colormaps
 from wt_registry import register
 from matplotlib.colors import to_hex
-from ecoscope.platform.annotations import AnyDataFrame,AnyGeoDataFrame
+from ecoscope.platform.annotations import AnyDataFrame, AnyGeoDataFrame
 from ecoscope_workflows_ext_ste.tasks.results._spatial_layers import ColorPalette, CustomPalette
 
 
@@ -16,6 +16,7 @@ _MC_SCHEME = {
     "fisher_jenks": "fisherjenks",
     "std_mean": "stdmean",
 }
+
 
 def _compute_edges(vals: pd.Series, scheme: str, bins: int) -> np.ndarray:
     """Bin edges from a mapclassify scheme, clipped to [vals.min(), vals.max()]."""
@@ -33,6 +34,7 @@ def _compute_edges(vals: pd.Series, scheme: str, bins: int) -> np.ndarray:
     # keep only breaks strictly inside the data range (drops std_mean's out-of-range edges)
     interior = [b for b in np.asarray(mc.bins, dtype=float) if lo < b < hi]
     return np.unique(np.array([lo, *interior, hi], dtype=float))
+
 
 @register()
 def add_visit_bins(
@@ -56,6 +58,7 @@ def add_visit_bins(
     if use_abs:
         vals = vals.abs()
     df[new_col] = no_data_label
+
     def fmt(x):
         return f"{x:.0f}" if float(x).is_integer() else f"{x:.2f}".rstrip("0").rstrip(".")
 
@@ -81,6 +84,7 @@ def add_visit_bins(
     df[new_col] = pd.Categorical(df[new_col], categories=[no_data_label] + labels, ordered=True)
     return df
 
+
 @register()
 def add_bin_colors(
     df: AnyDataFrame,
@@ -89,7 +93,7 @@ def add_bin_colors(
     cmap: ColorPalette,
     no_data_label: str = "Unvisited",
     no_data_color: str = "#808080",
-    ) -> AnyDataFrame:
+) -> AnyDataFrame:
     df = df.copy()
     # use the categorical's own order if present, else sorted uniques
     if isinstance(df[col].dtype, pd.CategoricalDtype):
@@ -112,6 +116,7 @@ def add_bin_colors(
     df[new_col] = df[col].map(color_map)
     return df
 
+
 @register()
 def order_bin_categories(
     df: AnyGeoDataFrame,
@@ -127,9 +132,5 @@ def order_bin_categories(
         m = re.match(r"\s*(-?\d+(?:\.\d+)?)", b)
         return float(m.group(1)) if m else float("-inf")
 
-    df[bin_column] = pd.Categorical(
-        df[bin_column], 
-        categories=sorted(cats, key=_low), 
-        ordered=True
-        )
+    df[bin_column] = pd.Categorical(df[bin_column], categories=sorted(cats, key=_low), ordered=True)
     return df

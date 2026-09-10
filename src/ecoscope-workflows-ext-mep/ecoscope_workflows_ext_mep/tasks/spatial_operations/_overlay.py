@@ -2,6 +2,7 @@ from typing import Literal
 from wt_registry import register
 from ecoscope.platform.annotations import AnyGeoDataFrame
 
+
 @register()
 def overlay_gdf(
     left: AnyGeoDataFrame,

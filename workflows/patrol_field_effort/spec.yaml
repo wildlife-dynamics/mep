@@ -442,13 +442,15 @@ workflow:
       df: ${{ workflow.rename_patrol_cols.return }}
       datetime_column: "segment_start"
       components: ["date"]
+      remove_source: false 
+      column_prefix: null
 
   - name: Generate patrol summary table
     id: op_summary_table
     task: summarize_df
     partial:
       df: ${{ workflow.patrol_segment_date.return }}
-      groupby_cols: ["patrol_type","patrol_subject"]
+      groupby_cols: ["subject_id","patrol_subject"]
       reset_index: true
       summary_params:
         - display_name: distance_km
@@ -835,11 +837,27 @@ workflow:
       data: ${{ workflow.ltd_urls.return }}
 
   # Table widget for patrol summary
+  - name: Rename Patrol Summary Columns
+    id: op_summary_table_display
+    task: map_columns
+    partial:
+      raise_if_not_found: true
+      df: ${{ workflow.op_summary_table.return }}
+      duplicate_strategy: "suffix"
+      drop_columns: []
+      retain_columns: []
+      rename_columns:
+        subject_id: "Subject ID"
+        patrol_subject: "Patrol Subject"
+        distance_km: "Distance (km)"
+        duration_hrs: "Duration (hrs)"
+        patrol_days: "Patrol Days"
+
   - name: Render Patrol Summary Table
     id: op_summary_table_html
     task: draw_table
     partial:
-      dataframe: ${{ workflow.op_summary_table.return }}
+      dataframe: ${{ workflow.op_summary_table_display.return }}
       columns: null
       table_config:
         enable_sorting: true

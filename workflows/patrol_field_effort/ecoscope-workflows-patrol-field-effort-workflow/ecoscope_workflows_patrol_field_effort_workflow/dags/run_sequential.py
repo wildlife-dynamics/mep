@@ -1111,6 +1111,8 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             df=rename_patrol_cols,
             datetime_column="segment_start",
             components=["date"],
+            remove_source=False,
+            column_prefix=None,
             **(params.get("patrol_segment_date") or {}),
         )
         .call()
@@ -1131,7 +1133,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         )
         .partial(
             df=patrol_segment_date,
-            groupby_cols=["patrol_type", "patrol_subject"],
+            groupby_cols=["subject_id", "patrol_subject"],
             reset_index=True,
             summary_params=[
                 {
@@ -2061,6 +2063,37 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    op_summary_table_display = (
+        task(map_columns)
+        .validate()
+        .set_task_instance_id("op_summary_table_display")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            raise_if_not_found=True,
+            df=op_summary_table,
+            duplicate_strategy="suffix",
+            drop_columns=[],
+            retain_columns=[],
+            rename_columns={
+                "subject_id": "Subject ID",
+                "patrol_subject": "Patrol Subject",
+                "distance_km": "Distance (km)",
+                "duration_hrs": "Duration (hrs)",
+                "patrol_days": "Patrol Days",
+            },
+            **(params.get("op_summary_table_display") or {}),
+        )
+        .call()
+    )
+
     op_summary_table_html = (
         task(draw_table)
         .validate()
@@ -2075,7 +2108,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            dataframe=op_summary_table,
+            dataframe=op_summary_table_display,
             columns=None,
             table_config={
                 "enable_sorting": True,
