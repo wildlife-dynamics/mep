@@ -108,14 +108,16 @@ workflow:
       gdf: ${{ workflow.select_geo_er.return }}
       target_crs: "EPSG:3857"
 
-  - name: Save Study Area to File 
-    id: persist_spatial_file 
-    task: persist_df
-    partial:  
+  - name: Save Study Area to File
+    id: persist_spatial_file
+    task: ecoscope_workflows_ext_custom.tasks.io.persist_df_wrapper
+    partial:
       df: ${{ workflow.reproject_spatial_3857.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: er_spatial_file
-      filetype: geoparquet 
+      filetypes: [geoparquet]
+      sanitize: true
+      filename_prefix: earthranger
 
   - name: Create Analysis Grid
     id: create_geo_meshgrid
@@ -171,7 +173,7 @@ workflow:
     task: summarize_df 
     partial: 
       df: ${{ workflow.spatial_join_patrol_trajs.return }}
-      groupby_cols: ["cell_id"]
+      groupby_cols: ["index"]
       reset_index: true 
       summary_params: 
         - display_name: last_visited 
@@ -202,7 +204,7 @@ workflow:
       left: ${{ workflow.meshgrid_idx_id.return }}
       right: ${{ workflow.add_time.return }}
       how: left 
-      on: "cell_id"
+      on: "index"
       left_on: null
       right_on: null
       left_index: false 
@@ -257,7 +259,7 @@ workflow:
       df: ${{ workflow.reproject_4326.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: days_since_patrol_visit
-      filetype: geoparquet
+      filetype: gpkg
 
   - name: Prepare Trajectories for Dwell Calculation 
     id: reset_patrol_trajs
@@ -280,7 +282,7 @@ workflow:
       left: ${{ workflow.meshgrid_idx_id.return }}
       right: ${{ workflow.compute_patrol_dwell.return }}
       how: left 
-      on: cell_id 
+      on: index
       left_on: null
       right_on: null
       left_index: false 
@@ -335,7 +337,7 @@ workflow:
       df: ${{ workflow.add_dwell_bin_colors.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: time_spent_per_cell
-      filetype: geoparquet
+      filetype: gpkg
 
   - name: Calculate Patrol Route Density 
     id: calc_ltd_aoi
@@ -352,7 +354,7 @@ workflow:
       df: ${{ workflow.calc_ltd_aoi.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: patrols_linear_time_density 
-      filetype: geoparquet
+      filetype: gpkg
 
   - name: Prepare Route Density for Mapping 
     id: reproject_ltd 
@@ -437,7 +439,7 @@ workflow:
       df: ${{ workflow.get_patrol_obs.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: patrol_observations
-      filetype: geoparquet
+      filetype: gpkg
 
   - name: Save Patrol Trajectories 
     id: persist_patrol_trajs
@@ -446,7 +448,7 @@ workflow:
       df: ${{ workflow.patrol_obs_trajs.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: patrol_trajectories
-      filetype: geoparquet
+      filetype: gpkg
 
   - name: Set Study Area Opacity
     id: spatial_features_opacity
@@ -461,7 +463,8 @@ workflow:
     id: spatial_features_layer
     task: create_spatial_features_layer
     partial:
-      geodataframe: ${{ workflow.spatial_features_opacity.return }}
+      geodataframes:
+        - ${{ workflow.spatial_features_opacity.return }}
 
   - title: Map Zoom & Extent
     type: task-group

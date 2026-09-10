@@ -10,6 +10,9 @@ from ecoscope.platform.annotations import (  # type: ignore[import-untyped]
 from ecoscope.platform.connections import (  # type: ignore[import-untyped]
     EarthRangerClient,
 )
+from ecoscope_workflows_ext_ste.tasks.spatial_operations._spatial_features import (  # type: ignore[import-untyped]
+    get_featureset,
+)
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import Self

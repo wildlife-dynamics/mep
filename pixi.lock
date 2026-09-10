@@ -24,7 +24,7 @@ environments:
     - url: https://repo.prefix.dev/ecoscope-workflows-custom/
     packages:
       linux-64:
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-1.0.3.dev2+gd8932cd04.d20260910-pyh4616a5c_0.conda
+      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-1.0.3.dev3+gdc8b31454.d20260910-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-8_kmp_llvm.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/aiohttp-3.14.3-py312h5d8c7f2_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/alsa-lib-1.2.16.1-h7cc23a3_1.conda
@@ -246,7 +246,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libzlib-1.3.2-h25fd6f3_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/llvm-openmp-23.1.1-h7148c6a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/llvmlite-0.49.0-py312hb491018_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/lxml-6.1.2-py312h663fcd5_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/lxml-6.1.3-py312h663fcd5_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/lz4-c-1.10.0-hee9eb32_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/lzo-2.10-hebe6cf0_1003.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/markupsafe-3.0.3-py312h8a5da7c_1.conda
@@ -628,7 +628,7 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/wt-registry-0.2.2-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/wt-task-0.1.3-pyh4616a5c_0.conda
       osx-arm64:
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-1.0.3.dev2+gd8932cd04.d20260910-pyh4616a5c_0.conda
+      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-1.0.3.dev3+gdc8b31454.d20260910-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adwaita-icon-theme-49.0-unix_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/affine-3.0.1-pyhecae5ae_0.conda
@@ -1083,7 +1083,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/llvm-tools-23-23.1.1-h79441dc_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/llvm-tools-23.1.1-hdb3d66b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/llvmlite-0.49.0-py312ha6a25cf_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/lxml-6.1.2-py312h048a23b_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/lxml-6.1.3-py312haba262f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/lz4-c-1.10.0-hdca3b7d_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/lzo-2.10-h74c22ad_1003.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/markupsafe-3.0.3-py312h04c11ed_1.conda
@@ -1186,7 +1186,7 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/wt-registry-0.2.2-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/wt-task-0.1.3-pyh4616a5c_0.conda
       win-64:
-      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-1.0.3.dev2+gd8932cd04.d20260910-pyh4616a5c_0.conda
+      - conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-1.0.3.dev3+gdc8b31454.d20260910-pyh4616a5c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/affine-3.0.1-pyhecae5ae_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/aiohappyeyeballs-2.7.1-pyhd8ed1ab_0.conda
@@ -1604,7 +1604,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/libzlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/llvm-openmp-23.1.1-h49e36cd_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/llvmlite-0.49.0-py312h1534abe_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/win-64/lxml-6.1.2-py312h1476a5e_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/lxml-6.1.3-py312h1476a5e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/lz4-c-1.10.0-h6a83c73_2.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/lzo-2.10-h6a83c73_1003.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/m2-conda-epoch-20250515-0_x86_64.conda
@@ -2398,10 +2398,10 @@ environments:
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/wt-compiler-0.8.0-pyh4616a5c_0.conda
       - conda: https://repo.prefix.dev/ecoscope-workflows/noarch/wt-contracts-0.2.0-pyh4616a5c_0.conda
 packages:
-- conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-1.0.3.dev2+gd8932cd04.d20260910-pyh4616a5c_0.conda
+- conda: /tmp/ecoscope-workflows-custom/release/artifacts/noarch/ecoscope-workflows-ext-mep-1.0.3.dev3+gdc8b31454.d20260910-pyh4616a5c_0.conda
   subdir: noarch
-  sha256: 4a040d9dd05a66093befdadcc522a9427b5fe27fc6a50ca051ef5821d8211e90
-  md5: 252e6226e4b1cb46ba9b4be0d8c0e6c3
+  sha256: c394a53254f51298bcf032bbd197bf14d2f648b399890bc8a2934e3f3a0637cd
+  md5: 4d4d49a18e712fa3581f793325788bda
   depends:
   - python
   - wt-registry >=0.2.0,<0.3.0
@@ -2419,8 +2419,8 @@ packages:
   - docxcompose
   channel: file:///tmp/ecoscope-workflows-custom/release/artifacts
   license: BSD-3-Clause
-  size: 75562
-  timestamp: 1789032921333
+  size: 75575
+  timestamp: 1789035635162
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
   sha256: 1dd3fffd892081df9726d7eb7e0dea6198962ba775bd88842135a4ddb4deb3c9
@@ -6053,22 +6053,22 @@ packages:
   run_exports: {}
   size: 40829232
   timestamp: 1788518429834
-- conda: https://conda.anaconda.org/conda-forge/linux-64/lxml-6.1.2-py312h663fcd5_2.conda
-  sha256: 9668d76e526cdd6457fe64c0ccfee6f0055980b81ad137bea0f52e8c1ebcabb0
-  md5: ca5780f80f19ffa3dd8bd325ecaf26dd
+- conda: https://conda.anaconda.org/conda-forge/linux-64/lxml-6.1.3-py312h663fcd5_0.conda
+  sha256: 7ae87ca339fdc617c370a07da78ff8e950ceddf22f46fc2cac61c9f8ebafc84a
+  md5: 208336d5a9afe597e8a6d7004b108ef0
   depends:
   - __glibc >=2.17,<3.0.a0
   - libgcc >=15
   - libxml2
-  - libxml2-16 >=2.15.3
+  - libxml2-16 >=2.15.4
   - libxslt >=1.1.45,<2.0a0
   - libzlib >=1.3.2,<2.0a0
   - python >=3.12,<3.13.0a0
   - python_abi 3.12.* *_cp312
   license: BSD-3-Clause and MIT-CMU
   run_exports: {}
-  size: 1594924
-  timestamp: 1788569162948
+  size: 1595760
+  timestamp: 1789036626350
 - conda: https://conda.anaconda.org/conda-forge/linux-64/lz4-c-1.10.0-hee9eb32_2.conda
   sha256: b8c0e930183e6b7f83cd35ace102f2b8c2f0faae41dc05255dc72f247dfc556a
   md5: e38a3253d72ab07d471483f24947e2a2
@@ -15274,22 +15274,21 @@ packages:
   run_exports: {}
   size: 30495799
   timestamp: 1788518430084
-- conda: https://conda.anaconda.org/conda-forge/osx-arm64/lxml-6.1.2-py312h048a23b_2.conda
-  sha256: 000bc66ccaa964c0e3f92f14e0fbf2bbd8016320ce7b3f22345354c0acff04fa
-  md5: 1c5b0be8a4fc3dcf80ee0e2a3df6a4b0
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/lxml-6.1.3-py312haba262f_0.conda
+  sha256: 8f4aa4fc8c0227cdf4cbe9adf8e51704c5d82b686842a8cb0e46c3d11450bd9d
+  md5: 6bbb82f69ac1cc00375cebcd3e7d594a
   depends:
   - __osx >=11.0
   - libxml2
-  - libxml2-16 >=2.15.3
+  - libxml2-16 >=2.15.4
   - libxslt >=1.1.45,<2.0a0
   - libzlib >=1.3.2,<2.0a0
   - python >=3.12,<3.13.0a0
-  - python >=3.12,<3.13.0a0 *_cpython
   - python_abi 3.12.* *_cp312
   license: BSD-3-Clause and MIT-CMU
   run_exports: {}
-  size: 1283306
-  timestamp: 1788569541100
+  size: 1280564
+  timestamp: 1789036616184
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/lz4-c-1.10.0-hdca3b7d_2.conda
   sha256: 1887867b393eb3c2b336deaffcf228574821ea1e0dcb9ef7bf6c9f59cec40f03
   md5: d47f7f3481c6f2fcc4ed22802f61c6dd
@@ -19532,12 +19531,12 @@ packages:
   run_exports: {}
   size: 28573910
   timestamp: 1788518471264
-- conda: https://conda.anaconda.org/conda-forge/win-64/lxml-6.1.2-py312h1476a5e_2.conda
-  sha256: bab373a4adec15963c46301d243c149b8526f11ef5d116a3d8ae20d030fa4af4
-  md5: 0efc6d9c7c6da38b09c7cbc917a11d0e
+- conda: https://conda.anaconda.org/conda-forge/win-64/lxml-6.1.3-py312h1476a5e_0.conda
+  sha256: d60a0470d35881b4c3df3967c0e1ab98f2eecdc273812f573cc7f7c373677fe1
+  md5: 1e2cfcfd5315fd67ab506653c9173346
   depends:
   - libxml2
-  - libxml2-16 >=2.15.3
+  - libxml2-16 >=2.15.4
   - libxslt >=1.1.45,<2.0a0
   - libzlib >=1.3.2,<2.0a0
   - python >=3.12,<3.13.0a0
@@ -19547,8 +19546,8 @@ packages:
   - vc14_runtime >=14.44.35208
   license: BSD-3-Clause and MIT-CMU
   run_exports: {}
-  size: 1273210
-  timestamp: 1788569312565
+  size: 1273740
+  timestamp: 1789036778093
 - conda: https://conda.anaconda.org/conda-forge/win-64/lz4-c-1.10.0-h6a83c73_2.conda
   sha256: 6824e36be0f95ae516dc36dddd18f69cbad0e4e07906fcb10a5f26a8dc471903
   md5: 3e0691cb20fcaf922df78ccea08b771a

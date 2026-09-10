@@ -42,6 +42,9 @@ from ecoscope.platform.tasks.skip import (
 from ecoscope.platform.tasks.skip import any_is_empty_df as any_is_empty_df
 from ecoscope.platform.tasks.transformation import map_columns as map_columns
 from ecoscope.platform.tasks.transformation import with_unit as with_unit
+from ecoscope_workflows_ext_custom.tasks.io import (
+    persist_df_wrapper as persist_df_wrapper_1,
+)
 from ecoscope_workflows_ext_custom.tasks.results import (
     create_geojson_layer as create_geojson_layer_1,
 )
@@ -313,7 +316,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
     )
 
     persist_spatial_file = (
-        task(persist_df)
+        task(persist_df_wrapper_1)
         .validate()
         .set_task_instance_id("persist_spatial_file")
         .handle_errors()
@@ -329,7 +332,9 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             df=reproject_spatial_3857,
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filename="er_spatial_file",
-            filetype="geoparquet",
+            filetypes=["geoparquet"],
+            sanitize=True,
+            filename_prefix="earthranger",
             **(params.get("persist_spatial_file") or {}),
         )
         .call()
@@ -483,7 +488,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         )
         .partial(
             df=spatial_join_patrol_trajs,
-            groupby_cols=["cell_id"],
+            groupby_cols=["index"],
             reset_index=True,
             summary_params=[
                 {
@@ -546,7 +551,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             left=meshgrid_idx_id,
             right=add_time,
             how="left",
-            on="cell_id",
+            on="index",
             left_on=None,
             right_on=None,
             left_index=False,
@@ -669,7 +674,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             df=reproject_4326,
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filename="days_since_patrol_visit",
-            filetype="geoparquet",
+            filetype="gpkg",
             **(params.get("persist_visit") or {}),
         )
         .call()
@@ -732,7 +737,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             left=meshgrid_idx_id,
             right=compute_patrol_dwell,
             how="left",
-            on="cell_id",
+            on="index",
             left_on=None,
             right_on=None,
             left_index=False,
@@ -855,7 +860,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             df=add_dwell_bin_colors,
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filename="time_spent_per_cell",
-            filetype="geoparquet",
+            filetype="gpkg",
             **(params.get("persist_dwell_geoparquet") or {}),
         )
         .call()
@@ -900,7 +905,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             df=calc_ltd_aoi,
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filename="patrols_linear_time_density",
-            filetype="geoparquet",
+            filetype="gpkg",
             **(params.get("persist_ltd_geoparquet") or {}),
         )
         .call()
@@ -1094,7 +1099,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             df=get_patrol_obs,
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filename="patrol_observations",
-            filetype="geoparquet",
+            filetype="gpkg",
             **(params.get("persist_patrol_obs") or {}),
         )
         .call()
@@ -1117,7 +1122,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             df=patrol_obs_trajs,
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filename="patrol_trajectories",
-            filetype="geoparquet",
+            filetype="gpkg",
             **(params.get("persist_patrol_trajs") or {}),
         )
         .call()
@@ -1159,7 +1164,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            geodataframe=spatial_features_opacity,
+            geodataframes=[spatial_features_opacity],
             **(params.get("spatial_features_layer") or {}),
         )
         .call()
