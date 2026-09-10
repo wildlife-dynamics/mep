@@ -61,6 +61,15 @@ from ecoscope.platform.tasks.results import (
 )
 from ecoscope.platform.tasks.results import draw_table as draw_table
 from ecoscope.platform.tasks.results import gather_dashboard as gather_dashboard
+from ecoscope.platform.tasks.transformation import (
+    concat_dataframes as concat_dataframes,
+)
+from ecoscope.platform.tasks.transformation import (
+    convert_column_values_to_string as convert_column_values_to_string,
+)
+from ecoscope.platform.tasks.transformation import (
+    decompose_datetime as decompose_datetime,
+)
 from ecoscope.platform.tasks.transformation import map_columns as map_columns
 from ecoscope.platform.tasks.transformation import with_unit as with_unit
 from ecoscope_workflows_ext_custom.tasks.io import (
@@ -110,9 +119,6 @@ from ecoscope_workflows_ext_mep.tasks.transformation import (
     compute_patrol_effort_fraction as compute_patrol_effort_fraction,
 )
 from ecoscope_workflows_ext_mep.tasks.transformation import (
-    operational_days as operational_days,
-)
-from ecoscope_workflows_ext_mep.tasks.transformation import (
     order_bin_categories as order_bin_categories,
 )
 from ecoscope_workflows_ext_mep.tasks.transformation import (
@@ -120,6 +126,9 @@ from ecoscope_workflows_ext_mep.tasks.transformation import (
 )
 from ecoscope_workflows_ext_ste.tasks.results import (
     create_spatial_features_layer as create_spatial_features_layer,
+)
+from ecoscope_workflows_ext_ste.tasks.spatial_operations import (
+    combine_deckgl_map_layers as combine_deckgl_map_layers,
 )
 from ecoscope_workflows_ext_ste.tasks.spatial_operations import (
     compute_view_state_from_gdf as compute_view_state_from_gdf,
@@ -901,6 +910,52 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    ltd_unvisited_diff = (
+        task(overlay_gdf)
+        .validate()
+        .set_task_instance_id("ltd_unvisited_diff")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            left=overlay_meshgrid_spatial,
+            right=calc_ltd_aoi,
+            how="difference",
+            keep_geom_type=False,
+            make_valid=True,
+            **(params.get("ltd_unvisited_diff") or {}),
+        )
+        .call()
+    )
+
+    calc_ltd_aoi_full = (
+        task(concat_dataframes)
+        .validate()
+        .set_task_instance_id("calc_ltd_aoi_full")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            dfs=[calc_ltd_aoi, ltd_unvisited_diff],
+            ensure_columns=["percentile", "density", "area_sqkm"],
+            reset_index=True,
+            **(params.get("calc_ltd_aoi_full") or {}),
+        )
+        .call()
+    )
+
     persist_ltd_geoparquet = (
         task(persist_df)
         .validate()
@@ -915,7 +970,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            df=calc_ltd_aoi,
+            df=calc_ltd_aoi_full,
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
             filename="patrols_linear_time_density",
             filetype="gpkg",
@@ -938,7 +993,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            gdf=calc_ltd_aoi,
+            gdf=calc_ltd_aoi_full,
             target_crs="EPSG:4326",
             **(params.get("reproject_ltd") or {}),
         )
@@ -1044,14 +1099,38 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
                 "extra__patrol_status": "patrol_status",
                 "extra__patrol_subject": "patrol_subject",
                 "extra__subject_id": "subject_id",
+                "extra__patrol_id": "patrol_id",
+                "extra__patrol_title": "name",
             },
             **(params.get("rename_patrol_cols") or {}),
         )
         .call()
     )
 
+    patrol_segment_date = (
+        task(decompose_datetime)
+        .validate()
+        .set_task_instance_id("patrol_segment_date")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=rename_patrol_cols,
+            datetime_column="segment_start",
+            components=["date"],
+            **(params.get("patrol_segment_date") or {}),
+        )
+        .call()
+    )
+
     op_summary_table = (
-        task(operational_days)
+        task(summarize_df)
         .validate()
         .set_task_instance_id("op_summary_table")
         .handle_errors()
@@ -1064,9 +1143,38 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            trajs=rename_patrol_cols,
-            time_range=time_range,
-            groupby_cols=["subject_id", "patrol_subject"],
+            df=patrol_segment_date,
+            groupby_cols=["patrol_type", "patrol_subject"],
+            reset_index=True,
+            summary_params=[
+                {
+                    "display_name": "distance_km",
+                    "aggregator": "sum",
+                    "column": "dist_meters",
+                    "convert_units": True,
+                    "original_unit": "m",
+                    "new_unit": "km",
+                    "decimal_places": 1,
+                },
+                {
+                    "display_name": "duration_hrs",
+                    "aggregator": "sum",
+                    "column": "timespan_seconds",
+                    "convert_units": True,
+                    "original_unit": "s",
+                    "new_unit": "h",
+                    "decimal_places": 1,
+                },
+                {
+                    "display_name": "patrol_days",
+                    "aggregator": "nunique",
+                    "column": "segment_start_date",
+                    "convert_units": False,
+                    "original_unit": None,
+                    "new_unit": None,
+                    "decimal_places": None,
+                },
+            ],
             **(params.get("op_summary_table") or {}),
         )
         .call()
@@ -1223,6 +1331,27 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    decat_time_visit_hex = (
+        task(convert_column_values_to_string)
+        .validate()
+        .set_task_instance_id("decat_time_visit_hex")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=reproject_4326,
+            columns=["hex_color"],
+            **(params.get("decat_time_visit_hex") or {}),
+        )
+        .call()
+    )
+
     add_time_visit_rgba = (
         task(add_rgba_from_hex)
         .validate()
@@ -1237,7 +1366,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            df=reproject_4326,
+            df=decat_time_visit_hex,
             column="hex_color",
             new_column="rgba_color",
             **(params.get("add_time_visit_rgba") or {}),
@@ -1303,6 +1432,27 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    combine_time_since_layers = (
+        task(combine_deckgl_map_layers)
+        .validate()
+        .set_task_instance_id("combine_time_since_layers")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            static_layers=spatial_features_layer,
+            grouped_layers=create_time_since_layer,
+            **(params.get("combine_time_since_layers") or {}),
+        )
+        .call()
+    )
+
     draw_time_since_map = (
         task(draw_map_1)
         .validate()
@@ -1320,7 +1470,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             max_zoom=10,
             static=False,
             title=None,
-            geo_layers=[create_time_since_layer, spatial_features_layer],
+            geo_layers=combine_time_since_layers,
             tile_layers=base_map_defs,
             legend_style={"placement": "bottom-right"},
             view_state=gdf_image_extent,
@@ -1351,6 +1501,27 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    decat_dwell_hex = (
+        task(convert_column_values_to_string)
+        .validate()
+        .set_task_instance_id("decat_dwell_hex")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=add_dwell_bin_colors,
+            columns=["hex_color"],
+            **(params.get("decat_dwell_hex") or {}),
+        )
+        .call()
+    )
+
     add_dwell_rgba = (
         task(add_rgba_from_hex)
         .validate()
@@ -1365,7 +1536,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            df=add_dwell_bin_colors,
+            df=decat_dwell_hex,
             column="hex_color",
             new_column="rgba_color",
             **(params.get("add_dwell_rgba") or {}),
@@ -1431,6 +1602,27 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    combine_dwell_layers = (
+        task(combine_deckgl_map_layers)
+        .validate()
+        .set_task_instance_id("combine_dwell_layers")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            static_layers=spatial_features_layer,
+            grouped_layers=create_dwell_layer,
+            **(params.get("combine_dwell_layers") or {}),
+        )
+        .call()
+    )
+
     draw_dwell_map = (
         task(draw_map_1)
         .validate()
@@ -1448,7 +1640,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             max_zoom=10,
             static=False,
             title=None,
-            geo_layers=[create_dwell_layer, spatial_features_layer],
+            geo_layers=combine_dwell_layers,
             tile_layers=base_map_defs,
             legend_style={"placement": "bottom-right"},
             view_state=gdf_image_extent,
@@ -1479,6 +1671,27 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    decat_ltd_hex = (
+        task(convert_column_values_to_string)
+        .validate()
+        .set_task_instance_id("decat_ltd_hex")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            df=add_ltd_bin_colors,
+            columns=["hex_color"],
+            **(params.get("decat_ltd_hex") or {}),
+        )
+        .call()
+    )
+
     add_ltd_rgba = (
         task(add_rgba_from_hex)
         .validate()
@@ -1493,7 +1706,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            df=add_ltd_bin_colors,
+            df=decat_ltd_hex,
             column="hex_color",
             new_column="rgba_color",
             **(params.get("add_ltd_rgba") or {}),
@@ -1559,6 +1772,27 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    combine_ltd_layers = (
+        task(combine_deckgl_map_layers)
+        .validate()
+        .set_task_instance_id("combine_ltd_layers")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_is_empty_df,
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            static_layers=spatial_features_layer,
+            grouped_layers=create_ltd_layer,
+            **(params.get("combine_ltd_layers") or {}),
+        )
+        .call()
+    )
+
     draw_ltd_map = (
         task(draw_map_1)
         .validate()
@@ -1576,7 +1810,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             max_zoom=10,
             static=False,
             title=None,
-            geo_layers=[create_ltd_layer, spatial_features_layer],
+            geo_layers=combine_ltd_layers,
             tile_layers=base_map_defs,
             legend_style={"placement": "bottom-right"},
             view_state=gdf_image_extent,
@@ -1862,7 +2096,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
                 "enable_download": False,
                 "hide_header": False,
             },
-            widget_id="Operational Days Summary",
+            widget_id="Patrol Summary",
             **(params.get("op_summary_table_html") or {}),
         )
         .call()
@@ -1883,7 +2117,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         )
         .partial(
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
-            filename_suffix="op_summary_table",
+            filename_suffix="patrol_summary_table",
             text=op_summary_table_html,
             **(params.get("op_summary_table_html_url") or {}),
         )
@@ -1904,7 +2138,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            title="Operational Days Summary",
+            title="Patrol Summary",
             data=op_summary_table_html_url,
             **(params.get("op_summary_table_widget") or {}),
         )
