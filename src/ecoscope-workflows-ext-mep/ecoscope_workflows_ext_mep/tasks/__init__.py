@@ -4,3 +4,4 @@ from . import reporting as reporting
 from . import results as results
 from . import transformation as transformation
 from . import animate as animate
+from . import spatial_operations as spatial_operations

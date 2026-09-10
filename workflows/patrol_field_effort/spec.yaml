@@ -1,0 +1,898 @@
+id: patrol_field_effort
+requirements:
+  - name: ecoscope-platform
+    version: ">=2.18.0"
+    channel: https://repo.prefix.dev/ecoscope-workflows/
+
+  - name: ecoscope-workflows-ext-custom
+    version: "0.1.0rc14.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-ste
+    version: "0.0.0rc1.*"
+    channel: https://repo.prefix.dev/ecoscope-workflows-custom/
+
+  - name: ecoscope-workflows-ext-mep
+    version: "*"
+    channel: "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
+    
+  - name: pydeck
+    version: 0.9.2
+    channel: conda-forge
+
+  - name: opentelemetry-sdk
+    version: ">=1.20.0,<2.0.0"
+    channel: conda-forge
+
+rjsf-overrides:
+  properties:
+    create_geo_meshgrid.properties.auto_scale_or_custom_cell_size.anyOf:
+      - $ref: "#/$defs/CustomGridCellSize"
+    create_geo_meshgrid.properties.auto_scale_or_custom_cell_size.default:
+      auto_scale_or_custom: "Customize"
+      grid_cell_size: 1000
+  uiSchema:
+    create_geo_meshgrid.auto_scale_or_custom_cell_size.auto_scale_or_custom:
+      ui:widget: hidden
+
+task-instance-defaults:
+  skipif:
+    conditions:
+      - any_is_empty_df
+      - any_dependency_skipped
+
+workflow:
+  # set workflow details
+  - name: Workflow Details
+    id: workflow_details
+    task: set_workflow_details
+
+  # connect to earthranger
+  - name: Connect to EarthRanger
+    id: er_client_name
+    task: set_er_connection
+
+  # define time range
+  - name: Time Range
+    id: time_range
+    task: set_time_range
+
+  # set groupers -- limiting this to subject_name
+  - name: Configure Grouping Strategy
+    id: groupers
+    task: set_groupers
+    partial:
+      groupers: []
+      # - index_name: subject_name
+
+  # set basemaps
+  - name: Configure Base Map Layers
+    id: base_map_defs
+    task: set_base_maps_pydeck
+
+  - name: Area of Interest
+    id: select_geo_er
+    task: ecoscope_workflows_ext_mep.tasks.spatial_operations.get_spatial_features
+    partial:
+      client: ${{ workflow.er_client_name.return }}
+      legend_title: "Legend"
+  
+  - name: Fetch Patrol Observations 
+    id: get_patrol_obs 
+    task: get_patrol_observations 
+    partial:
+      client: ${{ workflow.er_client_name.return }}
+      time_range: ${{ workflow.time_range.return }}
+      status: ["done"]
+      include_patrol_details: true 
+      raise_on_empty: true 
+      sub_page_size: 150 
+      patrols_overlap_daterange: true 
+
+  - name: Build Patrol Trajectories 
+    id: patrol_obs_trajs 
+    task: relocations_to_trajectory 
+    partial: 
+      relocations: ${{ workflow.get_patrol_obs.return }}
+  
+  - name: Validate Study Area Geometry 
+    id: assert_polygon
+    task: assert_polygon_types
+    partial: 
+      gdf: ${{ workflow.select_geo_er.return }}
+  
+  - name: Prepare Study Area for Analysis
+    id: reproject_spatial_3857
+    task: reproject_gdf 
+    partial: 
+      gdf: ${{ workflow.select_geo_er.return }}
+      target_crs: "EPSG:3857"
+
+  - name: Save Study Area to File
+    id: persist_spatial_file
+    task: ecoscope_workflows_ext_custom.tasks.io.persist_df_wrapper
+    partial:
+      df: ${{ workflow.reproject_spatial_3857.return }}
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: er_spatial_file
+      filetypes: [geoparquet]
+      sanitize: true
+      filename_prefix: earthranger
+
+  - name: Create Analysis Grid
+    id: create_geo_meshgrid
+    task: create_meshgrid
+    partial:
+      aoi: ${{ workflow.reproject_spatial_3857.return }}
+      crs: "EPSG:3857"
+      intersecting_only: true
+
+  - name: Clip Grid to Study Area 
+    id: overlay_meshgrid_spatial
+    task: overlay_gdf 
+    partial: 
+      left: ${{ workflow.create_geo_meshgrid.return }}
+      right: ${{ workflow.reproject_spatial_3857.return }}
+      how: "intersection"
+      keep_geom_type: true 
+      make_valid: true 
+
+  - name: Reset Index on Meshgrid
+    id: meshgrid_idx_id
+    task: ecoscope_workflows_ext_mep.tasks.transformation.reset_dataframe_index
+    partial:
+      df: ${{ workflow.overlay_meshgrid_spatial.return }}
+      drop: false
+  
+  - name: Prepare Patrol Trajectories for Analysis
+    id: reproject_trajs 
+    task: reproject_gdf 
+    partial: 
+      gdf: ${{ workflow.patrol_obs_trajs.return }}
+      target_crs: "EPSG:3857"
+      
+  - name: Select Trajectory Columns
+    id: select_patrol_columns
+    task: select_columns
+    partial:
+      df: ${{ workflow.reproject_trajs.return }}
+      columns: ["segment_start","segment_end","geometry"]
+      raise_on_missing: true
+
+  - name: Overlay Patrols on Grid
+    id: spatial_join_patrol_trajs
+    task: spatial_join
+    partial:
+      left_df: ${{ workflow.select_patrol_columns.return }}
+      right_df: ${{ workflow.meshgrid_idx_id.return }}
+      how: "inner"
+      predicate: "intersects"
+
+  - name: Summarize Patrol Visits per Grid Cell 
+    id: summarize_df_grids 
+    task: summarize_df 
+    partial: 
+      df: ${{ workflow.spatial_join_patrol_trajs.return }}
+      groupby_cols: ["index"]
+      reset_index: true 
+      summary_params: 
+        - display_name: last_visited 
+          aggregator: max 
+          column: segment_end 
+          original_unit: null 
+          new_unit: null 
+          decimal_places: null 
+
+        - display_name: first_visited 
+          aggregator: min 
+          column: segment_start 
+          original_unit: null 
+          new_unit: null 
+          decimal_places: null 
+
+  - name: Calculate Days Since Last Visit
+    id: add_time 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_time_since_visit 
+    partial: 
+      df: ${{ workflow.summarize_df_grids.return }}
+      time_range: ${{ workflow.time_range.return }}
+
+  - name: Attach Visit Stats to Grid
+    id: merge_gridded_stats
+    task: merge_two_dataframes
+    partial:
+      left: ${{ workflow.meshgrid_idx_id.return }}
+      right: ${{ workflow.add_time.return }}
+      how: left 
+      on: "index"
+      left_on: null
+      right_on: null
+      left_index: false 
+      right_index: false 
+      fillna_value: null
+
+  - name: Flag Visited Cells (Days Since Visit)
+    id: add_null_flag
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_non_null_flag 
+    partial:  
+      df: ${{ workflow.merge_gridded_stats.return }}
+      source_column: "days_since_visit"
+      flag_column: "visited"
+
+  - name: Classify Days Since Visit into Bins
+    id: add_custom_visit_bins
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_visit_bins 
+    partial: 
+      df: ${{ workflow.add_null_flag.return }}
+      col: "days_since_visit"
+      mask_col: "visited"
+      new_col: "visit_bin"
+      bins: 5 
+      scheme: natural_breaks
+      no_data_label: "Unvisited"
+      use_abs: true
+  
+  - name: Color Days Since Visit Bins
+    id: add_visit_bin_colors
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_bin_colors
+    partial:
+      df: ${{ workflow.add_custom_visit_bins.return }}
+      col: visit_bin
+      new_col: hex_color
+      cmap:
+        type_: "palette"
+        name: "RdYlGn"
+      no_data_color: "#808080"
+      no_data_label: "Unvisited"
+
+  - name: Prepare Visit Layer for Mapping
+    id: reproject_4326
+    task: reproject_gdf 
+    partial: 
+      gdf: ${{ workflow.add_visit_bin_colors.return }}
+      target_crs: "EPSG:4326"
+
+  - name: Save Days Since Visit Data
+    id: persist_visit
+    task: persist_df
+    partial:  
+      df: ${{ workflow.reproject_4326.return }}
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: days_since_patrol_visit
+      filetype: gpkg
+
+  - name: Prepare Trajectories for Dwell Calculation 
+    id: reset_patrol_trajs
+    task: ecoscope_workflows_ext_mep.tasks.transformation.reset_dataframe_index
+    partial: 
+      df: ${{ workflow.reproject_trajs.return }}
+      drop: false 
+
+  - name: Calculate Time Spent per Grid Cell
+    id: compute_patrol_dwell
+    task: ecoscope_workflows_ext_mep.tasks.transformation.compute_dwell_time
+    partial:
+      patrol_trajectories: ${{ workflow.reset_patrol_trajs.return }}
+      gridded_spatial_feature: ${{ workflow.meshgrid_idx_id.return }}
+
+  - name: Attach Dwell Time to Grid
+    id: merge_dwell_gdf
+    task: merge_two_dataframes
+    partial:
+      left: ${{ workflow.meshgrid_idx_id.return }}
+      right: ${{ workflow.compute_patrol_dwell.return }}
+      how: left 
+      on: index
+      left_on: null
+      right_on: null
+      left_index: false 
+      right_index: false 
+      fillna_value: null
+
+  - name: Prepare Dwell Layer for Mapping 
+    id: reproject_dwell_gdf 
+    task: reproject_gdf
+    partial: 
+      gdf: ${{ workflow.merge_dwell_gdf.return }}
+      target_crs: "EPSG:4326" 
+
+  - name: Flag Visited Cells (Dwell Time)
+    id: add_null_dwell_flag
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_non_null_flag
+    partial:
+      df: ${{ workflow.reproject_dwell_gdf.return }}
+      source_column: "hours_in_cell"
+      flag_column: "visited"
+
+  - name: Classify Dwell Time into Bins
+    id: add_custom_dwell_bins
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_visit_bins
+    partial:
+      df: ${{ workflow.add_null_dwell_flag.return }}
+      col: "hours_in_cell"
+      mask_col: "visited"
+      new_col: "visit_bin"
+      bins: 5 
+      scheme: natural_breaks
+      no_data_label: "Unvisited"
+      use_abs: true
+  
+  - name: Color Dwell Time Bins
+    id: add_dwell_bin_colors
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_bin_colors
+    partial:
+      df: ${{ workflow.add_custom_dwell_bins.return }}
+      col: visit_bin
+      new_col: hex_color
+      cmap:
+        type_: "palette"
+        name: "RdYlGn"
+      no_data_color: "#808080"
+      no_data_label: "Unvisited"
+
+  - name: Save Dwell Time Data
+    id: persist_dwell_geoparquet
+    task: persist_df
+    partial:  
+      df: ${{ workflow.add_dwell_bin_colors.return }}
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: time_spent_per_cell
+      filetype: gpkg
+
+  - name: Calculate Patrol Route Density
+    id: calc_ltd_aoi
+    task: calculate_linear_time_density
+    partial:
+      percentiles: null
+      trajectory_gdf: ${{ workflow.reproject_trajs.return }}
+      meshgrid: ${{ workflow.overlay_meshgrid_spatial.return }}
+
+  - name: Compute Unvisited Grid Cells (Route Density)
+    id: ltd_unvisited_diff
+    task: overlay_gdf
+    partial:
+      left: ${{ workflow.overlay_meshgrid_spatial.return }}
+      right: ${{ workflow.calc_ltd_aoi.return }}
+      how: "difference"
+      keep_geom_type: false
+      make_valid: true
+
+  - name: Combine Route Density with Unvisited Cells
+    id: calc_ltd_aoi_full
+    task: concat_dataframes
+    partial:
+      dfs:
+        - ${{ workflow.calc_ltd_aoi.return }}
+        - ${{ workflow.ltd_unvisited_diff.return }}
+      ensure_columns: ["percentile", "density", "area_sqkm"]
+      reset_index: true
+
+  - name: Save Route Density Data
+    id: persist_ltd_geoparquet
+    task: persist_df
+    partial:
+      df: ${{ workflow.calc_ltd_aoi_full.return }}
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: patrols_linear_time_density
+      filetype: gpkg
+
+  - name: Prepare Route Density for Mapping
+    id: reproject_ltd
+    task: reproject_gdf
+    partial:
+      gdf: ${{ workflow.calc_ltd_aoi_full.return }}
+      target_crs: "EPSG:4326"
+
+  - name: Flag Cells with Patrol Coverage
+    id: add_null_ltd_flag
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_non_null_flag
+    partial:
+      df: ${{ workflow.reproject_ltd.return }}
+      source_column: "percentile"
+      flag_column: "visited"
+
+  - name: Classify Route Density into Bins
+    id: add_custom_ltd_bins
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_visit_bins
+    partial:
+      df: ${{ workflow.add_null_ltd_flag.return }}
+      col: "percentile"
+      mask_col: "visited"
+      new_col: "visit_bin"
+      bins: 5 
+      scheme: natural_breaks
+      no_data_label: "Unvisited"
+      use_abs: true
+  
+  - name: Color Route Density Bins
+    id: add_ltd_bin_colors
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_bin_colors
+    partial:
+      df: ${{ workflow.add_custom_ltd_bins.return }}
+      col: visit_bin
+      new_col: hex_color
+      cmap: 
+        type_: "palette"
+        name: "RdYlGn"
+      no_data_color: "#808080"
+      no_data_label: "Unvisited"
+
+  - name: Standardize Patrol Column Names 
+    id: rename_patrol_cols 
+    task: map_columns
+    partial: 
+      raise_if_not_found: true 
+      df: ${{ workflow.reproject_trajs.return }}
+      duplicate_strategy: "suffix"
+      drop_columns: []
+      retain_columns: []
+      rename_columns:
+        extra__patrol_type__value: patrol_type
+        extra__patrol_serial_number: patrol_serial_number
+        extra__patrol_status: patrol_status
+        extra__patrol_subject: patrol_subject
+        extra__subject_id: subject_id
+        extra__patrol_id: patrol_id
+        extra__patrol_title: name
+
+  - name: Extract Patrol Date
+    id: patrol_segment_date
+    task: ecoscope.platform.tasks.transformation.decompose_datetime
+    partial:
+      df: ${{ workflow.rename_patrol_cols.return }}
+      datetime_column: "segment_start"
+      components: ["date"]
+      remove_source: false 
+      column_prefix: null
+
+  - name: Generate patrol summary table
+    id: op_summary_table
+    task: summarize_df
+    partial:
+      df: ${{ workflow.patrol_segment_date.return }}
+      groupby_cols: ["subject_id","patrol_subject"]
+      reset_index: true
+      summary_params:
+        - display_name: distance_km
+          aggregator: sum
+          column: dist_meters
+          convert_units: true
+          original_unit: m
+          new_unit: km
+          decimal_places: 1
+
+        - display_name: duration_hrs
+          aggregator: sum
+          column: timespan_seconds
+          convert_units: true
+          original_unit: s
+          new_unit: h
+          decimal_places: 1
+
+        - display_name: patrol_days
+          aggregator: nunique
+          column: segment_start_date
+          convert_units: false
+          original_unit: null
+          new_unit: null
+          decimal_places: null
+
+  - name: Save Patrol Summary Table (CSV)
+    id: persist_oper_table
+    task: persist_df
+    partial:
+      df: ${{ workflow.op_summary_table.return }}
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: null
+      filetype: csv
+
+  - name: Save Patrol Observations
+    id: persist_patrol_obs
+    task: persist_df
+    partial:
+      df: ${{ workflow.get_patrol_obs.return }}
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: patrol_observations
+      filetype: gpkg
+
+  - name: Save Patrol Trajectories 
+    id: persist_patrol_trajs
+    task: persist_df
+    partial:  
+      df: ${{ workflow.patrol_obs_trajs.return }}
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename: patrol_trajectories
+      filetype: gpkg
+
+  - name: Set Study Area Opacity
+    id: spatial_features_opacity
+    task: set_spatial_features_opacity
+    partial:
+      gdf: ${{ workflow.select_geo_er.return }}
+      fill_opacity: 0.0
+      line_opacity: 1.0
+
+  # Time spent per grid cell
+  - name: Build Study Area Map Layer
+    id: spatial_features_layer
+    task: create_spatial_features_layer
+    partial:
+      geodataframes:
+        - ${{ workflow.spatial_features_opacity.return }}
+
+  - title: Map Zoom & Extent
+    type: task-group
+    description: Calculate the geographic extent of the movement tracks and determine an appropriate zoom level and center point for the map. This ensures that all tracks are visible and well-framed when the map is rendered.
+    tasks:
+      - name: null
+        id: zoom_to_envelope
+        task: ecoscope_workflows_ext_ste.tasks.spatial_operations.envelope_gdf
+        partial:
+          gdf: ${{ workflow.spatial_features_opacity.return }}
+
+      - name: Zoom view to gdf extent
+        id: gdf_image_extent
+        task: ecoscope_workflows_ext_ste.tasks.spatial_operations.compute_view_state_from_gdf
+        partial:
+          pitch: 0
+          bearing: 0
+          max_zoom: 15
+          gdf: ${{ workflow.zoom_to_envelope.return }}
+  
+  - name: Decategorize Hex Colors (Days Since Visit)
+    id: decat_time_visit_hex
+    task: convert_column_values_to_string
+    partial:
+      df: ${{ workflow.reproject_4326.return }}
+      columns: ["hex_color"]
+
+  - name: Prepare Colors for Days Since Visit Map
+    id: add_time_visit_rgba
+    task: add_rgba_from_hex
+    partial:
+      df: ${{ workflow.decat_time_visit_hex.return }}
+      column: hex_color 
+      new_column: rgba_color
+
+  - name: Sort Days Since Visit Legend 
+    id: order_bin_visit_since 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.order_bin_categories 
+    partial: 
+      df: ${{ workflow.add_time_visit_rgba.return }}
+      bin_column: visit_bin 
+
+  - name: Build Days Since Visit Map Layer 
+    id: create_time_since_layer 
+    task: ecoscope_workflows_ext_custom.tasks.results.create_geojson_layer 
+    partial: 
+      data_url: null
+      geodataframe: ${{ workflow.order_bin_visit_since.return }}
+      layer_style: 
+        filled: true 
+        extruded: false 
+        stroked: true 
+        get_fill_color: "rgba_color"
+        get_line_color: [0, 0, 0]
+        opacity: 0.55
+        get_line_width: 0.25 
+      legend: 
+        title: "Time Since Visit (Days)"
+        label_column: visit_bin 
+        color_column: "rgba_color"
+        sort: ascending 
+        label_suffix: null
+
+  - name: Combine Days Since Visit Map Layers
+    id: combine_time_since_layers
+    task: ecoscope_workflows_ext_ste.tasks.spatial_operations.combine_deckgl_map_layers
+    partial:
+      static_layers: ${{ workflow.spatial_features_layer.return }}
+      grouped_layers: ${{ workflow.create_time_since_layer.return }}
+
+  - name: Render Days Since Visit Map
+    id: draw_time_since_map
+    task: ecoscope_workflows_ext_custom.tasks.results.draw_map
+    partial:
+      max_zoom: 10
+      static: false
+      title: null
+      geo_layers: ${{ workflow.combine_time_since_layers.return }}
+      tile_layers: ${{ workflow.base_map_defs.return }}
+      legend_style: 
+        placement: "bottom-right"
+      view_state: ${{ workflow.gdf_image_extent.return }}
+
+  - name: Save Days Since Visit Map
+    id: time_since_urls
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      text: ${{ workflow.draw_time_since_map.return }}
+      filename: days_since_patrol_visit_map.html
+
+  # Dwell time
+  - name: Decategorize Hex Colors (Dwell Time)
+    id: decat_dwell_hex
+    task: convert_column_values_to_string
+    partial:
+      df: ${{ workflow.add_dwell_bin_colors.return }}
+      columns: ["hex_color"]
+
+  - name: Prepare Colors for Dwell Time Map
+    id: add_dwell_rgba
+    task: add_rgba_from_hex
+    partial:
+      df: ${{ workflow.decat_dwell_hex.return }}
+      column: hex_color
+      new_column: rgba_color
+  
+  - name: Sort Dwell Time Legend
+    id: order_bin_dwell_since 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.order_bin_categories 
+    partial: 
+      df: ${{ workflow.add_dwell_rgba.return }}
+      bin_column: visit_bin 
+
+  - name: Build Dwell Time Map Layer 
+    id: create_dwell_layer 
+    task: ecoscope_workflows_ext_custom.tasks.results.create_geojson_layer 
+    partial: 
+      data_url: null
+      geodataframe: ${{ workflow.order_bin_dwell_since.return }}
+      layer_style: 
+        filled: true 
+        extruded: false
+        stroked: true 
+        get_fill_color: "rgba_color"
+        get_line_color: [0, 0, 0]
+        opacity: 0.55
+        get_line_width: 0.25 
+      legend: 
+        title: "Time Spent(Hours)"
+        label_column: visit_bin 
+        color_column: "rgba_color"
+        sort: ascending 
+        label_suffix: null
+  
+  - name: Combine Dwell Time Map Layers
+    id: combine_dwell_layers
+    task: ecoscope_workflows_ext_ste.tasks.spatial_operations.combine_deckgl_map_layers
+    partial:
+      static_layers: ${{ workflow.spatial_features_layer.return }}
+      grouped_layers: ${{ workflow.create_dwell_layer.return }}
+
+  - name: Render Dwell Time Map
+    id: draw_dwell_map
+    task: ecoscope_workflows_ext_custom.tasks.results.draw_map
+    partial:
+      max_zoom: 10
+      static: false
+      title: null
+      geo_layers: ${{ workflow.combine_dwell_layers.return }}
+      tile_layers: ${{ workflow.base_map_defs.return }}
+      legend_style: 
+        placement: "bottom-right"
+      view_state: ${{ workflow.gdf_image_extent.return }}
+
+  - name: Save Dwell Time Map
+    id: dwell_urls
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      text: ${{ workflow.draw_dwell_map.return }}
+      filename: time_spent_per_grid_map.html
+
+  # Linear Time Density
+  - name: Decategorize Hex Colors (Route Density)
+    id: decat_ltd_hex
+    task: convert_column_values_to_string
+    partial:
+      df: ${{ workflow.add_ltd_bin_colors.return }}
+      columns: ["hex_color"]
+
+  - name: Prepare Colors for Route Density Map
+    id: add_ltd_rgba
+    task: add_rgba_from_hex
+    partial:
+      df: ${{ workflow.decat_ltd_hex.return }}
+      column: hex_color
+      new_column: rgba_color
+  
+  - name: Sort Route Density Legend
+    id: order_bin_ltd_since 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.order_bin_categories 
+    partial: 
+      df: ${{ workflow.add_ltd_rgba.return }}
+      bin_column: visit_bin 
+
+  - name: Build Route Density Map Layer 
+    id: create_ltd_layer 
+    task: ecoscope_workflows_ext_custom.tasks.results.create_geojson_layer 
+    partial: 
+      data_url: null
+      geodataframe: ${{ workflow.order_bin_ltd_since.return }}
+      layer_style: 
+        filled: true 
+        extruded: false
+        stroked: true 
+        get_fill_color: "rgba_color"
+        get_line_color: [0, 0, 0]
+        opacity: 0.55
+        get_line_width: 0.25 
+      legend: 
+        title: "Time Spent"
+        label_column: visit_bin 
+        color_column: "rgba_color"
+        sort: ascending 
+        label_suffix: null
+  
+  - name: Combine Route Density Map Layers
+    id: combine_ltd_layers
+    task: ecoscope_workflows_ext_ste.tasks.spatial_operations.combine_deckgl_map_layers
+    partial:
+      static_layers: ${{ workflow.spatial_features_layer.return }}
+      grouped_layers: ${{ workflow.create_ltd_layer.return }}
+
+  - name: Render Route Density Map
+    id: draw_ltd_map
+    task: ecoscope_workflows_ext_custom.tasks.results.draw_map
+    partial:
+      max_zoom: 10
+      static: false
+      title: null
+      geo_layers: ${{ workflow.combine_ltd_layers.return }}
+      tile_layers: ${{ workflow.base_map_defs.return }}
+      legend_style: 
+        placement: "bottom-right"
+      view_state: ${{ workflow.gdf_image_extent.return }}
+
+  - name: Save Route Density Map
+    id: ltd_urls
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      text: ${{ workflow.draw_ltd_map.return }}
+      filename: ltd_patrols_map.html
+
+  - name: Calculate total patrols  
+    id: total_patrols 
+    task: dataframe_column_nunique
+    partial: 
+      column_name: subject_id
+      df: ${{ workflow.rename_patrol_cols.return }}
+  
+  - name: Calculate Total Patrol Distance 
+    id: total_patrol_dist 
+    task: dataframe_column_sum 
+    partial: 
+      column_name: dist_meters 
+      df: ${{ workflow.rename_patrol_cols.return }}
+
+  - name: Convert Distance to Kilometres
+    id: total_patrol_dist_converted
+    task: with_unit
+    partial:
+      original_unit: m
+      new_unit: km
+      value: ${{ workflow.total_patrol_dist.return }}
+
+  - name: Calculate Patrol Coverage Fraction
+    id: patrol_effort_spatial
+    task: ecoscope_workflows_ext_mep.tasks.transformation.compute_patrol_effort_fraction
+    partial:
+      gdf: ${{ workflow.add_visit_bin_colors.return }}
+
+  # Stat card widgets
+  - name: Create Total Patrols Widget
+    id: total_patrols_sv_widget
+    task: create_single_value_widget_single_view
+    partial:
+      title: "Total Patrols"
+      decimal_places: 0
+      data: ${{ workflow.total_patrols.return }}
+
+  - name: Create Total Distance Widget
+    id: total_patrol_dist_sv_widget
+    task: create_single_value_widget_single_view
+    partial:
+      title: "Total Patrol Distance"
+      decimal_places: 1
+      data: ${{ workflow.total_patrol_dist_converted.return }}
+
+  - name: Format Patrol Coverage as Percentage
+    id: patrol_effort_quantity
+    task: to_quantity
+    partial:
+      value: ${{ workflow.patrol_effort_spatial.return }}
+      unit: "%"
+
+  - name: Create Patrol Coverage Widget
+    id: patrol_effort_sv_widget
+    task: create_single_value_widget_single_view
+    partial:
+      title: "Patrol Coverage"
+      decimal_places: 1
+      data: ${{ workflow.patrol_effort_quantity.return }}
+
+  # Map widgets
+  - name: Create Time Since Visit Map Widget
+    id: time_since_map_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Days Since Patrol Visit"
+      data: ${{ workflow.time_since_urls.return }}
+
+  - name: Create Dwell Time Map Widget
+    id: dwell_map_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Time Spent Per Grid Cell (Hours)"
+      data: ${{ workflow.dwell_urls.return }}
+
+  - name: Create Linear Time Density Map Widget
+    id: ltd_map_widget
+    task: create_map_widget_single_view
+    partial:
+      title: "Patrol Linear Time Density"
+      data: ${{ workflow.ltd_urls.return }}
+
+  # Table widget for patrol summary
+  - name: Rename Patrol Summary Columns
+    id: op_summary_table_display
+    task: map_columns
+    partial:
+      raise_if_not_found: true
+      df: ${{ workflow.op_summary_table.return }}
+      duplicate_strategy: "suffix"
+      drop_columns: []
+      retain_columns: []
+      rename_columns:
+        subject_id: "Subject ID"
+        patrol_subject: "Patrol Subject"
+        distance_km: "Distance (km)"
+        duration_hrs: "Duration (hrs)"
+        patrol_days: "Patrol Days"
+
+  - name: Render Patrol Summary Table
+    id: op_summary_table_html
+    task: draw_table
+    partial:
+      dataframe: ${{ workflow.op_summary_table_display.return }}
+      columns: null
+      table_config:
+        enable_sorting: true
+        enable_filtering: true
+        enable_download: false
+        hide_header: false
+      widget_id: "Patrol Summary"
+
+  - name: Save Patrol Summary Table (HTML)
+    id: op_summary_table_html_url
+    task: persist_text
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename_suffix: patrol_summary_table
+      text: ${{ workflow.op_summary_table_html.return }}
+
+  - name: Create Patrol Summary Table Widget
+    id: op_summary_table_widget
+    task: create_table_widget_single_view
+    partial:
+      title: "Patrol Summary"
+      data: ${{ workflow.op_summary_table_html_url.return }}
+
+  - name: Generate Dashboard
+    id: patrol_effort_dashboard
+    task: gather_dashboard
+    partial:
+      details: ${{ workflow.workflow_details.return }}
+      widgets:
+        - ${{ workflow.total_patrols_sv_widget.return }}
+        - ${{ workflow.total_patrol_dist_sv_widget.return }}
+        - ${{ workflow.patrol_effort_sv_widget.return }}
+        - ${{ workflow.time_since_map_widget.return }}
+        - ${{ workflow.dwell_map_widget.return }}
+        - ${{ workflow.ltd_map_widget.return }}
+        - ${{ workflow.op_summary_table_widget.return }}
+      time_range: ${{ workflow.time_range.return }}
+      groupers: ${{ workflow.groupers.return }}

@@ -77,3 +77,9 @@ cmd = './dev/recompile.sh animate_tracks--install'
 
 [feature.compile.tasks.recompile-animate_tracks]
 cmd = './dev/recompile.sh animate_tracks --update'
+
+[feature.compile.tasks.compile-patrol_field_effort]
+cmd = './dev/recompile.sh patrol_field_effort --install'
+
+[feature.compile.tasks.recompile-patrol_field_effort]
+cmd = './dev/recompile.sh patrol_field_effort --update'

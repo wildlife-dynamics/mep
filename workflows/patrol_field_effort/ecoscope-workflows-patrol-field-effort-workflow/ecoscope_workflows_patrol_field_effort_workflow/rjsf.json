@@ -1,0 +1,795 @@
+{
+  "properties": {
+    "workflow_details": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Workflow Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Workflow Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "description": "Add information that will help to differentiate this workflow from another.",
+      "title": "Workflow Details"
+    },
+    "er_client_name": {
+      "additionalProperties": false,
+      "properties": {
+        "data_source": {
+          "$ref": "#/$defs/EarthRangerConnection",
+          "title": "",
+          "description": "Select one of your configured data sources."
+        }
+      },
+      "required": [
+        "data_source"
+      ],
+      "type": "object",
+      "title": "Connect to EarthRanger"
+    },
+    "time_range": {
+      "additionalProperties": false,
+      "properties": {
+        "since": {
+          "format": "date-time",
+          "title": "Since",
+          "type": "string",
+          "description": "The start time"
+        },
+        "until": {
+          "format": "date-time",
+          "title": "Until",
+          "type": "string",
+          "description": "The end time"
+        },
+        "timezone": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/TimezoneInfo"
+            }
+          ],
+          "default": null,
+          "title": "Timezone"
+        },
+        "time_format": {
+          "default": "%d %b %Y %H:%M:%S",
+          "title": "Time Format",
+          "type": "string",
+          "description": "The time format",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [
+        "since",
+        "until"
+      ],
+      "type": "object",
+      "description": "Choose the period of time to analyze.",
+      "title": "Time Range"
+    },
+    "base_map_defs": {
+      "additionalProperties": false,
+      "properties": {
+        "base_maps": {
+          "default": [
+            {
+              "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+              "opacity": 1,
+              "max_zoom": 20
+            },
+            {
+              "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+              "opacity": 0.5,
+              "max_zoom": 20
+            }
+          ],
+          "items": {
+            "title": "Base Layer",
+            "anyOf": [
+              {
+                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
+                "properties": {
+                  "url": {
+                    "default": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    "enum": [
+                      "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "Open Street Map",
+                "type": "object"
+              },
+              {
+                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
+                "properties": {
+                  "url": {
+                    "default": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "Roadmap",
+                "type": "object"
+              },
+              {
+                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
+                "properties": {
+                  "url": {
+                    "default": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "Satellite",
+                "type": "object"
+              },
+              {
+                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
+                "properties": {
+                  "url": {
+                    "default": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "Terrain",
+                "type": "object"
+              },
+              {
+                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
+                "properties": {
+                  "url": {
+                    "default": "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://tiles.arcgis.com/tiles/POUcpLYXNckpLjnY/arcgis/rest/services/landDx_basemap_tiles_mapservice/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "LandDx",
+                "type": "object"
+              },
+              {
+                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
+                "properties": {
+                  "url": {
+                    "default": "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+                    "title": "Preset Layer URL",
+                    "type": "string",
+                    "const": "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+                    "enum": [
+                      "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Layer Opacity",
+                    "type": "number"
+                  }
+                },
+                "title": "USGS Hillshade",
+                "type": "object"
+              },
+              {
+                "description": "A tiled raster layer loaded on-demand from a URL template (e.g., base maps).",
+                "properties": {
+                  "url": {
+                    "default": "https://example.tiles.com/{z}/{x}/{y}.png",
+                    "description": "The URL of a publicly accessible tiled raster service.",
+                    "pattern": "https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}([-a-zA-Z0-9()@:%_\\+.~#?&//=\\{\\}]*)",
+                    "title": "Custom Layer URL",
+                    "type": "string"
+                  },
+                  "opacity": {
+                    "default": 1,
+                    "description": "Set layer transparency from 1 (fully visible) to 0 (hidden).",
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "title": "Custom Layer Opacity",
+                    "type": "number"
+                  },
+                  "max_zoom": {
+                    "default": 20,
+                    "description": "Set the maximum zoom level to fetch tiles for.",
+                    "title": "Custom Layer Max Zoom",
+                    "type": "integer"
+                  },
+                  "min_zoom": {
+                    "default": 0,
+                    "description": "Set the minimum zoom level to fetch tiles for.",
+                    "title": "Custom Layer Min Zoom",
+                    "type": "integer"
+                  }
+                },
+                "title": "Custom Layer (Advanced)",
+                "type": "object"
+              }
+            ]
+          },
+          "title": " ",
+          "type": "array",
+          "description": "Select tile layers to use as base layers in map outputs. The first layer in the list will be the bottommost layer displayed.",
+          "ecoscope:advanced": true
+        }
+      },
+      "type": "object",
+      "required": [],
+      "title": "Configure Base Map Layers"
+    },
+    "select_geo_er": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/EarthRangerSource"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "group_by": {
+          "default": "type_name",
+          "title": "Group By",
+          "type": "string",
+          "description": "Column used to group features in the map legend e.g. 'Feature Type' shows one legend entry per feature type.",
+          "oneOf": [
+            {
+              "const": "type_name",
+              "title": "Feature Type"
+            },
+            {
+              "const": "title",
+              "title": "Feature Name"
+            }
+          ],
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Area of Interest"
+    },
+    "get_patrol_obs": {
+      "additionalProperties": false,
+      "properties": {
+        "patrol_types": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Patrol Types",
+          "type": "array",
+          "description": "Specify the patrol type(s) to analyze (optional). Leave empty to analyze all patrol types."
+        }
+      },
+      "required": [
+        "patrol_types"
+      ],
+      "type": "object",
+      "title": "Fetch Patrol Observations"
+    },
+    "patrol_obs_trajs": {
+      "additionalProperties": false,
+      "properties": {
+        "trajectory_segment_filter": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/TrajectorySegmentFilter"
+            }
+          ],
+          "default": {
+            "min_length_meters": 0.001,
+            "max_length_meters": 100000,
+            "min_time_secs": 1,
+            "max_time_secs": 172800,
+            "min_speed_kmhr": 0.01,
+            "max_speed_kmhr": 500
+          },
+          "title": " ",
+          "description": "Filter track data by setting limits on track segment length, duration, and speed. Segments outside these bounds are removed, reducing noise and to focus on meaningful movement patterns.",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Build Patrol Trajectories"
+    },
+    "create_geo_meshgrid": {
+      "additionalProperties": false,
+      "properties": {
+        "auto_scale_or_custom_cell_size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CustomGridCellSize"
+            }
+          ],
+          "default": {
+            "auto_scale_or_custom": "Customize",
+            "grid_cell_size": 1000
+          },
+          "title": "Grid Cell Size",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Create Analysis Grid"
+    },
+    "Map Zoom & Extent": {
+      "type": "object",
+      "description": "Calculate the geographic extent of the movement tracks and determine an appropriate zoom level and center point for the map. This ensures that all tracks are visible and well-framed when the map is rendered.",
+      "ecoscope:task_group": true,
+      "properties": {
+        "zoom_to_envelope": {
+          "additionalProperties": false,
+          "properties": {
+            "expansion_factor": {
+              "default": 1.5,
+              "title": "Expansion Factor",
+              "type": "number",
+              "description": "Factor to expand the bounding box (e.g., 1.2 = 20% larger)",
+              "ecoscope:advanced": true
+            }
+          },
+          "required": [],
+          "type": "object",
+          "title": ""
+        }
+      }
+    }
+  },
+  "$defs": {
+    "EarthRangerConnection": {
+      "properties": {
+        "name": {
+          "title": "Data Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "EarthRangerConnection",
+      "type": "object"
+    },
+    "TimezoneInfo": {
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "tzCode": {
+          "title": "Tzcode",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "utc": {
+          "title": "Utc",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "tzCode",
+        "name",
+        "utc"
+      ],
+      "title": "TimezoneInfo",
+      "type": "object"
+    },
+    "EarthRangerSource": {
+      "properties": {
+        "query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FeatureSetQuery"
+            },
+            {
+              "$ref": "#/$defs/FeatureTypeQuery"
+            },
+            {
+              "$ref": "#/$defs/FeatureIdQuery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        }
+      },
+      "title": "EarthRanger",
+      "type": "object"
+    },
+    "FeatureIdQuery": {
+      "description": "Load a single spatial feature by its EarthRanger UUID.",
+      "properties": {
+        "feature_id": {
+          "description": "UUID of a specific spatial feature available on EarthRanger.",
+          "title": "Feature Id",
+          "type": "string"
+        },
+        "style": {
+          "default": [],
+          "description": "Optional: Override how EarthRanger spatial features are rendered on the map. If not specified, features will use their native EarthRanger colours and styling.",
+          "items": {
+            "$ref": "#/$defs/LayerStyle"
+          },
+          "maxItems": 1,
+          "title": "Style",
+          "type": "array"
+        }
+      },
+      "required": [
+        "feature_id"
+      ],
+      "title": "Feature ID",
+      "type": "object"
+    },
+    "FeatureSetQuery": {
+      "description": "Load all features from a named EarthRanger featureset.",
+      "properties": {
+        "featureset_name": {
+          "description": "Display name of the featureset exactly as it appears in EarthRanger e.g. 'Boundaries'.",
+          "minLength": 1,
+          "title": "Featureset Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "featureset_name"
+      ],
+      "title": "Feature Set",
+      "type": "object"
+    },
+    "FeatureTypeQuery": {
+      "description": "Load all features of a given type across EarthRanger featuresets.",
+      "properties": {
+        "feature_type": {
+          "description": "Feature type name as shown in EarthRanger e.g. 'Conservancy'.",
+          "minLength": 1,
+          "title": "Feature Type",
+          "type": "string"
+        },
+        "style": {
+          "default": [],
+          "description": "Optional: Override how EarthRanger spatial features are rendered on the map. If not specified, features will use their native EarthRanger colours and styling.",
+          "items": {
+            "$ref": "#/$defs/LayerStyle"
+          },
+          "maxItems": 1,
+          "title": "Style",
+          "type": "array"
+        }
+      },
+      "required": [
+        "feature_type"
+      ],
+      "title": "Feature Type",
+      "type": "object"
+    },
+    "LayerStyle": {
+      "properties": {
+        "polygon": {
+          "default": [],
+          "description": "Polygon styling. Add one entry to override ER native colours.",
+          "items": {
+            "$ref": "#/$defs/PolygonStyle"
+          },
+          "maxItems": 1,
+          "title": "Polygon",
+          "type": "array"
+        },
+        "line": {
+          "default": [],
+          "description": "Line styling. Add one entry to override ER native colours.",
+          "items": {
+            "$ref": "#/$defs/LineStyle"
+          },
+          "maxItems": 1,
+          "title": "Line",
+          "type": "array"
+        },
+        "point": {
+          "default": [],
+          "description": "Point and icon marker styling. Add one entry to override ER native colours.",
+          "items": {
+            "$ref": "#/$defs/PointStyle"
+          },
+          "maxItems": 1,
+          "title": "Point",
+          "type": "array"
+        }
+      },
+      "title": "",
+      "type": "object"
+    },
+    "LineStyle": {
+      "properties": {
+        "color": {
+          "default": [],
+          "description": "Line hex colour(s) e.g. ['#E63946']. Cycles across rows.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Color",
+          "type": "array"
+        },
+        "opacity": {
+          "default": 1.0,
+          "description": "Line opacity 0\u20131.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Opacity",
+          "type": "number"
+        },
+        "width": {
+          "default": 2.0,
+          "description": "Line width in pixels.",
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "title": "",
+      "type": "object"
+    },
+    "PointStyle": {
+      "properties": {
+        "color": {
+          "default": [],
+          "description": "Fill hex colour(s). For SVG icons this tints the marker. Cycles across rows.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Color",
+          "type": "array"
+        },
+        "size": {
+          "default": null,
+          "description": "Point radius / icon size in pixels. Leave empty to use the size set in EarthRanger.",
+          "title": "Size",
+          "type": "number"
+        }
+      },
+      "title": "",
+      "type": "object"
+    },
+    "PolygonStyle": {
+      "properties": {
+        "fill_color": {
+          "default": [],
+          "description": "Fill hex colour(s) e.g. ['#FFA500']. Cycles across rows.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fill Color",
+          "type": "array"
+        },
+        "stroke_color": {
+          "default": null,
+          "description": "Border hex colour.",
+          "title": "Stroke Color",
+          "type": "string"
+        },
+        "fill_opacity": {
+          "default": 1.0,
+          "description": "Fill opacity 0\u20131.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Fill Opacity",
+          "type": "number"
+        },
+        "stroke_width": {
+          "default": 2.0,
+          "description": "Border width in pixels.",
+          "title": "Stroke Width",
+          "type": "number"
+        }
+      },
+      "title": "",
+      "type": "object"
+    },
+    "TrajectorySegmentFilter": {
+      "properties": {
+        "min_length_meters": {
+          "default": 0.001,
+          "ecoscope:advanced": true,
+          "minimum": 0.001,
+          "title": "Minimum Segment Length (Meters)",
+          "type": "number"
+        },
+        "max_length_meters": {
+          "default": 100000,
+          "ecoscope:advanced": true,
+          "exclusiveMinimum": 0.001,
+          "title": "Maximum Segment Length (Meters)",
+          "type": "number"
+        },
+        "min_time_secs": {
+          "default": 1,
+          "ecoscope:advanced": true,
+          "minimum": 1,
+          "title": "Minimum Segment Duration (Seconds)",
+          "type": "number"
+        },
+        "max_time_secs": {
+          "default": 172800,
+          "ecoscope:advanced": true,
+          "exclusiveMinimum": 1,
+          "title": "Maximum Segment Duration (Seconds)",
+          "type": "number"
+        },
+        "min_speed_kmhr": {
+          "default": 0.01,
+          "ecoscope:advanced": true,
+          "exclusiveMinimum": 0.001,
+          "title": "Minimum Segment Speed (Kilometers per Hour)",
+          "type": "number"
+        },
+        "max_speed_kmhr": {
+          "default": 500,
+          "ecoscope:advanced": true,
+          "exclusiveMinimum": 0.001,
+          "title": "Maximum Segment Speed (Kilometers per Hour)",
+          "type": "number"
+        }
+      },
+      "title": "TrajectorySegmentFilter",
+      "type": "object"
+    },
+    "AutoScaleGridCellSize": {
+      "properties": {
+        "auto_scale_or_custom": {
+          "const": "Auto-scale",
+          "default": "Auto-scale",
+          "ecoscope:advanced": true,
+          "enum": [
+            "Auto-scale"
+          ],
+          "title": "Grid Cell Size",
+          "type": "string"
+        }
+      },
+      "title": "Auto-scale",
+      "type": "object"
+    },
+    "CustomGridCellSize": {
+      "properties": {
+        "auto_scale_or_custom": {
+          "const": "Customize",
+          "default": "Customize",
+          "ecoscope:advanced": true,
+          "enum": [
+            "Customize"
+          ],
+          "title": "Grid Cell Size",
+          "type": "string"
+        },
+        "grid_cell_size": {
+          "default": 5000,
+          "description": "Define the resolution of the raster grid (in the unit of measurement defined by the coordinate reference system set below). A smaller grid cell size provides more detail, while a larger size generalizes the data.",
+          "exclusiveMaximum": 10000,
+          "exclusiveMinimum": 0,
+          "gt": 0,
+          "lt": 10000,
+          "title": "Custom Grid Cell Size",
+          "type": "number"
+        }
+      },
+      "title": "Customize",
+      "type": "object"
+    }
+  },
+  "uiSchema": {
+    "workflow_details": {
+      "ui:order": [
+        "name",
+        "description"
+      ]
+    },
+    "time_range": {
+      "ui:order": [
+        "since",
+        "until",
+        "timezone",
+        "time_format"
+      ]
+    },
+    "select_geo_er": {
+      "ui:order": [
+        "source",
+        "group_by"
+      ]
+    },
+    "ui:order": [
+      "workflow_details",
+      "er_client_name",
+      "time_range",
+      "base_map_defs",
+      "select_geo_er",
+      "get_patrol_obs",
+      "patrol_obs_trajs",
+      "create_geo_meshgrid",
+      "Map Zoom & Extent"
+    ],
+    "create_geo_meshgrid": {
+      "auto_scale_or_custom_cell_size": {
+        "auto_scale_or_custom": {
+          "ui:widget": "hidden"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
