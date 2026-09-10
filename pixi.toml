@@ -27,7 +27,7 @@ imageio-ffmpeg="*"
 [feature.compile.dependencies]
 ecoscope-workflows-ext-mep = "*"
 ecoscope-workflows-ext-ste ="0.0.0rc1.*"
-ecoscope-workflows-ext-custom = "0.1.0rc14.*"
+ecoscope-workflows-ext-custom = "0.1.1.*"
 
 graphviz = "*"
 wt-compiler = "==0.8.0"
@@ -77,3 +77,9 @@ cmd = './dev/recompile.sh animate_tracks--install'
 
 [feature.compile.tasks.recompile-animate_tracks]
 cmd = './dev/recompile.sh animate_tracks --update'
+
+[feature.compile.tasks.compile-patrol_field_effort]
+cmd = './dev/recompile.sh patrol_field_effort --install'
+
+[feature.compile.tasks.recompile-patrol_field_effort]
+cmd = './dev/recompile.sh patrol_field_effort --update'

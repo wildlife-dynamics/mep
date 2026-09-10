@@ -1,0 +1,81 @@
+all-grouper:
+  name: All Grouper
+  description: A demonstration of a workflow with no grouping.
+  params:
+    workflow_details:
+      description: Custom
+      name: custom_workflow
+    groupers:
+      groupers: []
+    configure_base_maps:
+      base_maps:
+        - url: >-
+            https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}
+          opacity: 1
+          max_zoom: 20
+    set_previous_period:
+      option:
+        custom: Same as current period
+    er_client_name:
+      data_source:
+        name: ste
+    gee_project_name:
+      data_source:
+        name: ecoscope_poc
+    retrieve_ldx_db:
+      input_method:
+        url: https://www.dropbox.com/scl/fi/v9maw2jeg1zptv68qtpv3/landDx.gpkg?rlkey=kez5vsbxkgha2emfy5kzwa5n1&st=98v4anq3&dl=0
+    custom_trajs_filter:
+      min_length_meters: 0.001
+      max_length_meters: 5000
+      min_time_secs: 1
+      max_time_secs: 21600
+      min_speed_kmhr: 0.01
+      max_speed_kmhr: 9
+    time_range:
+      since: '2010-01-01T10:11:00.000Z'
+      until: '2020-01-11T10:11:00.000Z'
+    subject_group_var:
+      var: elephants
+
+
+value-grouper:
+  name: Value Grouper
+  description: A demonstration of a workflow grouped by a value.
+  params:
+    workflow_details:
+      description: Custom
+      name: custom_workflow
+    groupers:
+      groupers: 
+        - subject_name
+    configure_base_maps:
+      base_maps:
+        - url: >-
+            https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}
+          opacity: 1
+          max_zoom: 20
+    set_previous_period:
+      option:
+        custom: Same as current period
+    er_client_name:
+      data_source:
+        name: ste
+    gee_project_name:
+      data_source:
+        name: ecoscope_poc
+    retrieve_ldx_db:
+      input_method:
+        url: https://www.dropbox.com/scl/fi/v9maw2jeg1zptv68qtpv3/landDx.gpkg?rlkey=kez5vsbxkgha2emfy5kzwa5n1&st=98v4anq3&dl=0
+    custom_trajs_filter:
+      min_length_meters: 0.001
+      max_length_meters: 5000
+      min_time_secs: 1
+      max_time_secs: 21600
+      min_speed_kmhr: 0.01
+      max_speed_kmhr: 9
+    time_range:
+      since: '2010-01-01T10:11:00.000Z'
+      until: '2020-01-11T10:11:00.000Z'
+    subject_group_var:
+      var: elephants

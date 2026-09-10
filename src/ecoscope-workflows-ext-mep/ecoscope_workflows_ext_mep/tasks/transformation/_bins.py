@@ -1,10 +1,11 @@
+import re
 from typing import Literal
 import numpy as np
 import pandas as pd
 from matplotlib import colormaps
 from wt_registry import register
 from matplotlib.colors import to_hex
-from ecoscope.platform.annotations import AnyDataFrame
+from ecoscope.platform.annotations import AnyDataFrame,AnyGeoDataFrame
 from ecoscope_workflows_ext_custom.tasks.transformation._color_utils import ColorPalette, CustomPalette
 
 
@@ -109,4 +110,26 @@ def add_bin_colors(
     color_map[no_data_label] = no_data_color
 
     df[new_col] = df[col].map(color_map)
+    return df
+
+@register()
+def order_bin_categories(
+    df: AnyGeoDataFrame,
+    bin_column: str = "visit_bin",
+) -> AnyGeoDataFrame:
+    """Set a bin column as an ordered categorical, sorted by the leading
+    number in each label. Labels without a number (e.g. 'Unvisited') sort first.
+    """
+    df = df.copy()
+    cats = df[bin_column].dropna().unique().tolist()
+
+    def _low(b):
+        m = re.match(r"\s*(-?\d+(?:\.\d+)?)", b)
+        return float(m.group(1)) if m else float("-inf")
+
+    df[bin_column] = pd.Categorical(
+        df[bin_column], 
+        categories=sorted(cats, key=_low), 
+        ordered=True
+        )
     return df
