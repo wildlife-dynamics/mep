@@ -6,7 +6,7 @@ from matplotlib import colormaps
 from wt_registry import register
 from matplotlib.colors import to_hex
 from ecoscope.platform.annotations import AnyDataFrame,AnyGeoDataFrame
-from ecoscope_workflows_ext_custom.tasks.transformation._color_utils import ColorPalette, CustomPalette
+from ecoscope_workflows_ext_ste.tasks.results._spatial_layers import ColorPalette, CustomPalette
 
 
 _MC_SCHEME = {
@@ -83,13 +83,13 @@ def add_visit_bins(
 
 @register()
 def add_bin_colors(
-    df: AnyDataFrame, 
-    col: str, 
-    new_col: str, 
-    cmap: ColorPalette, 
+    df: AnyDataFrame,
+    col: str,
+    new_col: str,
+    cmap: ColorPalette,
     no_data_label: str = "Unvisited",
     no_data_color: str = "#808080",
-    ):
+    ) -> AnyDataFrame:
     df = df.copy()
     # use the categorical's own order if present, else sorted uniques
     if isinstance(df[col].dtype, pd.CategoricalDtype):

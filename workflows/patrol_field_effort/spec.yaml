@@ -1,11 +1,11 @@
 id: patrol_field_effort
 requirements:
   - name: ecoscope-platform
-    version: ">=2.15.0, <2.16.0"
+    version: ">=2.18.0"
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.1.1.*"
+    version: "0.1.0rc14.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-ste
@@ -62,17 +62,17 @@ workflow:
     id: groupers
     task: set_groupers
     partial:
-      groupers:
-        - index_name: []
+      groupers: []
+      # - index_name: subject_name
 
   # set basemaps
   - name: Configure Base Map Layers
-    id: configure_base_maps
+    id: base_map_defs
     task: set_base_maps_pydeck
 
   - name: Area of Interest
     id: select_geo_er
-    task: ecoscope_workflows_ext_custom.tasks.io.get_spatial_features
+    task: ecoscope_workflows_ext_mep.tasks.spatial_operations.get_spatial_features
     partial:
       client: ${{ workflow.er_client_name.return }}
       legend_title: "Legend"
@@ -137,9 +137,9 @@ workflow:
 
   - name: Reset Index on Meshgrid
     id: meshgrid_idx_id
-    task: reset_dataframe_index
+    task: ecoscope_workflows_ext_mep.tasks.transformation.reset_dataframe_index
     partial:
-      gdf: ${{ workflow.overlay_meshgrid_spatial.return }}
+      df: ${{ workflow.overlay_meshgrid_spatial.return }}
       drop: false
   
   - name: Prepare Patrol Trajectories for Analysis
@@ -190,7 +190,7 @@ workflow:
 
   - name: Calculate Days Since Last Visit
     id: add_time 
-    task: add_time_since_visit 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_time_since_visit 
     partial: 
       df: ${{ workflow.summarize_df_grids.return }}
       time_range: ${{ workflow.time_range.return }}
@@ -211,7 +211,7 @@ workflow:
 
   - name: Flag Visited Cells (Days Since Visit)
     id: add_null_flag
-    task: add_non_null_flag 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_non_null_flag 
     partial:  
       df: ${{ workflow.merge_gridded_stats.return }}
       source_column: "days_since_visit"
@@ -219,7 +219,7 @@ workflow:
 
   - name: Classify Days Since Visit into Bins
     id: add_custom_visit_bins
-    task: add_visit_bins 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_visit_bins 
     partial: 
       df: ${{ workflow.add_null_flag.return }}
       col: "days_since_visit"
@@ -232,7 +232,7 @@ workflow:
   
   - name: Color Days Since Visit Bins
     id: add_visit_bin_colors
-    task: add_bin_colors
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_bin_colors
     partial:
       df: ${{ workflow.add_custom_visit_bins.return }}
       col: visit_bin
@@ -261,14 +261,14 @@ workflow:
 
   - name: Prepare Trajectories for Dwell Calculation 
     id: reset_patrol_trajs
-    task: reset_dataframe_index
+    task: ecoscope_workflows_ext_mep.tasks.transformation.reset_dataframe_index
     partial: 
       df: ${{ workflow.reproject_trajs.return }}
       drop: false 
 
   - name: Calculate Time Spent per Grid Cell
     id: compute_patrol_dwell
-    task: compute_dwell_time
+    task: ecoscope_workflows_ext_mep.tasks.transformation.compute_dwell_time
     partial:
       patrol_trajectories: ${{ workflow.reset_patrol_trajs.return }}
       gridded_spatial_feature: ${{ workflow.meshgrid_idx_id.return }}
@@ -296,7 +296,7 @@ workflow:
 
   - name: Flag Visited Cells (Dwell Time)
     id: add_null_dwell_flag
-    task: add_non_null_flag
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_non_null_flag
     partial:
       df: ${{ workflow.reproject_dwell_gdf.return }}
       source_column: "hours_in_cell"
@@ -304,7 +304,7 @@ workflow:
 
   - name: Classify Dwell Time into Bins
     id: add_custom_dwell_bins
-    task: add_visit_bins
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_visit_bins
     partial:
       df: ${{ workflow.add_null_dwell_flag.return }}
       col: "hours_in_cell"
@@ -317,7 +317,7 @@ workflow:
   
   - name: Color Dwell Time Bins
     id: add_dwell_bin_colors
-    task: add_bin_colors
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_bin_colors
     partial:
       df: ${{ workflow.add_custom_dwell_bins.return }}
       col: visit_bin
@@ -363,7 +363,7 @@ workflow:
 
   - name: Flag Cells with Patrol Coverage
     id: add_null_ltd_flag
-    task: add_non_null_flag
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_non_null_flag
     partial:
       df: ${{ workflow.reproject_ltd.return }}
       source_column: "percentile"
@@ -371,11 +371,11 @@ workflow:
 
   - name: Classify Route Density into Bins
     id: add_custom_ltd_bins
-    task: add_visit_bins
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_visit_bins
     partial:
       df: ${{ workflow.add_null_ltd_flag.return }}
       col: "percentile"
-      visited_col: "visited"
+      mask_col: "visited"
       new_col: "visit_bin"
       bins: 5 
       scheme: natural_breaks
@@ -384,7 +384,7 @@ workflow:
   
   - name: Color Route Density Bins
     id: add_ltd_bin_colors
-    task: add_bin_colors
+    task: ecoscope_workflows_ext_mep.tasks.transformation.add_bin_colors
     partial:
       df: ${{ workflow.add_custom_ltd_bins.return }}
       col: visit_bin
@@ -401,6 +401,7 @@ workflow:
     partial: 
       raise_if_not_found: true 
       df: ${{ workflow.reproject_trajs.return }}
+      duplicate_strategy: "suffix"
       drop_columns: []
       retain_columns: []
       rename_columns: 
@@ -412,7 +413,7 @@ workflow:
 
   - name: Generate operational days summary table 
     id: op_summary_table 
-    task: operational_days
+    task: ecoscope_workflows_ext_mep.tasks.transformation.operational_days
     partial: 
       trajs: ${{ workflow.rename_patrol_cols.return }}
       time_range: ${{ workflow.time_range.return }}
@@ -422,17 +423,17 @@ workflow:
 
   - name: Save Operational Days Table (CSV)
     id: persist_oper_table 
-    task: persist_df_wrapper
+    task: persist_df
     partial:  
       df: ${{ workflow.op_summary_table.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: null
-      filetype: patrol_operational_days
+      filetype: csv
 
-  - name: Save Patrol Observations 
-    id: persist_patrol_obs 
-    task: persist_df_wrapper
-    partial:  
+  - name: Save Patrol Observations
+    id: persist_patrol_obs
+    task: persist_df
+    partial:
       df: ${{ workflow.get_patrol_obs.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: patrol_observations
@@ -440,7 +441,7 @@ workflow:
 
   - name: Save Patrol Trajectories 
     id: persist_patrol_trajs
-    task: persist_df_wrapper
+    task: persist_df
     partial:  
       df: ${{ workflow.patrol_obs_trajs.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
@@ -491,7 +492,7 @@ workflow:
 
   - name: Sort Days Since Visit Legend 
     id: order_bin_visit_since 
-    task: order_bin_categories 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.order_bin_categories 
     partial: 
       df: ${{ workflow.add_time_visit_rgba.return }}
       bin_column: visit_bin 
@@ -530,7 +531,7 @@ workflow:
       tile_layers: ${{ workflow.base_map_defs.return }}
       legend_style: 
         placement: "bottom-right"
-      view_state: ${{ workflow.overall_zoom_value.return }}
+      view_state: ${{ workflow.gdf_image_extent.return }}
 
   - name: Save Days Since Visit Map
     id: time_since_urls
@@ -551,7 +552,7 @@ workflow:
   
   - name: Sort Dwell Time Legend
     id: order_bin_dwell_since 
-    task: order_bin_categories 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.order_bin_categories 
     partial: 
       df: ${{ workflow.add_dwell_rgba.return }}
       bin_column: visit_bin 
@@ -590,7 +591,7 @@ workflow:
       tile_layers: ${{ workflow.base_map_defs.return }}
       legend_style: 
         placement: "bottom-right"
-      view_state: ${{ workflow.overall_zoom_value.return }}
+      view_state: ${{ workflow.gdf_image_extent.return }}
 
   - name: Save Dwell Time Map
     id: dwell_urls
@@ -611,7 +612,7 @@ workflow:
   
   - name: Sort Route Density Legend
     id: order_bin_ltd_since 
-    task: order_bin_categories 
+    task: ecoscope_workflows_ext_mep.tasks.transformation.order_bin_categories 
     partial: 
       df: ${{ workflow.add_ltd_rgba.return }}
       bin_column: visit_bin 
@@ -650,7 +651,7 @@ workflow:
       tile_layers: ${{ workflow.base_map_defs.return }}
       legend_style: 
         placement: "bottom-right"
-      view_state: ${{ workflow.overall_zoom_value.return }}
+      view_state: ${{ workflow.gdf_image_extent.return }}
 
   - name: Save Route Density Map
     id: ltd_urls
@@ -684,7 +685,7 @@ workflow:
 
   - name: Calculate Patrol Coverage Fraction
     id: patrol_effort_spatial
-    task: compute_patrol_effort_fraction
+    task: ecoscope_workflows_ext_mep.tasks.transformation.compute_patrol_effort_fraction
     partial:
       gdf: ${{ workflow.add_visit_bin_colors.return }}
 

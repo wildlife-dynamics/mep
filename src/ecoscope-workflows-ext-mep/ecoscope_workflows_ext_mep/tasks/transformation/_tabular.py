@@ -2,9 +2,10 @@ import pandas as pd
 from pydantic import Field
 from typing import Annotated
 from wt_registry import register
-from ..spatial_operations import overlay_gdf, spatial_join
+from ..spatial_operations import overlay_gdf
 from ecoscope.platform.tasks.filter._filter import TimeRange
 from ecoscope.platform.annotations import AnyDataFrame,AnyGeoDataFrame
+from ecoscope_workflows_ext_ste.tasks.spatial_operations._spatial_join import  spatial_join
 
 ColumnName = Annotated[str, Field(description="Column to aggregate")]
 
