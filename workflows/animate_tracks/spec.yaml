@@ -208,8 +208,8 @@ workflow:
         id: trips_view_state
         task: ecoscope_workflows_ext_ste.tasks.spatial_operations.compute_view_state_from_gdf
         partial:
-          pitch: 0
-          bearing: 0
+          # pitch: 0
+          # bearing: 0
           max_zoom: 15
           gdf: ${{ workflow.zoom_to_envelope.return }}
   

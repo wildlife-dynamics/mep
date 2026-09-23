@@ -10,7 +10,7 @@ from PIL import Image
 import geopandas as gpd
 from pyproj import Transformer
 import concurrent.futures as cf
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from shapely.geometry import LineString
 from typing import Annotated, Literal, cast
 from pydantic.json_schema import SkipJsonSchema
@@ -87,6 +87,16 @@ class CustomBasemap(_BasemapFields):
 BasemapOption = Annotated[DefaultBasemap | CustomBasemap, Field(discriminator="preset")]
 
 
+class DotMarker(BaseModel):
+    """Flat circle at each subject's current position (deck.gl ScatterplotLayer).
+
+    Styled by the animation settings (head_radius, head_color, head_outline_*).
+    """
+
+    model_config = ConfigDict(json_schema_extra={"title": "Dot"})
+    marker: Annotated[Literal["dot"], Field(default="dot", title="Marker icon")] = "dot"
+
+
 class ScenegraphLayerDefinition(BaseModel):
     """An animated 3D head built from a glTF/GLB model (deck.gl ScenegraphLayer).
 
@@ -100,32 +110,40 @@ class ScenegraphLayerDefinition(BaseModel):
     See https://deck.gl/docs/api-reference/mesh-layers/scenegraph-layer for more info.
     """
 
-    enabled: Annotated[
-        bool,
-        AdvancedField(default=False, description="Enable the 3D head model. When off, subjects render as flat dots."),
-    ] = False
+    model_config = ConfigDict(json_schema_extra={"title": "3D model"}, protected_namespaces=())
+    marker: Annotated[Literal["model"], Field(default="model", title="Marker icon")] = "model"
     glb: Annotated[
         str | SkipJsonSchema[None],
         AdvancedField(
             default="https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb",
+            title="3D model (GLB)",
             description="GLB source: an http(s) URL, a data: URI, or a local file path. "
             "None -> bundled default model (elephant).",
         ),
     ] = "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb"
     size_scale: Annotated[
         float,
-        AdvancedField(default=50.0, description="ScenegraphLayer sizeScale. Tune to your scene."),
+        AdvancedField(
+            default=50.0, gt=0, title="Size scale", description="Model size multiplier. Tune to your scene."
+        ),
     ] = 50.0
     size_min_pixels: Annotated[
         float,
         AdvancedField(
             default=12.0,
+            ge=1,
+            le=200,
+            title="Min size (px)",
             description="Clamp the on-screen model to at least this many pixels so it stays visible when zoomed out.",
         ),
     ] = 12.0
     size_max_pixels: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(default=None, description="Optional upper clamp on the model's on-screen size in pixels."),
+        Annotated[float, Field(ge=1, le=500)] | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            title="Max size (px)",
+            description="Upper clamp on the model's on-screen size in pixels. Must be at least Min size.",
+        ),
     ] = 75.0
     face_heading: Annotated[
         bool,
@@ -190,12 +208,18 @@ class ScenegraphLayerDefinition(BaseModel):
     ] = 3.0
     pbr_lighting: Annotated[
         bool,
-        AdvancedField(default=True, description="Physically-based lighting ('pbr'); False -> flat shading."),
+        AdvancedField(
+            default=True,
+            title="Realistic lighting (PBR)",
+            description="Shade the model with physically-based lighting. Uncheck for flat shading, "
+            "which shows subject colors more accurately.",
+        ),
     ] = True
     tint: Annotated[
         list[int] | SkipJsonSchema[None],
         AdvancedField(
             default=None,
+            title="Tint",
             description="Optional RGB tint over the model as [R, G, B]. None -> the model's own materials.",
         ),
     ] = [220, 220, 255]
@@ -203,12 +227,26 @@ class ScenegraphLayerDefinition(BaseModel):
         bool,
         AdvancedField(
             default=True,
+            title="Use subject color",
             description="Colour the model with each subject's track colour. "
             "False -> use `tint` (or the model's own materials). Note: the colour "
             "multiplies the model's material, so it reads truest with a light/neutral "
             "glb and flat lighting (pbr_lighting=False).",
         ),
     ] = True
+
+    @model_validator(mode="after")
+    def _check_size_range(self):
+        if self.size_max_pixels is not None and self.size_max_pixels < self.size_min_pixels:
+            raise ValueError(
+                f"Max size ({self.size_max_pixels} px) must be at least Min size ({self.size_min_pixels} px)."
+            )
+        return self
+
+
+# Bare union: draw_animated_map sets the discriminator on its own AdvancedField (the compiler only reads
+# the first FieldInfo in an Annotated, so an inner Field here would drop the title and advanced flag).
+HeadMarker = DotMarker | ScenegraphLayerDefinition
 
 
 def _resolve_glb_data_uri(glb: str | None) -> str:
@@ -427,10 +465,6 @@ def create_trips_layer(
 
 @register()
 def create_scenegraph_layer(
-    enabled: Annotated[
-        bool,
-        AdvancedField(default=False, description="Enable the 3D head model. When off, subjects render as flat dots."),
-    ] = False,
     glb: Annotated[
         str | SkipJsonSchema[None],
         AdvancedField(
@@ -465,7 +499,6 @@ def create_scenegraph_layer(
     the head falls back to the flat ScatterplotLayer dot.
     """
     return ScenegraphLayerDefinition(
-        enabled=enabled,
         glb=glb,
         size_scale=size_scale,
         size_min_pixels=size_min_pixels,
@@ -862,12 +895,14 @@ def draw_animated_map(
     view_state: Annotated[ViewState | SkipJsonSchema[None], AdvancedField(default=ViewState())] = None,
     widget_id: Annotated[str | SkipJsonSchema[None], Field(default=None, exclude=True)] = None,
     head_layer: Annotated[
-        ScenegraphLayerDefinition,
+        HeadMarker,
         AdvancedField(
-            default=ScenegraphLayerDefinition(),
-            description="3D glTF/GLB head model settings. Enable with the 'enabled' checkbox.",
+            default=DotMarker(),
+            discriminator="marker",
+            title="Marker icon",
+            description="Marker drawn at each subject's current position: a flat dot, or a 3D glTF/GLB model.",
         ),
-    ] = ScenegraphLayerDefinition(),
+    ] = DotMarker(),
 ) -> Annotated[str, Field()]:
     """Like draw_map, but animates the TripsLayer with an interactive TimelineWidget.
 
@@ -942,7 +977,7 @@ def draw_animated_map(
 
     # --- Optional 3D head model (ScenegraphLayer via head_layer) ----------------
     hm = head_layer
-    if hm is not None and hm.enabled:
+    if isinstance(hm, ScenegraphLayerDefinition):
         show_head = True  # a model implies you want the head drawn
         head_model_uri_js = '"' + _resolve_glb_data_uri(hm.glb) + '"'
         head_model_size = float(hm.size_scale)

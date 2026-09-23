@@ -477,11 +477,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             unpack_depth=1,
         )
         .partial(
-            pitch=0,
-            bearing=0,
-            max_zoom=15,
-            gdf=zoom_to_envelope,
-            **(params.get("trips_view_state") or {}),
+            max_zoom=15, gdf=zoom_to_envelope, **(params.get("trips_view_state") or {})
         )
         .call()
     )

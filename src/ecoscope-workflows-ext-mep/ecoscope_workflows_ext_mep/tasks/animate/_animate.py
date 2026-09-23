@@ -1,4 +1,3 @@
-from __future__ import annotations
 import asyncio
 import logging
 import os
@@ -49,10 +48,12 @@ class DurationConfig(BaseModel):
     seconds: Annotated[
         float,
         Field(
-            default=75.0,
-            description="Video duration in seconds.",
+            default=30.0,
+            gt=0,
+            title="Duration (seconds)",
+            description="Video duration in seconds. Only used when 'Auto' is unchecked.",
         ),
-    ] = 75.0
+    ] = 30.0
 
 
 _RESOLUTION_PRESETS = {
@@ -87,10 +88,10 @@ class CustomResolution(BaseModel):
     ] = 720
 
 
-ResolutionConfig = Annotated[
-    PresetResolution | CustomResolution,
-    Field(discriminator="preset"),
-]
+# Bare unions for task params: the discriminator goes on the param's own AdvancedField, because the
+# compiler only reads the first FieldInfo in an Annotated and would otherwise drop the advanced flag.
+ResolutionOptions = PresetResolution | CustomResolution
+ResolutionConfig = Annotated[ResolutionOptions, Field(discriminator="preset")]
 
 
 def _resolve_resolution(resolution: ResolutionConfig) -> tuple[int, int]:
@@ -392,7 +393,8 @@ class StaticCamera(BaseModel):
     with is what renders. Pick one of the other camera types for movement.
     """
 
-    type_: Literal["static"] = "static"
+    model_config = ConfigDict(json_schema_extra={"title": "Static"})
+    type_: Annotated[Literal["static"], Field(default="static", title="Camera")] = "static"
 
 
 class FollowCamera(BaseModel):
@@ -404,7 +406,8 @@ class FollowCamera(BaseModel):
     Follow3DCamera instead.
     """
 
-    type_: Literal["follow"] = "follow"
+    model_config = ConfigDict(json_schema_extra={"title": "Follow subject"})
+    type_: Annotated[Literal["follow"], Field(default="follow", title="Camera")] = "follow"
     subject_index: Annotated[
         int,
         Field(
@@ -491,7 +494,8 @@ class Follow3DCamera(BaseModel):
     to match the tracked subject's direction of travel (heading_lock).
     """
 
-    type_: Literal["follow_3d"] = "follow_3d"
+    model_config = ConfigDict(json_schema_extra={"title": "Follow subject (3D)"})
+    type_: Annotated[Literal["follow_3d"], Field(default="follow_3d", title="Camera")] = "follow_3d"
     subject_index: Annotated[
         int,
         Field(
@@ -587,7 +591,8 @@ class OrbitCamera(BaseModel):
     point in the scene.
     """
 
-    type_: Literal["orbit"] = "orbit"
+    model_config = ConfigDict(json_schema_extra={"title": "Orbit"})
+    type_: Annotated[Literal["orbit"], Field(default="orbit", title="Camera")] = "orbit"
     zoom: Annotated[
         float | SkipJsonSchema[None],
         Field(
@@ -633,7 +638,8 @@ class FitCamera(BaseModel):
     override); pitch and bearing can still be fixed.
     """
 
-    type_: Literal["fit"] = "fit"
+    model_config = ConfigDict(json_schema_extra={"title": "Fit all tracks"})
+    type_: Annotated[Literal["fit"], Field(default="fit", title="Camera")] = "fit"
     subject_index: Annotated[
         int,
         Field(
@@ -691,7 +697,8 @@ class CinematicCamera(BaseModel):
     MapView.
     """
 
-    type_: Literal["cinematic"] = "cinematic"
+    model_config = ConfigDict(json_schema_extra={"title": "Cinematic fly-through"})
+    type_: Annotated[Literal["cinematic"], Field(default="cinematic", title="Camera")] = "cinematic"
     subject_index: Annotated[
         int,
         Field(
@@ -824,7 +831,8 @@ class CinematicCamera(BaseModel):
 class KeyframesFromFile(BaseModel):
     """Camera path loaded from an uploaded waypoint file."""
 
-    type_: Literal["file"] = "file"
+    model_config = ConfigDict(json_schema_extra={"title": "Upload waypoint file"})
+    type_: Annotated[Literal["file"], Field(default="file", title="Source")] = "file"
     keyframes_file: Annotated[
         str | SkipJsonSchema[None],
         Field(
@@ -839,7 +847,8 @@ class KeyframesFromFile(BaseModel):
 class KeyframesFromSubject(BaseModel):
     """Camera path auto-derived from the animated data by following one subject (or the group)."""
 
-    type_: Literal["subject"] = "subject"
+    model_config = ConfigDict(json_schema_extra={"title": "Follow a subject"})
+    type_: Annotated[Literal["subject"], Field(default="subject", title="Source")] = "subject"
     subject: Annotated[
         str | SkipJsonSchema[None],
         Field(
@@ -866,7 +875,8 @@ class KeyframesCamera(BaseModel):
     over `source` when non-empty.
     """
 
-    type_: Literal["keyframes"] = "keyframes"
+    model_config = ConfigDict(json_schema_extra={"title": "Keyframes"})
+    type_: Annotated[Literal["keyframes"], Field(default="keyframes", title="Camera")] = "keyframes"
     keyframes: Annotated[
         list[CameraKeyframe] | SkipJsonSchema[None],
         Field(
@@ -920,10 +930,8 @@ class KeyframesCamera(BaseModel):
     ] = 0
 
 
-CameraConfig = Annotated[
-    StaticCamera | FollowCamera | Follow3DCamera | OrbitCamera | FitCamera | CinematicCamera | KeyframesCamera,
-    Field(discriminator="type_"),
-]
+CameraOptions = StaticCamera | FollowCamera | Follow3DCamera | OrbitCamera | FitCamera | CinematicCamera | KeyframesCamera
+CameraConfig = Annotated[CameraOptions, Field(discriminator="type_")]
 
 
 # --- JS injected into each page: reads the scene data and builds the camera ----
@@ -1625,13 +1633,14 @@ def render_animation(
     output_dir: str | None = None,
     out_path: str = "animation.mp4",
     camera: Annotated[
-        CameraConfig,
+        CameraOptions,
         AdvancedField(
             default=StaticCamera(),
-            description="Camera behavior for the clip. Pick a type — StaticCamera (initial view), FollowCamera/"
-            "Follow3DCamera (tracks a subject), OrbitCamera (circles the scene), FitCamera (zooms to show all "
-            "visited points), CinematicCamera (smooth fly-through), or KeyframesCamera (flies through waypoints) "
-            "— then configure that type's fields.",
+            discriminator="type_",
+            title="Camera",
+            description="Camera behavior for the clip: Static (initial view), Follow subject / Follow subject (3D) "
+            "(tracks a subject), Orbit (circles the scene), Fit all tracks (zooms to show all visited points), "
+            "Cinematic fly-through, or Keyframes (flies through waypoints) — then configure that option's fields.",
         ),
     ] = StaticCamera(),
     fps: Annotated[int, AdvancedField(default=30, gt=0, description="Output video frame rate.")] = 30,
@@ -1639,13 +1648,16 @@ def render_animation(
         DurationConfig,
         AdvancedField(
             default=DurationConfig(),
+            title="Duration",
             description="Video duration. 'auto' derives length from the animation's own playback time.",
         ),
     ] = DurationConfig(),
     resolution: Annotated[
-        ResolutionConfig,
+        ResolutionOptions,
         AdvancedField(
             default=PresetResolution(),
+            discriminator="preset",
+            title="Resolution",
             description="Output video resolution. Pick a common preset (720p/1080p/4K), or 'custom' to set an "
             "exact width/height.",
         ),

@@ -131,6 +131,32 @@
       "required": [],
       "title": "Terrain Exaggeration"
     },
+    "trips_view_state": {
+      "additionalProperties": false,
+      "properties": {
+        "pitch": {
+          "default": 0,
+          "maximum": 90,
+          "minimum": 0,
+          "title": "Pitch",
+          "type": "integer",
+          "description": "...",
+          "ecoscope:advanced": true
+        },
+        "bearing": {
+          "default": 0,
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Bearing",
+          "type": "integer",
+          "description": "...",
+          "ecoscope:advanced": true
+        }
+      },
+      "required": [],
+      "type": "object",
+      "title": "Zoom view to gdf extent"
+    },
     "animation_settings": {
       "additionalProperties": false,
       "properties": {
@@ -150,35 +176,19 @@
       "additionalProperties": false,
       "properties": {
         "head_layer": {
-          "allOf": [
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DotMarker"
+            },
             {
               "$ref": "#/$defs/ScenegraphLayerDefinition"
             }
           ],
           "default": {
-            "enabled": false,
-            "glb": "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb",
-            "size_scale": 50.0,
-            "size_min_pixels": 12.0,
-            "size_max_pixels": 75.0,
-            "face_heading": true,
-            "yaw_offset": 0.0,
-            "model_pitch": 90.0,
-            "model_roll": 0.0,
-            "smooth_samples": 2,
-            "terrain_pitch": false,
-            "terrain_pitch_scale": 1.0,
-            "min_move_m": 3.0,
-            "pbr_lighting": true,
-            "tint": [
-              220,
-              220,
-              255
-            ],
-            "use_track_color": true
+            "marker": "dot"
           },
-          "title": "Head Layer",
-          "description": "3D glTF/GLB head model settings. Enable with the 'enabled' checkbox.",
+          "title": "Marker icon",
+          "description": "Marker drawn at each subject's current position: a flat dot, or a 3D glTF/GLB model.",
           "ecoscope:advanced": true
         }
       },
@@ -192,7 +202,8 @@
         "enabled": {
           "default": false,
           "title": "Enabled",
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Render the animated map as a video file. When off, the video creation step is skipped entirely."
         }
       },
       "type": "object",
@@ -229,7 +240,9 @@
           "default": {
             "type_": "static"
           },
-          "title": "Camera"
+          "title": "Camera",
+          "description": "Camera behavior for the clip: Static (initial view), Follow subject / Follow subject (3D) (tracks a subject), Orbit (circles the scene), Fit all tracks (zooms to show all visited points), Cinematic fly-through, or Keyframes (flies through waypoints) \u2014 then configure that option's fields.",
+          "ecoscope:advanced": true
         },
         "duration": {
           "allOf": [
@@ -239,9 +252,11 @@
           ],
           "default": {
             "auto": true,
-            "seconds": 75.0
+            "seconds": 30.0
           },
-          "title": "Duration"
+          "title": "Duration",
+          "description": "Video duration. 'auto' derives length from the animation's own playback time.",
+          "ecoscope:advanced": true
         },
         "resolution": {
           "anyOf": [
@@ -255,7 +270,9 @@
           "default": {
             "preset": "720p"
           },
-          "title": "Resolution"
+          "title": "Resolution",
+          "description": "Output video resolution. Pick a common preset (720p/1080p/4K), or 'custom' to set an exact width/height.",
+          "ecoscope:advanced": true
         }
       },
       "required": [],
@@ -353,42 +370,65 @@
       "title": "TrajectorySegmentFilter",
       "type": "object"
     },
+    "DotMarker": {
+      "description": "Flat circle at each subject's current position (deck.gl ScatterplotLayer).\n\nStyled by the animation settings (head_radius, head_color, head_outline_*).",
+      "properties": {
+        "marker": {
+          "const": "dot",
+          "default": "dot",
+          "enum": [
+            "dot"
+          ],
+          "title": "Marker icon",
+          "type": "string"
+        }
+      },
+      "title": "Dot",
+      "type": "object"
+    },
     "ScenegraphLayerDefinition": {
       "description": "An animated 3D head built from a glTF/GLB model (deck.gl ScenegraphLayer).\n\nCreate one with create_scenegraph_layer() and pass it to\ndraw_animated_map(head_layer=...). Its position and heading are driven per-frame\nfrom the TripsLayer, so it follows each subject's current location. `glb` accepts\nan http(s) URL, a `data:` URI, or a local file path (read and embedded as a data\nURI). None -> bundled default (the elephant model). If the ScenegraphLayer\nconstructor or the glTF loader can't be resolved at runtime, the head silently\nfalls back to the flat ScatterplotLayer dot.\nSee https://deck.gl/docs/api-reference/mesh-layers/scenegraph-layer for more info.",
       "properties": {
-        "enabled": {
-          "default": false,
-          "description": "Enable the 3D head model. When off, subjects render as flat dots.",
-          "ecoscope:advanced": true,
-          "title": "Enabled",
-          "type": "boolean"
+        "marker": {
+          "const": "model",
+          "default": "model",
+          "enum": [
+            "model"
+          ],
+          "title": "Marker icon",
+          "type": "string"
         },
         "glb": {
           "default": "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/african_bush_elephant.glb",
           "description": "GLB source: an http(s) URL, a data: URI, or a local file path. None -> bundled default model (elephant).",
           "ecoscope:advanced": true,
-          "title": "Glb",
+          "title": "3D model (GLB)",
           "type": "string"
         },
         "size_scale": {
           "default": 50.0,
-          "description": "ScenegraphLayer sizeScale. Tune to your scene.",
+          "description": "Model size multiplier. Tune to your scene.",
           "ecoscope:advanced": true,
-          "title": "Size Scale",
+          "exclusiveMinimum": 0.0,
+          "title": "Size scale",
           "type": "number"
         },
         "size_min_pixels": {
           "default": 12.0,
           "description": "Clamp the on-screen model to at least this many pixels so it stays visible when zoomed out.",
           "ecoscope:advanced": true,
-          "title": "Size Min Pixels",
+          "maximum": 200.0,
+          "minimum": 1.0,
+          "title": "Min size (px)",
           "type": "number"
         },
         "size_max_pixels": {
           "default": 75.0,
-          "description": "Optional upper clamp on the model's on-screen size in pixels.",
+          "description": "Upper clamp on the model's on-screen size in pixels. Must be at least Min size.",
           "ecoscope:advanced": true,
-          "title": "Size Max Pixels",
+          "maximum": 500.0,
+          "minimum": 1.0,
+          "title": "Max size (px)",
           "type": "number"
         },
         "face_heading": {
@@ -449,9 +489,9 @@
         },
         "pbr_lighting": {
           "default": true,
-          "description": "Physically-based lighting ('pbr'); False -> flat shading.",
+          "description": "Shade the model with physically-based lighting. Uncheck for flat shading, which shows subject colors more accurately.",
           "ecoscope:advanced": true,
-          "title": "Pbr Lighting",
+          "title": "Realistic lighting (PBR)",
           "type": "boolean"
         },
         "tint": {
@@ -472,11 +512,11 @@
           "default": true,
           "description": "Colour the model with each subject's track colour. False -> use `tint` (or the model's own materials). Note: the colour multiplies the model's material, so it reads truest with a light/neutral glb and flat lighting (pbr_lighting=False).",
           "ecoscope:advanced": true,
-          "title": "Use Track Color",
+          "title": "Use subject color",
           "type": "boolean"
         }
       },
-      "title": "ScenegraphLayerDefinition",
+      "title": "3D model",
       "type": "object"
     },
     "CinematicCamera": {
@@ -488,11 +528,11 @@
           "enum": [
             "cinematic"
           ],
-          "title": "Type ",
+          "title": "Camera",
           "type": "string"
         }
       },
-      "title": "CinematicCamera",
+      "title": "Cinematic fly-through",
       "type": "object"
     },
     "CustomResolution": {
@@ -534,9 +574,10 @@
           "type": "boolean"
         },
         "seconds": {
-          "default": 75.0,
-          "description": "Video duration in seconds.",
-          "title": "Seconds",
+          "default": 30.0,
+          "description": "Video duration in seconds. Only used when 'Auto' is unchecked.",
+          "exclusiveMinimum": 0.0,
+          "title": "Duration (seconds)",
           "type": "number"
         }
       },
@@ -552,11 +593,11 @@
           "enum": [
             "fit"
           ],
-          "title": "Type ",
+          "title": "Camera",
           "type": "string"
         }
       },
-      "title": "FitCamera",
+      "title": "Fit all tracks",
       "type": "object"
     },
     "Follow3DCamera": {
@@ -568,11 +609,11 @@
           "enum": [
             "follow_3d"
           ],
-          "title": "Type ",
+          "title": "Camera",
           "type": "string"
         }
       },
-      "title": "Follow3DCamera",
+      "title": "Follow subject (3D)",
       "type": "object"
     },
     "FollowCamera": {
@@ -584,11 +625,11 @@
           "enum": [
             "follow"
           ],
-          "title": "Type ",
+          "title": "Camera",
           "type": "string"
         }
       },
-      "title": "FollowCamera",
+      "title": "Follow subject",
       "type": "object"
     },
     "KeyframesCamera": {
@@ -600,7 +641,7 @@
           "enum": [
             "keyframes"
           ],
-          "title": "Type ",
+          "title": "Camera",
           "type": "string"
         },
         "source": {
@@ -661,7 +702,7 @@
           "type": "number"
         }
       },
-      "title": "KeyframesCamera",
+      "title": "Keyframes",
       "type": "object"
     },
     "KeyframesFromFile": {
@@ -673,7 +714,7 @@
           "enum": [
             "file"
           ],
-          "title": "Type ",
+          "title": "Source",
           "type": "string"
         },
         "keyframes_file": {
@@ -683,7 +724,7 @@
           "type": "string"
         }
       },
-      "title": "KeyframesFromFile",
+      "title": "Upload waypoint file",
       "type": "object"
     },
     "KeyframesFromSubject": {
@@ -695,7 +736,7 @@
           "enum": [
             "subject"
           ],
-          "title": "Type ",
+          "title": "Source",
           "type": "string"
         },
         "subject": {
@@ -705,7 +746,7 @@
           "type": "string"
         }
       },
-      "title": "KeyframesFromSubject",
+      "title": "Follow a subject",
       "type": "object"
     },
     "OrbitCamera": {
@@ -717,11 +758,11 @@
           "enum": [
             "orbit"
           ],
-          "title": "Type ",
+          "title": "Camera",
           "type": "string"
         }
       },
-      "title": "OrbitCamera",
+      "title": "Orbit",
       "type": "object"
     },
     "PresetResolution": {
@@ -751,11 +792,11 @@
           "enum": [
             "static"
           ],
-          "title": "Type ",
+          "title": "Camera",
           "type": "string"
         }
       },
-      "title": "StaticCamera",
+      "title": "Static",
       "type": "object"
     }
   },
@@ -774,6 +815,12 @@
         "time_format"
       ]
     },
+    "trips_view_state": {
+      "ui:order": [
+        "pitch",
+        "bearing"
+      ]
+    },
     "create_animation": {
       "ui:order": [
         "camera",
@@ -788,6 +835,7 @@
       "subject_group_var",
       "convert_to_trajs",
       "terrain_exaggeration",
+      "trips_view_state",
       "animation_settings",
       "draw_animation",
       "video_output_path",
