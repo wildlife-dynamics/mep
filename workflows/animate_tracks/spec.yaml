@@ -24,10 +24,22 @@ requirements:
     version: ">=1.20.0,<2.0.0"
     channel: conda-forge
 
-# rjsf-overrides:
-#   properties:
-#     Subject Group.properties.subject_group_var.properties.var.title: Subject Group Name
-#     Subject Group.properties.subject_group_var.properties.var.default: Elephants
+rjsf-overrides:
+  properties:
+    # Section descriptions for task blocks exposed on the config form
+    er_client_name.description: Choose the EarthRanger site to pull subject tracking data from.
+    subject_observations.description: Choose the subject group whose movements will be animated. Each subject in the group is drawn as its own track.
+    convert_to_trajs.description: Clean the tracks before animating by removing segments that are too long, too short, too slow or too fast to be real movement, such as GPS jumps.
+    terrain_exaggeration.description: Control how strongly hills and valleys are raised on the 3D terrain. Increase it to make relief easier to see in flat landscapes.
+    terrain_sampling.description: Control how tracks are draped onto the 3D terrain so they sit on the ground surface rather than floating above it or disappearing below it.
+    trips_animation.description: Choose the marker shown at each subject's current position as its track plays.
+    create_controls.description: Choose which playback controls appear on the interactive map, such as play/pause, the time slider and speed buttons, and where they sit.
+    timeline_animation.description: Set how long the animation takes to play from the first location to the last, and whether the map slowly rotates while it plays.
+    create_animation.description: Export the animation as an MP4 video. Choose how the camera moves, how long the video runs and its resolution.
+    # Viewing angle of the map (ext_ste ships these with placeholder descriptions)
+    Map Zoom & Extent.properties.trips_view_state.properties.pitch.description: Tilt of the map in degrees. 0 looks straight down; higher values tilt the view towards the horizon for a 3D look at the terrain. The video cameras use this tilt too.
+    Map Zoom & Extent.properties.trips_view_state.properties.bearing.description: Rotation of the map in degrees clockwise from north. 0 keeps north at the top, 90 puts east at the top, and negative values rotate counter-clockwise. The video cameras use this rotation too.
+
 task-instance-defaults:
   skipif:
     conditions:
