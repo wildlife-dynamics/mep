@@ -323,7 +323,7 @@
       },
       "type": "object",
       "required": [],
-      "title": "Create timeline animation"
+      "title": "Create Timeline Animation"
     },
     "create_animation": {
       "additionalProperties": false,

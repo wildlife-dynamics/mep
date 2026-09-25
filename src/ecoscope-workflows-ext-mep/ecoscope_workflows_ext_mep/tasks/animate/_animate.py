@@ -413,21 +413,24 @@ class FollowCamera(BaseModel):
     zoom_offset: ZoomOffset = 0.0
     follow_window: Annotated[
         float,
-        AdvancedField(
-            default=0.1, gt=0, le=1, description="Share of the timeline treated as 'recent' when framing."
-        ),
+        AdvancedField(default=0.1, gt=0, le=1, description="Share of the timeline treated as 'recent' when framing."),
     ] = 0.1
     follow_smoothing: Annotated[
         float,
         AdvancedField(
-            default=0.25, ge=0, le=1, description="Share of the gap to the action closed every 1/30 s: "
-            "low = smooth but laggy, 1 = snaps to it. Independent of fps."
+            default=0.25,
+            ge=0,
+            le=1,
+            description="Share of the gap to the action closed every 1/30 s: "
+            "low = smooth but laggy, 1 = snaps to it. Independent of fps.",
         ),
     ] = 0.25
     heading_lock: Annotated[
         bool, AdvancedField(default=False, description="Rotate the camera to face the direction of travel.")
     ] = False
-    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")] = 80
+    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")] = (
+        80
+    )
 
 
 class OrbitCamera(BaseModel):
@@ -457,15 +460,16 @@ class CinematicCamera(BaseModel):
     zoom_offset: ZoomOffset = 0.0
     follow_window: Annotated[
         float,
-        AdvancedField(
-            default=0.1, gt=0, le=1, description="Share of the timeline treated as 'recent' when framing."
-        ),
+        AdvancedField(default=0.1, gt=0, le=1, description="Share of the timeline treated as 'recent' when framing."),
     ] = 0.1
     follow_smoothing: Annotated[
         float,
         AdvancedField(
-            default=0.25, ge=0, le=1, description="Share of the gap to the action closed every 1/30 s: "
-            "low = smooth but laggy, 1 = snaps to it. Independent of fps."
+            default=0.25,
+            ge=0,
+            le=1,
+            description="Share of the gap to the action closed every 1/30 s: "
+            "low = smooth but laggy, 1 = snaps to it. Independent of fps.",
         ),
     ] = 0.25
     lead_frac: Annotated[
@@ -491,7 +495,9 @@ class CinematicCamera(BaseModel):
             default=0.12, ge=0, le=0.5, description="Share of the clip spent flying in from the whole-scene view."
         ),
     ] = 0.12
-    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")] = 80
+    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")] = (
+        80
+    )
 
 
 class KeyframesFromFile(BaseModel):
@@ -607,8 +613,10 @@ class FlyAroundCamera(BaseModel):
     tilt: Annotated[
         float | SkipJsonSchema[None],
         AdvancedField(
-            default=None, ge=0, le=80, description="Tilt on arrival (0 = straight down). Leave blank to use the "
-            "map's pitch."
+            default=None,
+            ge=0,
+            le=80,
+            description="Tilt on arrival (0 = straight down). Leave blank to use the " "map's pitch.",
         ),
     ] = None
     heading: Annotated[
@@ -708,7 +716,11 @@ window.__cam = (function () {
   };
   Box.prototype.center = function () { return { lon: (this.w + this.e) / 2, lat: (this.s + this.n) / 2 }; };
 
-  function lowerBound(T, t) { var lo = 0, hi = T.length; while (lo < hi) { var m = (lo + hi) >> 1; if (T[m] < t) lo = m + 1; else hi = m; } return lo; }
+  function lowerBound(T, t) {
+    var lo = 0, hi = T.length;
+    while (lo < hi) { var m = (lo + hi) >> 1; if (T[m] < t) lo = m + 1; else hi = m; }
+    return lo;
+  }
   function posAt(tr, t) {      // interpolated [lon, lat] of a track at time t (clamped)
     var C = tr.C, T = tr.T, last = T.length - 1;
     if (t <= T[0]) return C[0];
@@ -803,7 +815,9 @@ window.__cam = (function () {
     var S = scene(), key = (subject == null || subject === '') ? null : String(subject);
     var tr = null;
     if (key == null) {
-      S.tracks.forEach(function (x) { if (!tr || x.T[x.T.length - 1] - x.T[0] > tr.T[tr.T.length - 1] - tr.T[0]) tr = x; });
+      S.tracks.forEach(function (x) {
+        if (!tr || x.T[x.T.length - 1] - x.T[0] > tr.T[tr.T.length - 1] - tr.T[0]) tr = x;
+      });
     } else {
       tr = S.tracks.find(function (x) { return values(x.d).indexOf(key) >= 0; }) || null;
     }
@@ -822,7 +836,8 @@ window.__cam = (function () {
     var zoom = (fitBox(b, o) || base).zoom, out = [];
     for (var i = 0; i < n; i++) {
       var tt = smp[0].t + (smp[smp.length - 1].t - smp[0].t) * (i / (n - 1));
-      var k = Math.max(1, lowerBound(smp.map(function (x) { return x.t; }), tt)), A = smp[k - 1], B = smp[Math.min(k, smp.length - 1)];
+      var k = Math.max(1, lowerBound(smp.map(function (x) { return x.t; }), tt));
+      var A = smp[k - 1], B = smp[Math.min(k, smp.length - 1)];
       var f = (B.t > A.t) ? (tt - A.t) / (B.t - A.t) : 0;
       out.push({ t: Math.min(1, tt / END), lon: A.p[0] + (B.p[0] - A.p[0]) * f, lat: A.p[1] + (B.p[1] - A.p[1]) * f,
                  zoom: zoom, pitch: base.pitch, bearing: base.bearing });
@@ -881,7 +896,9 @@ window.__cam = (function () {
     var preset = o.preset, init = initialView() || {}, S = scene();
     var pitch = init.pitch || 0, bearing = init.bearing || 0;          // from the map
     var whole = fitBox(S.box, o) || { longitude: init.longitude, latitude: init.latitude, zoom: init.zoom || 8 };
-    var base = { longitude: whole.longitude, latitude: whole.latitude, zoom: whole.zoom, pitch: pitch, bearing: bearing };
+    var base = {
+      longitude: whole.longitude, latitude: whole.latitude, zoom: whole.zoom, pitch: pitch, bearing: bearing
+    };
     var END = span() || 1, win = (o.follow_window == null ? 0.1 : o.follow_window) * END;
     var smooth = Math.max(0, Math.min(1, o.follow_smoothing == null ? 0.25 : o.follow_smoothing));
     // follow_smoothing is per 1/30 s; rescale so the camera keeps up equally at any fps.
@@ -999,9 +1016,7 @@ async def _prepare_page(browser, html_uri, *, width, height, device_scale_factor
     # The "Save as Image" widget (a camera icon, top-right) has no `id` in the rendered
     # DOM -- #SaveImageWidget never matched. Hide it by its actual deck.gl widget class.
     # The playback bar from draw_animated_map is for interactive viewing only.
-    await page.add_style_tag(
-        content=".deck-widget-save-image, #timeline-controls { display: none !important; }"
-    )
+    await page.add_style_tag(content=".deck-widget-save-image, #timeline-controls { display: none !important; }")
     return page, pending
 
 
@@ -1064,9 +1079,9 @@ class VideoQuality(BaseModel):
     crf: int = Field(
         default=18, ge=0, le=51, description="H.264 constant rate factor (0 = lossless, 51 = worst). Lower = better."
     )
-    x264_preset: Literal["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"] = (
-        Field(default="veryfast", description="x264 encoding speed preset (ultrafast → veryslow).")
-    )
+    x264_preset: Literal[
+        "ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"
+    ] = Field(default="veryfast", description="x264 encoding speed preset (ultrafast → veryslow).")
     device_scale_factor: int = Field(default=1, gt=0, description="Browser device pixel ratio. 2 = HiDPI output.")
 
 
@@ -1279,7 +1294,9 @@ async def render_animation_async(
 def render_animation(
     html_path: Annotated[str, Field(description="Animated map HTML from draw_animated_map.")],
     output_dir: Annotated[str | SkipJsonSchema[None], Field(description="Directory for the video.")] = None,
-    out_path: Annotated[str, Field(description="Video file name (or path when output_dir is unset).")] = "animation.mp4",
+    out_path: Annotated[
+        str, Field(description="Video file name (or path when output_dir is unset).")
+    ] = "animation.mp4",
     camera: Annotated[
         CameraOptions,
         AdvancedField(

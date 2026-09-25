@@ -88,7 +88,8 @@
         "subject_group_name"
       ],
       "type": "object",
-      "title": "Subject Group"
+      "title": "Subject Group",
+      "description": "Choose the subject group whose movements will be animated. Each subject in the group is drawn as its own track."
     },
     "convert_to_trajs": {
       "additionalProperties": false,
@@ -114,7 +115,8 @@
       },
       "required": [],
       "type": "object",
-      "title": "Trajectory Segment Filter"
+      "title": "Trajectory Segment Filter",
+      "description": "Clean the tracks before animating by removing segments that are too long, too short, too slow or too fast to be real movement, such as GPS jumps."
     },
     "terrain_exaggeration": {
       "additionalProperties": false,
@@ -130,7 +132,8 @@
       },
       "type": "object",
       "required": [],
-      "title": "Terrain Exaggeration"
+      "title": "Terrain Exaggeration",
+      "description": "Control how strongly hills and valleys are raised on the 3D terrain. Increase it to make relief easier to see in flat landscapes."
     },
     "terrain_sampling": {
       "additionalProperties": false,
@@ -152,7 +155,8 @@
       },
       "type": "object",
       "required": [],
-      "title": "Terrain Sampling"
+      "title": "Terrain Sampling",
+      "description": "Control how tracks are draped onto the 3D terrain so they sit on the ground surface rather than floating above it or disappearing below it."
     },
     "Map Zoom & Extent": {
       "type": "object",
@@ -168,7 +172,7 @@
               "minimum": 0,
               "title": "Pitch",
               "type": "integer",
-              "description": "...",
+              "description": "Tilt of the map in degrees. 0 looks straight down; higher values tilt the view towards the horizon for a 3D look at the terrain. The video cameras use this tilt too.",
               "ecoscope:advanced": true
             },
             "bearing": {
@@ -177,7 +181,7 @@
               "minimum": -180,
               "title": "Bearing",
               "type": "integer",
-              "description": "...",
+              "description": "Rotation of the map in degrees clockwise from north. 0 keeps north at the top, 90 puts east at the top, and negative values rotate counter-clockwise. The video cameras use this rotation too.",
               "ecoscope:advanced": true
             }
           },
@@ -227,7 +231,8 @@
       },
       "type": "object",
       "required": [],
-      "title": "Create Animation"
+      "title": "Create Animation",
+      "description": "Choose the marker shown at each subject's current position as its track plays."
     },
     "create_controls": {
       "additionalProperties": false,
@@ -307,7 +312,8 @@
       },
       "type": "object",
       "required": [],
-      "title": "Create Controls"
+      "title": "Create Controls",
+      "description": "Choose which playback controls appear on the interactive map, such as play/pause, the time slider and speed buttons, and where they sit."
     },
     "timeline_animation": {
       "additionalProperties": false,
@@ -330,7 +336,8 @@
       },
       "type": "object",
       "required": [],
-      "title": "Create timeline animation"
+      "title": "Create Timeline Animation",
+      "description": "Set how long the animation takes to play from the first location to the last, and whether the map slowly rotates while it plays."
     },
     "create_animation": {
       "additionalProperties": false,
@@ -400,7 +407,8 @@
       },
       "required": [],
       "type": "object",
-      "title": "Animation Video"
+      "title": "Animation Video",
+      "description": "Export the animation as an MP4 video. Choose how the camera moves, how long the video runs and its resolution."
     }
   },
   "$defs": {

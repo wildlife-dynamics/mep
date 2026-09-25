@@ -27,7 +27,7 @@ requirements:
 rjsf-overrides:
   properties:
     # Section descriptions for task blocks exposed on the config form
-    er_client_name.description: Choose the EarthRanger site to pull subject tracking data from.
+    #er_client_name.description: Choose the EarthRanger site to pull subject tracking data from.
     subject_observations.description: Choose the subject group whose movements will be animated. Each subject in the group is drawn as its own track.
     convert_to_trajs.description: Clean the tracks before animating by removing segments that are too long, too short, too slow or too fast to be real movement, such as GPS jumps.
     terrain_exaggeration.description: Control how strongly hills and valleys are raised on the 3D terrain. Increase it to make relief easier to see in flat landscapes.

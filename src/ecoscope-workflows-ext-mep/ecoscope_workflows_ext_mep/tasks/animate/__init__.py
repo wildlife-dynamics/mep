@@ -14,7 +14,7 @@ from ._draw_map import (
     create_time_window_animation,
     create_elevation_decoder,
     set_basemap_urls,
-    set_basemap_option
+    set_basemap_option,
 )
 
 from ._animate import (

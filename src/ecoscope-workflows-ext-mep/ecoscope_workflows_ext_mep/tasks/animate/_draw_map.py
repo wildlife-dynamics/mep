@@ -155,9 +155,7 @@ class ScenegraphLayerDefinition(BaseModel):
     ] = None
     size_scale: Annotated[
         float,
-        AdvancedField(
-            default=50.0, gt=0, title="Size scale", description="Model size multiplier. Tune to your scene."
-        ),
+        AdvancedField(default=50.0, gt=0, title="Size scale", description="Model size multiplier. Tune to your scene."),
     ] = 50.0
     size_min_pixels: Annotated[
         float,
@@ -552,9 +550,9 @@ def create_terrain_sampling(
             "None -> Terrarium default.",
         ),
     ] = None,
-    offset: Annotated[float, AdvancedField(
-        default=30,
-        description="Metres added above the sampled ground at every vertex.")] = 30.0,
+    offset: Annotated[
+        float, AdvancedField(default=30, description="Metres added above the sampled ground at every vertex.")
+    ] = 30.0,
     ground_elevation: Annotated[
         float, AdvancedField(default=1000.0, description="Constant ground used only if DEM sampling fails.")
     ] = 1000.0,
@@ -1027,7 +1025,9 @@ def drape_trips_on_terrain(
 
     xyz = np.column_stack([lonlats, ground + terrain.offset])
     draped = shapely.linestrings(xyz, indices=row_idx)
-    return cast(AnyGeoDataFrame, trips_gdf.set_geometry(gpd.GeoSeries(draped, index=trips_gdf.index, crs=trips_gdf.crs)))
+    return cast(
+        AnyGeoDataFrame, trips_gdf.set_geometry(gpd.GeoSeries(draped, index=trips_gdf.index, crs=trips_gdf.crs))
+    )
 
 
 def _to_epoch_seconds(values: pd.Series) -> np.ndarray:
@@ -1157,9 +1157,7 @@ def draw_animated_map(
             times = _to_epoch_seconds(ld.geodataframe[anim.time_col])
         animated.append((i, ld, anim, times))
     if not animated:
-        raise ValueError(
-            "draw_animated_map needs at least one animated layer (animate_layer) or a TripsLayer."
-        )
+        raise ValueError("draw_animated_map needs at least one animated layer (animate_layer) or a TripsLayer.")
 
     pieces = [(np.concatenate(t) if t else np.empty(0)) if isinstance(t, list) else t for *_, t in animated]
     pieces = [p for p in pieces if p.size]
@@ -1508,7 +1506,9 @@ const ANIMATORS = {
         // One extension instance for the layer's lifetime, or deck re-initialises it. The new
         // id makes deck create a fresh layer: an extension added to an existing layer never
         // gets its filter attribute, so every row would read as time 0.
-        if (!st.extensions) st.extensions = (base.props.extensions || []).concat([new DataFilterCtor({ filterSize: 1 })]);
+        if (!st.extensions) {
+          st.extensions = (base.props.extensions || []).concat([new DataFilterCtor({ filterSize: 1 })]);
+        }
         return { layers: [base.clone({
           id: base.id + '-window',
           extensions: st.extensions,
@@ -1750,10 +1750,10 @@ window.__tripsAnim = {
 @register()
 def create_timeline_animation(
     duration_s: Annotated[
-        float, AdvancedField(
-            gt=0, 
-            default=30.0,
-            description="Playback length in seconds, from the start of the timeline to its end.")
+        float,
+        AdvancedField(
+            gt=0, default=30.0, description="Playback length in seconds, from the start of the timeline to its end."
+        ),
     ] = 30.0,
     fps_limit: Annotated[float, AdvancedField(default=30.0, gt=0)] = 30.0,
     controls: Annotated[
@@ -1780,37 +1780,22 @@ def create_timeline_animation(
 
 @register()
 def create_playback_controls(
-    visible: Annotated[
-        bool, 
-        AdvancedField(default=True,description="Show the playback bar at all.")] = True,
-    show_play: Annotated[
-        bool, 
-        AdvancedField(default=True, description="Play/pause button.")] = True,
-    show_restart: Annotated[
-        bool, 
-        AdvancedField(default=True, description="Restart button.")] = True,
-    show_scrubber: Annotated[
-        bool, 
-        AdvancedField(default=True, description="Slider for jumping to any moment.")] = True,
+    visible: Annotated[bool, AdvancedField(default=True, description="Show the playback bar at all.")] = True,
+    show_play: Annotated[bool, AdvancedField(default=True, description="Play/pause button.")] = True,
+    show_restart: Annotated[bool, AdvancedField(default=True, description="Restart button.")] = True,
+    show_scrubber: Annotated[bool, AdvancedField(default=True, description="Slider for jumping to any moment.")] = True,
     show_clock: Annotated[
-        bool, 
-        AdvancedField(default=True, description="Playback position / total length, e.g. 0:12 / 0:30.")
+        bool, AdvancedField(default=True, description="Playback position / total length, e.g. 0:12 / 0:30.")
     ] = True,
-    show_time: Annotated[
-        bool, AdvancedField(
-            default=True,
-            description="Current time in the data.")] = True,
+    show_time: Annotated[bool, AdvancedField(default=True, description="Current time in the data.")] = True,
     time_format: Annotated[
         Literal["datetime", "date", "elapsed"],
         AdvancedField(
             default="date",
-            description="Data time as 'datetime' (2024-01-01 06:00 UTC), 'date', or 'elapsed' since the start."),
+            description="Data time as 'datetime' (2024-01-01 06:00 UTC), 'date', or 'elapsed' since the start.",
+        ),
     ] = "date",
-    show_speed: Annotated[
-        bool, 
-        AdvancedField(
-            default= True,
-            description="Button cycling through `speeds`.")] = True,
+    show_speed: Annotated[bool, AdvancedField(default=True, description="Button cycling through `speeds`.")] = True,
     speeds: Annotated[
         list[Annotated[float, Field(gt=0)]],
         AdvancedField(default=[0.5, 1, 2, 4], min_length=1, description="Speed multipliers to cycle through."),
