@@ -1,3 +1,4 @@
+from . import earthengine as earthengine
 from . import io as io
 from . import landdx as landdx
 from . import reporting as reporting
