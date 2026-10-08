@@ -1,8 +1,9 @@
+from typing import Annotated
+
+from ecoscope.platform.annotations import AdvancedField, AnyDataFrame
+from ecoscope.platform.connections import EarthRangerClient
 from pydantic import Field
 from wt_registry import register
-from typing import Annotated
-from ecoscope.platform.connections import EarthRangerClient
-from ecoscope.platform.annotations import AdvancedField, AnyDataFrame
 
 
 @register()
