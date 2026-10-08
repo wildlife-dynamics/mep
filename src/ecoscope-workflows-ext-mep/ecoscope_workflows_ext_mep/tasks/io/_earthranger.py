@@ -1,8 +1,9 @@
+from typing import Annotated
+
+from ecoscope.platform.annotations import AdvancedField, AnyDataFrame
+from ecoscope.platform.connections import EarthRangerClient
 from pydantic import Field
 from wt_registry import register
-from typing import Annotated
-from ecoscope.platform.connections import EarthRangerClient
-from ecoscope.platform.annotations import AdvancedField, AnyDataFrame
 
 
 @register()
@@ -62,4 +63,60 @@ def get_subjects(
 
     if raise_on_empty and df.empty:
         raise ValueError("No data returned from EarthRanger for get_subjects")
+    return df
+
+
+@register()
+def get_sources(
+    client: EarthRangerClient,
+    manufacturer_id: Annotated[str | None, Field(description="Filter sources by manufacturer ID.")] = None,
+    provider_key: Annotated[str | None, Field(description="Filter sources by provider key.")] = None,
+    provider: Annotated[str | None, Field(description="Filter sources by provider ID.")] = None,
+    ids: Annotated[list[str] | None, Field(description="List of source IDs to fetch.")] = None,
+    raise_on_empty: Annotated[
+        bool,
+        AdvancedField(
+            default=False,
+            description="Whether to abort the workflow if no sources are returned from EarthRanger.",
+        ),
+    ] = False,
+) -> AnyDataFrame:
+    """Fetch sources (tracking devices) from EarthRanger."""
+
+    df = client.get_sources(
+        manufacturer_id=manufacturer_id,
+        provider_key=provider_key,
+        provider=provider,
+        id=",".join(str(i) for i in ids) if ids is not None else None,
+    )
+
+    if raise_on_empty and df.empty:
+        raise ValueError("No data returned from EarthRanger for get_sources")
+    return df
+
+
+@register()
+def get_subjectsources(
+    client: EarthRangerClient,
+    subject_ids: Annotated[
+        list[str] | None, Field(description="Only include assignments for these subject IDs.")
+    ] = None,
+    source_ids: Annotated[list[str] | None, Field(description="Only include assignments for these source IDs.")] = None,
+    raise_on_empty: Annotated[
+        bool,
+        AdvancedField(
+            default=False,
+            description="Whether to abort the workflow if no subject-source assignments are returned from EarthRanger.",
+        ),
+    ] = False,
+) -> AnyDataFrame:
+    """Fetch subject-source assignments (which device was on which subject, and when) from EarthRanger."""
+
+    df = client.get_subjectsources(
+        subjects=",".join(str(i) for i in subject_ids) if subject_ids is not None else None,
+        sources=",".join(str(i) for i in source_ids) if source_ids is not None else None,
+    )
+
+    if raise_on_empty and df.empty:
+        raise ValueError("No data returned from EarthRanger for get_subjectsources")
     return df

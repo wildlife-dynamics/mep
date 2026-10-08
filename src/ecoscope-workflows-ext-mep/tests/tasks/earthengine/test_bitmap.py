@@ -12,10 +12,18 @@ import io
 import numpy as np
 import pytest
 import rasterio
+from matplotlib import colormaps
+from matplotlib.colors import to_hex
 from PIL import Image
+from pydantic import ValidationError
 from rasterio.transform import from_origin
 
-from ecoscope_workflows_ext_mep.tasks.earthengine._bitmap import DEFAULT_PALETTE, composite_to_bitmap_layer
+from ecoscope_workflows_ext_mep.tasks.earthengine._bitmap import (
+    DEFAULT_COLORMAPS,
+    ColormapPalette,
+    CustomPalette,
+    composite_to_bitmap_layer,
+)
 from ecoscope_workflows_ext_mep.tasks.earthengine._composite import NODATA, VALID_COUNT_BAND
 
 BANDS = ["blue", "green", "red", "nir", "NDVI", VALID_COUNT_BAND]
@@ -63,17 +71,42 @@ def _decode(layer) -> np.ndarray:
 
 
 class TestCompositeToBitmapLayer:
-    def test_single_band_uses_palette_and_legend(self, composite_path):
+    def test_single_band_defaults_to_the_bands_colormap(self, composite_path):
         layer = composite_to_bitmap_layer(composite_path, band="NDVI", vmin=0.0, vmax=1.0)
 
         rgba = _decode(layer)
+        assert DEFAULT_COLORMAPS["NDVI"].name == "RdYlGn"
         assert layer.legend.title == "NDVI"
         assert [v.label for v in layer.legend.values] == ["0.00", "0.20", "0.40", "0.60", "0.80", "1.00"]
-        assert [v.color for v in layer.legend.values] == DEFAULT_PALETTE
-        # NDVI increases left to right, so the green channel should too (brown -> green palette)
+        assert layer.legend.values[0].color == to_hex(colormaps["RdYlGn"](0.0))
+        assert layer.legend.values[-1].color == to_hex(colormaps["RdYlGn"](1.0))
+        # NDVI increases left to right: red end on the left, green end on the right
         row = rgba[rgba.shape[0] // 2]
         opaque = row[row[:, 3] == 255]
-        assert opaque[0, 1] < opaque[-1, 1]
+        assert opaque[0, 0] > opaque[0, 1]
+        assert opaque[-1, 1] > opaque[-1, 0]
+
+    def test_named_colormap_can_be_reversed(self, composite_path):
+        forward = composite_to_bitmap_layer(composite_path, palette=ColormapPalette(name="viridis"))
+        reverse = composite_to_bitmap_layer(composite_path, palette=ColormapPalette(name="viridis", reverse=True))
+
+        assert forward.legend.values[0].color == reverse.legend.values[-1].color
+        assert forward.legend.values[-1].color == reverse.legend.values[0].color
+
+    def test_custom_palette_spans_its_colours(self, composite_path):
+        layer = composite_to_bitmap_layer(composite_path, palette=CustomPalette(colors=["#ffffff", "#000000"]))
+
+        assert layer.legend.values[0].color == "#ffffff"
+        assert layer.legend.values[-1].color == "#000000"
+
+    def test_bands_without_a_default_fall_back_to_viridis(self, composite_path):
+        layer = composite_to_bitmap_layer(composite_path, band="valid_count")
+
+        assert layer.legend.values[-1].color == to_hex(colormaps["viridis"](1.0))
+
+    def test_qualitative_colormaps_are_not_offered(self):
+        with pytest.raises(ValidationError):
+            ColormapPalette(name="tab10")
 
     def test_no_data_is_transparent(self, composite_path):
         rgba = _decode(composite_to_bitmap_layer(composite_path, band="NDVI"))
