@@ -34,10 +34,7 @@ def get_subjects(
         str | None, Field(description="Only include subjects updated until this timestamp (ISO).")
     ] = None,
     tracks: Annotated[
-        bool, 
-        AdvancedField(
-            default=False, 
-            description="Whether to include recent tracks for each subject.")
+        bool, AdvancedField(default=False, description="Whether to include recent tracks for each subject.")
     ] = False,
     ids: Annotated[
         list[str] | None,
