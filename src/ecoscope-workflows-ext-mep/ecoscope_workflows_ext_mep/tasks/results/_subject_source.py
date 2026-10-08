@@ -15,26 +15,16 @@ DASH_PATTERN = r"^[\d.\s,]*$"
 
 
 def _color(default: str, description: str) -> Any:
-    return AdvancedField(
-        default=default, description=description, pattern=COLOR_PATTERN
-    )
+    return AdvancedField(default=default, description=description, pattern=COLOR_PATTERN)
 
 
 class NodeStyle(BaseModel):
     """Style of the subject and source pills."""
 
-    subject_fill: Annotated[
-        str, _color("#dbeafe", "Fill colour of active subjects.")
-    ] = "#dbeafe"
-    inactive_subject_fill: Annotated[
-        str, _color("#f1f5f9", "Fill colour of inactive subjects.")
-    ] = "#f1f5f9"
-    source_fill: Annotated[str, _color("#dcfce7", "Fill colour of sources.")] = (
-        "#dcfce7"
-    )
-    border_color: Annotated[
-        str, _color("#94a3b8", "Outline colour of linked subjects and sources.")
-    ] = "#94a3b8"
+    subject_fill: Annotated[str, _color("#dbeafe", "Fill colour of active subjects.")] = "#dbeafe"
+    inactive_subject_fill: Annotated[str, _color("#f1f5f9", "Fill colour of inactive subjects.")] = "#f1f5f9"
+    source_fill: Annotated[str, _color("#dcfce7", "Fill colour of sources.")] = "#dcfce7"
+    border_color: Annotated[str, _color("#94a3b8", "Outline colour of linked subjects and sources.")] = "#94a3b8"
     unlinked_border_color: Annotated[
         str,
         _color(
@@ -55,9 +45,7 @@ class NodeStyle(BaseModel):
     ] = 1.0
     flagged_border_width: Annotated[
         float,
-        AdvancedField(
-            default=2.0, ge=0, description="Outline width of unlinked or missing pills."
-        ),
+        AdvancedField(default=2.0, ge=0, description="Outline width of unlinked or missing pills."),
     ] = 2.0
     width: Annotated[
         int,
@@ -76,29 +64,19 @@ class NodeStyle(BaseModel):
 class LinkStyle(BaseModel):
     """Style of the assignment lines and their date labels."""
 
-    current_color: Annotated[
-        str, _color("#475569", "Line colour of current assignments.")
-    ] = "#475569"
-    ended_color: Annotated[
-        str, _color("#cbd5e1", "Line colour of ended assignments.")
-    ] = "#cbd5e1"
+    current_color: Annotated[str, _color("#475569", "Line colour of current assignments.")] = "#475569"
+    ended_color: Annotated[str, _color("#cbd5e1", "Line colour of ended assignments.")] = "#cbd5e1"
     bad_date_color: Annotated[
         str,
-        _color(
-            "#dc2626", "Line and label colour of assignments with an unreadable date."
-        ),
+        _color("#dc2626", "Line and label colour of assignments with an unreadable date."),
     ] = "#dc2626"
     current_width: Annotated[
         float,
-        AdvancedField(
-            default=1.5, ge=0, description="Line width of current assignments."
-        ),
+        AdvancedField(default=1.5, ge=0, description="Line width of current assignments."),
     ] = 1.5
     ended_width: Annotated[
         float,
-        AdvancedField(
-            default=1.0, ge=0, description="Line width of ended assignments."
-        ),
+        AdvancedField(default=1.0, ge=0, description="Line width of ended assignments."),
     ] = 1.0
     ended_dash: Annotated[
         str,
@@ -108,26 +86,18 @@ class LinkStyle(BaseModel):
             description="Dash pattern of ended assignments as SVG stroke-dasharray (e.g. '4 3'). Empty for solid.",
         ),
     ] = "4 3"
-    label_color: Annotated[
-        str, _color("#334155", "Date label colour of current assignments.")
-    ] = "#334155"
-    ended_label_color: Annotated[
-        str, _color("#94a3b8", "Date label colour of ended assignments.")
-    ] = "#94a3b8"
+    label_color: Annotated[str, _color("#334155", "Date label colour of current assignments.")] = "#334155"
+    ended_label_color: Annotated[str, _color("#94a3b8", "Date label colour of ended assignments.")] = "#94a3b8"
     label_font_size: Annotated[
         float,
-        AdvancedField(
-            default=11, ge=6, description="Font size of the date labels in pixels."
-        ),
+        AdvancedField(default=11, ge=6, description="Font size of the date labels in pixels."),
     ] = 11
 
 
 class DiagramLayoutStyle(BaseModel):
     """Page-level style: fonts, background, column headings and spacing."""
 
-    font_size: Annotated[
-        float, AdvancedField(default=12, ge=6, description="Font size in pixels.")
-    ] = 12
+    font_size: Annotated[float, AdvancedField(default=12, ge=6, description="Font size in pixels.")] = 12
     font_color: Annotated[str, _color("#0f172a", "Text colour.")] = "#0f172a"
     font_family: Annotated[
         str,
@@ -142,32 +112,16 @@ class DiagramLayoutStyle(BaseModel):
         bool,
         AdvancedField(default=True, description="Show the legend above the diagram."),
     ] = True
-    muted_color: Annotated[
-        str, _color("#64748b", "Colour of the legend and empty-state text.")
-    ] = "#64748b"
-    header_color: Annotated[
-        str, _color("#475569", "Colour of the column headings.")
-    ] = "#475569"
-    section_color: Annotated[
-        str, _color("#b45309", "Colour of the 'no source' / 'no subject' headings.")
-    ] = "#b45309"
-    rule_color: Annotated[
-        str, _color("#e2e8f0", "Colour of the line above the unlinked section.")
-    ] = "#e2e8f0"
-    subject_header: Annotated[
-        str, AdvancedField(default="Subjects", description="Left column heading.")
-    ] = "Subjects"
-    assigned_header: Annotated[
-        str, AdvancedField(default="Assigned", description="Date column heading.")
-    ] = "Assigned"
-    source_header: Annotated[
-        str, AdvancedField(default="Sources", description="Right column heading.")
-    ] = "Sources"
+    muted_color: Annotated[str, _color("#64748b", "Colour of the legend and empty-state text.")] = "#64748b"
+    header_color: Annotated[str, _color("#475569", "Colour of the column headings.")] = "#475569"
+    section_color: Annotated[str, _color("#b45309", "Colour of the 'no source' / 'no subject' headings.")] = "#b45309"
+    rule_color: Annotated[str, _color("#e2e8f0", "Colour of the line above the unlinked section.")] = "#e2e8f0"
+    subject_header: Annotated[str, AdvancedField(default="Subjects", description="Left column heading.")] = "Subjects"
+    assigned_header: Annotated[str, AdvancedField(default="Assigned", description="Date column heading.")] = "Assigned"
+    source_header: Annotated[str, AdvancedField(default="Sources", description="Right column heading.")] = "Sources"
     label_column_width: Annotated[
         int,
-        AdvancedField(
-            default=150, ge=40, description="Width of the date label column in pixels."
-        ),
+        AdvancedField(default=150, ge=40, description="Width of the date label column in pixels."),
     ] = 150
     link_width: Annotated[
         int,
@@ -245,7 +199,7 @@ def assignment_bounds(
     `start`/`end` are None when that end is open; `bad_start`/`bad_end` hold the raw
     text of a date that could not be read. Accepts either the raw ER shape
     (`assigned_range` dict) or the flattened `assigned_range_lower`/`assigned_range_upper`
-    columns, with optional `invalid_assigned_range_*` columns carrying unparseable dates.
+    columns, with optional `invalid_assigned_range_*` columns carrying unparsable dates.
     """
     raw = row.get("assigned_range")
     raw = raw if isinstance(raw, dict) else {}
@@ -266,20 +220,8 @@ def format_assignment_range(
     bad_end: str | None,
 ) -> str:
     """Render bounds from `assignment_bounds` as e.g. '2024-03-01 → present'."""
-    start_label = (
-        f"⚠ {bad_start}"
-        if bad_start
-        else start.strftime("%Y-%m-%d")
-        if start is not None
-        else "?"
-    )
-    end_label = (
-        f"⚠ {bad_end}"
-        if bad_end
-        else end.strftime("%Y-%m-%d")
-        if end is not None
-        else "present"
-    )
+    start_label = f"⚠ {bad_start}" if bad_start else start.strftime("%Y-%m-%d") if start is not None else "?"
+    end_label = f"⚠ {bad_end}" if bad_end else end.strftime("%Y-%m-%d") if end is not None else "present"
     return f"{start_label} → {end_label}"
 
 
@@ -333,11 +275,7 @@ def build_subject_source_graph(
     edges: list[dict] = []
 
     subject_ids = {str(i) for i in subjects["id"]} if "id" in subjects else set()
-    links = (
-        subjectsources.copy()
-        if not subjectsources.empty
-        else pd.DataFrame(columns=["subject", "source"])
-    )
+    links = subjectsources.copy() if not subjectsources.empty else pd.DataFrame(columns=["subject", "source"])
     links["subject"] = links["subject"].astype(str)
     links["source"] = links["source"].astype(str)
     links = links[links["subject"].isin(subject_ids)]
@@ -408,9 +346,7 @@ def build_subject_source_graph(
     return nodes, edges
 
 
-def layout_subject_source_diagram(
-    nodes: list[dict], edges: list[dict]
-) -> dict[str, Any]:
+def layout_subject_source_diagram(nodes: list[dict], edges: list[dict]) -> dict[str, Any]:
     """Assign each subject, source and assignment a row in a two-column layout.
 
     Linked subjects are listed alphabetically on the left, each spanning one row per
@@ -593,12 +529,8 @@ def _render_html(
 
     # Every element carries the s-<i>/c-<j> classes of what it is connected to, so
     # hovering a subject (or source) can highlight everything sharing its class.
-    subject_classes: dict[str, set[str]] = {
-        n["id"]: {f"s-{subject_idx[n['id']]}"} for n in layout["subjects"]
-    }
-    source_classes: dict[str, set[str]] = {
-        n["id"]: {f"c-{source_idx[n['id']]}"} for n in layout["sources"]
-    }
+    subject_classes: dict[str, set[str]] = {n["id"]: {f"s-{subject_idx[n['id']]}"} for n in layout["subjects"]}
+    source_classes: dict[str, set[str]] = {n["id"]: {f"c-{source_idx[n['id']]}"} for n in layout["sources"]}
     for link in layout["links"]:
         subject_classes[link["from"]].add(f"c-{source_idx[link['to']]}")
         source_classes[link["to"]].add(f"s-{subject_idx[link['from']]}")
@@ -633,16 +565,10 @@ def _render_html(
 
     for node in layout["subjects"]:
         key = f"s-{subject_idx[node['id']]}"
-        parts.append(
-            pill(
-                node, subject_x, subject_y[node["id"]], subject_classes[node["id"]], key
-            )
-        )
+        parts.append(pill(node, subject_x, subject_y[node["id"]], subject_classes[node["id"]], key))
     for node in layout["sources"]:
         key = f"c-{source_idx[node['id']]}"
-        parts.append(
-            pill(node, source_x, source_y[node["id"]], source_classes[node["id"]], key)
-        )
+        parts.append(pill(node, source_x, source_y[node["id"]], source_classes[node["id"]], key))
 
     if layout["unlinked_row"] is not None:
         y = y_of(layout["unlinked_row"])
@@ -716,21 +642,19 @@ def draw_subject_source_diagram(
     subjects: AnyDataFrame,
     subjectsources: AnyDataFrame,
     sources: AnyDataFrame,
-    title: Annotated[
-        str, Field(description="Heading shown above the diagram. Empty for none.")
-    ] = "",
+    title: Annotated[str, Field(description="Heading shown above the diagram. Empty for none.")] = "",
     row_height: Annotated[
         int,
         Field(
             ge=16,
-            description="Height in pixels of each row; every assignment, and every unlinked subject or source, gets a row.",
+            description=(
+                "Height in pixels of each row; every assignment, and every unlinked subject or source, gets a row."
+            ),
         ),
     ] = 42,
     include_unlinked_sources: Annotated[
         bool,
-        Field(
-            description="Also draw sources that are not assigned to any of the given subjects."
-        ),
+        Field(description="Also draw sources that are not assigned to any of the given subjects."),
     ] = True,
     node_style: Annotated[
         NodeStyle | SkipJsonSchema[None],
@@ -785,9 +709,7 @@ def draw_subject_source_diagram(
         include_unlinked_sources=include_unlinked_sources,
     )
     layout = layout_subject_source_diagram(nodes, edges)
-    div_id = "".join(
-        c if c.isalnum() else "-" for c in (widget_id or "subject-source-diagram")
-    )
+    div_id = "".join(c if c.isalnum() else "-" for c in (widget_id or "subject-source-diagram"))
     return _render_html(
         layout,
         title=title,

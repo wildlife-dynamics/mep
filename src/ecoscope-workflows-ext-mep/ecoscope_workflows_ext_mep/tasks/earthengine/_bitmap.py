@@ -6,9 +6,9 @@ embedded as a PNG in a `BitmapLayerDefinition` for `merge_tile_layers` / the map
 """
 
 import math
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional, Union
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from wt_registry import register
 
 from ecoscope.platform.tasks.results._pydeck import BitmapLayerDefinition, LegendSegment, LegendValue
@@ -20,7 +20,83 @@ COLOR_COMPOSITES: dict[str, list[str]] = {
     "true_color": ["red", "green", "blue"],
     "false_color": ["nir", "red", "green"],
 }
-DEFAULT_PALETTE = ["#A0522D", "#C4A882", "#D4CC6A", "#8FBC6B", "#5A8C4A", "#2E5E2E"]
+
+# Continuous matplotlib colormaps that read well on rasters (no qualitative ones like tab10).
+RasterColormap = Literal[
+    # sequential, perceptually uniform
+    "viridis",
+    "cividis",
+    "magma",
+    "inferno",
+    "plasma",
+    # sequential, single hue / themed
+    "Greens",
+    "YlGn",
+    "Blues",
+    "YlGnBu",
+    "Reds",
+    "YlOrRd",
+    "YlOrBr",
+    "Greys",
+    "gray",
+    "bone",
+    # diverging, for indices centred near zero
+    "RdYlGn",
+    "BrBG",
+    "RdBu",
+    "Spectral",
+    "PiYG",
+    "PuOr",
+]
+
+
+class ColormapPalette(BaseModel):
+    type_: Literal["palette"] = "palette"
+    name: Annotated[RasterColormap, Field(description="Matplotlib colormap name.")] = "viridis"
+    reverse: Annotated[bool, Field(description="Flip the colormap so high values get the low-end colour.")] = False
+
+
+class CustomPalette(BaseModel):
+    type_: Literal["custom"] = "custom"
+    colors: Annotated[list[str], Field(description="Hex colours from low to high values, e.g. ['#f7fcb9', '#31a354'].")]
+
+
+ColorPalette = Annotated[Union[ColormapPalette, CustomPalette], Field(discriminator="type_")]
+
+# Used when no palette is given: each band gets a colormap that suits what it measures.
+DEFAULT_COLORMAPS: dict[str, ColormapPalette] = {
+    "blue": ColormapPalette(name="Blues"),
+    "green": ColormapPalette(name="Greens"),
+    "red": ColormapPalette(name="Reds"),
+    "nir": ColormapPalette(name="magma"),
+    "swir1": ColormapPalette(name="inferno"),
+    "swir2": ColormapPalette(name="cividis"),
+    "NDVI": ColormapPalette(name="RdYlGn"),
+    "EVI": ColormapPalette(name="RdYlGn"),
+    "SAVI": ColormapPalette(name="YlGn"),
+    "MSAVI": ColormapPalette(name="YlGn"),
+    "NDMI": ColormapPalette(name="BrBG"),
+    "NDWI": ColormapPalette(name="RdBu"),
+    "NBR": ColormapPalette(name="RdYlGn"),
+    "NDBI": ColormapPalette(name="YlOrRd"),
+    "NDSI": ColormapPalette(name="bone"),
+    "BSI": ColormapPalette(name="YlOrBr"),
+    VALID_COUNT_BAND: ColormapPalette(name="viridis"),
+}
+FALLBACK_COLORMAP = ColormapPalette(name="viridis")
+LEGEND_STEPS = 6
+
+
+def _colormap(palette: Union[ColormapPalette, CustomPalette], name: str):
+    import matplotlib as mpl
+    from matplotlib.colors import LinearSegmentedColormap
+
+    if isinstance(palette, CustomPalette):
+        if not palette.colors:
+            raise ValueError("A custom palette needs at least one hex colour.")
+        return LinearSegmentedColormap.from_list(name, palette.colors)
+    cmap = mpl.colormaps[palette.name]
+    return cmap.reversed() if palette.reverse else cmap
 
 
 def _read_web_mercator(src, band_names: list[str], max_size: int):
@@ -90,7 +166,11 @@ def composite_to_bitmap_layer(
         ),
     ] = "NDVI",
     palette: Annotated[
-        Optional[list[str]], Field(description="Hex colours from low to high values (single bands only)")
+        Optional[ColorPalette],
+        Field(
+            description="A named colormap or custom hex colours (single bands only). "
+            "Defaults to a colormap suited to the band, e.g. RdYlGn for NDVI."
+        ),
     ] = None,
     vmin: Annotated[
         Optional[float], Field(description="Value mapped to the first colour. Defaults to the 2nd percentile")
@@ -107,7 +187,7 @@ def composite_to_bitmap_layer(
 
     import numpy as np
     import rasterio
-    from matplotlib.colors import LinearSegmentedColormap
+    from matplotlib.colors import to_hex
     from PIL import Image
 
     from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
@@ -130,16 +210,14 @@ def composite_to_bitmap_layer(
             lo, hi = _stretch(channel, vmin, vmax)
             rgba[..., i] = (np.clip((np.nan_to_num(channel, nan=lo) - lo) / (hi - lo), 0, 1) * 255).astype("uint8")
     else:
-        palette = palette or DEFAULT_PALETTE
+        cmap = _colormap(palette or DEFAULT_COLORMAPS.get(band, FALLBACK_COLORMAP), band)
         lo, hi = _stretch(data[0], vmin, vmax)
         normalised = np.clip((np.nan_to_num(data[0], nan=lo) - lo) / (hi - lo), 0, 1)
-        rgba[..., :3] = (LinearSegmentedColormap.from_list(band, palette)(normalised)[..., :3] * 255).astype("uint8")
-        steps = max(len(palette) - 1, 1)
+        rgba[..., :3] = (cmap(normalised)[..., :3] * 255).astype("uint8")
+        fractions = [i / (LEGEND_STEPS - 1) for i in range(LEGEND_STEPS)]
         legend = LegendSegment(
             title=band,
-            values=[
-                LegendValue(label=f"{lo + (hi - lo) * i / steps:.2f}", color=color) for i, color in enumerate(palette)
-            ],
+            values=[LegendValue(label=f"{lo + (hi - lo) * f:.2f}", color=to_hex(cmap(f))) for f in fractions],
         )
     rgba[..., 3] = 255
     rgba[~valid] = 0

@@ -110,11 +110,7 @@ def subjectsources():
 
 
 def _edge(edges, subject, source):
-    return next(
-        e
-        for e in edges
-        if e["from"] == f"subject:{subject}" and e["to"] == f"source:{source}"
-    )
+    return next(e for e in edges if e["from"] == f"subject:{subject}" and e["to"] == f"source:{source}")
 
 
 def _node(nodes, node_id):
@@ -128,9 +124,7 @@ class TestBuildSubjectSourceGraph:
         assert len([n for n in nodes if n["group"] == "source"]) == 5
         assert len(edges) == 4
 
-    def test_current_assignment_is_solid_and_open_ended(
-        self, subjects, subjectsources, sources
-    ):
+    def test_current_assignment_is_solid_and_open_ended(self, subjects, subjectsources, sources):
         _, edges = build_subject_source_graph(subjects, subjectsources, sources)
         edge = _edge(edges, "amani", "s1")
         assert edge["label"] == "2024-03-01 → present"
@@ -173,40 +167,28 @@ class TestBuildSubjectSourceGraph:
         assert _edge(edges, "amani", "s1")["label"] == "2024-03-01 → present"
         assert _edge(edges, "baraka", "s2")["bad_date"] is True
 
-    def test_unlinked_subject_and_source_are_flagged(
-        self, subjects, subjectsources, sources
-    ):
+    def test_unlinked_subject_and_source_are_flagged(self, subjects, subjectsources, sources):
         nodes, _ = build_subject_source_graph(subjects, subjectsources, sources)
         assert _node(nodes, "subject:lonely")["linked"] is False
         assert _node(nodes, "source:spare")["linked"] is False
         assert _node(nodes, "source:s1")["linked"] is True
 
     def test_can_hide_unlinked_sources(self, subjects, subjectsources, sources):
-        nodes, _ = build_subject_source_graph(
-            subjects, subjectsources, sources, include_unlinked_sources=False
-        )
+        nodes, _ = build_subject_source_graph(subjects, subjectsources, sources, include_unlinked_sources=False)
         assert "source:spare" not in {n["id"] for n in nodes}
 
-    def test_numpy_bool_inactive_subject_is_flagged(
-        self, subjects, subjectsources, sources
-    ):
+    def test_numpy_bool_inactive_subject_is_flagged(self, subjects, subjectsources, sources):
         nodes, _ = build_subject_source_graph(subjects, subjectsources, sources)
         assert _node(nodes, "subject:zawadi")["inactive"] is True
         assert _node(nodes, "subject:amani")["inactive"] is False
         assert "inactive" in _node(nodes, "subject:zawadi")["title"]
 
-    def test_assignments_for_other_groups_are_dropped(
-        self, subjects, subjectsources, sources
-    ):
-        _, edges = build_subject_source_graph(
-            subjects[subjects["id"] == "amani"], subjectsources, sources
-        )
+    def test_assignments_for_other_groups_are_dropped(self, subjects, subjectsources, sources):
+        _, edges = build_subject_source_graph(subjects[subjects["id"] == "amani"], subjectsources, sources)
         assert {e["from"] for e in edges} == {"subject:amani"}
 
     def test_assignment_to_unknown_source_still_drawn(self, subjects, sources):
-        links = pd.DataFrame(
-            [{"subject": "amani", "source": "ghost-source-id", "assigned_range": None}]
-        )
+        links = pd.DataFrame([{"subject": "amani", "source": "ghost-source-id", "assigned_range": None}])
         nodes, edges = build_subject_source_graph(subjects, links, sources)
         assert "not found in sources" in _node(nodes, "source:ghost-source-id")["title"]
         assert _node(nodes, "source:ghost-source-id")["missing"] is True
@@ -215,13 +197,9 @@ class TestBuildSubjectSourceGraph:
 
 class TestLayout:
     def _layout(self, subjects, subjectsources, sources):
-        return layout_subject_source_diagram(
-            *build_subject_source_graph(subjects, subjectsources, sources)
-        )
+        return layout_subject_source_diagram(*build_subject_source_graph(subjects, subjectsources, sources))
 
-    def test_subjects_alphabetical_with_one_row_per_assignment(
-        self, subjects, subjectsources, sources
-    ):
+    def test_subjects_alphabetical_with_one_row_per_assignment(self, subjects, subjectsources, sources):
         layout = self._layout(subjects, subjectsources, sources)
         linked = [n for n in layout["subjects"] if n["row"] < layout["unlinked_row"]]
         assert [n["label"] for n in linked] == ["Amani", "Baraka", "Zawadi"]
@@ -229,9 +207,7 @@ class TestLayout:
         assert linked[0]["row"] == 0.5
         assert sorted(link["row"] for link in layout["links"]) == [0, 1, 2, 3]
 
-    def test_sources_sit_beside_their_assignments(
-        self, subjects, subjectsources, sources
-    ):
+    def test_sources_sit_beside_their_assignments(self, subjects, subjectsources, sources):
         layout = self._layout(subjects, subjectsources, sources)
         link_rows = {link["to"]: link["row"] for link in layout["links"]}
         for node in layout["sources"]:
@@ -255,17 +231,11 @@ class TestLayout:
     def test_unlinked_listed_at_bottom(self, subjects, subjectsources, sources):
         layout = self._layout(subjects, subjectsources, sources)
         below = layout["unlinked_row"]
-        assert [n["label"] for n in layout["subjects"] if n["row"] > below] == [
-            "Lonely"
-        ]
-        assert [n["label"] for n in layout["sources"] if n["row"] > below] == [
-            "ST-9999"
-        ]
+        assert [n["label"] for n in layout["subjects"] if n["row"] > below] == ["Lonely"]
+        assert [n["label"] for n in layout["sources"] if n["row"] > below] == ["ST-9999"]
         assert all(link["row"] < below for link in layout["links"])
 
-    def test_no_unlinked_section_when_everything_is_linked(
-        self, subjects, subjectsources, sources
-    ):
+    def test_no_unlinked_section_when_everything_is_linked(self, subjects, subjectsources, sources):
         layout = self._layout(
             subjects[subjects["id"] != "lonely"],
             subjectsources,
@@ -289,9 +259,7 @@ class TestDrawSubjectSourceDiagram:
         assert "Subjects with no source" in html
 
     def test_height_grows_with_rows(self, subjects, subjectsources):
-        many_sources = pd.DataFrame(
-            [{"id": f"x{i}", "manufacturer_id": f"X-{i}"} for i in range(300)]
-        )
+        many_sources = pd.DataFrame([{"id": f"x{i}", "manufacturer_id": f"X-{i}"} for i in range(300)])
         html = draw_subject_source_diagram(
             subjects=subjects,
             subjectsources=subjectsources,
@@ -312,9 +280,7 @@ class TestDrawSubjectSourceDiagram:
 
     def test_labels_are_escaped(self, subjectsources, sources):
         evil = pd.DataFrame([{"id": "amani", "name": "</script><b>x</b>"}])
-        html = draw_subject_source_diagram(
-            subjects=evil, subjectsources=subjectsources, sources=sources
-        )
+        html = draw_subject_source_diagram(subjects=evil, subjectsources=subjectsources, sources=sources)
         assert "</script><b>" not in html
 
 
@@ -352,10 +318,7 @@ class TestStyles:
             style.border_color,
             style.border_width,
         )
-        assert (
-            node_colors(_node(nodes, "subject:zawadi"), style)[0]
-            == style.inactive_subject_fill
-        )
+        assert node_colors(_node(nodes, "subject:zawadi"), style)[0] == style.inactive_subject_fill
         assert node_colors(_node(nodes, "source:spare"), style)[1:] == (
             style.unlinked_border_color,
             style.flagged_border_width,
@@ -381,13 +344,9 @@ class TestStyles:
             subjects=subjects,
             subjectsources=subjectsources,
             sources=sources,
-            node_style=NodeStyle(
-                subject_fill="#ff00aa", unlinked_border_color="purple"
-            ),
+            node_style=NodeStyle(subject_fill="#ff00aa", unlinked_border_color="purple"),
             link_style=LinkStyle(current_color="rgb(1, 2, 3)", ended_dash=""),
-            layout_style=DiagramLayoutStyle(
-                font_family="Georgia, serif", subject_header="Animals", showlegend=False
-            ),
+            layout_style=DiagramLayoutStyle(font_family="Georgia, serif", subject_header="Animals", showlegend=False),
         )
         assert 'fill="#ff00aa"' in html
         assert 'stroke="purple"' in html

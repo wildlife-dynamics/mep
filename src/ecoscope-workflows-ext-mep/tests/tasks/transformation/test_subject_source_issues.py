@@ -115,9 +115,7 @@ class TestBaseCase:
         issues = get_subject_source_issues(subjects, subjectsources, sources)
         assert list(issues.columns) == ISSUE_COLUMNS
 
-    def test_flags_subject_with_no_source_and_unlinked_source(
-        self, subjects, subjectsources, sources
-    ):
+    def test_flags_subject_with_no_source_and_unlinked_source(self, subjects, subjectsources, sources):
         issues = get_subject_source_issues(subjects, subjectsources, sources)
         assert issues[["Issue", "Name"]].values.tolist() == [
             [NO_SOURCE, "Ranger Truck 3"],
@@ -187,17 +185,11 @@ class TestBadDates:
         assert bad["Detail"].tolist() == ["Start date 0023-06-10 is out of range"]
 
     def test_er_placeholders_are_not_flagged(self, subjects, sources):
-        links = pd.DataFrame(
-            [_link("a1", "amani", "st1001", "0001-01-01T00:00:00+00:00", OPEN_END)]
-        )
-        assert _issues(
-            get_subject_source_issues(subjects, links, sources), BAD_DATE
-        ).empty
+        links = pd.DataFrame([_link("a1", "amani", "st1001", "0001-01-01T00:00:00+00:00", OPEN_END)])
+        assert _issues(get_subject_source_issues(subjects, links, sources), BAD_DATE).empty
 
     def test_bad_dates_listed_first(self, subjects, sources):
-        links = pd.DataFrame(
-            [_link("b1", "baraka", "st1002", "0023-06-10T00:00:00+00:00", None)]
-        )
+        links = pd.DataFrame([_link("b1", "baraka", "st1002", "0023-06-10T00:00:00+00:00", None)])
         issues = get_subject_source_issues(subjects, links, sources)
         assert issues.iloc[0]["Issue"] == BAD_DATE
 
@@ -217,9 +209,7 @@ class TestOverlaps:
             ]
         )
         overlap = _issues(get_subject_source_issues(subjects, links, sources), OVERLAP)
-        assert overlap[["Record type", "Name", "ID"]].values.tolist() == [
-            ["Source", "ST-1001", "st1001"]
-        ]
+        assert overlap[["Record type", "Name", "ID"]].values.tolist() == [["Source", "ST-1001", "st1001"]]
         assert "Amani (2024-03-01 → present)" in overlap.iloc[0]["Detail"]
         assert "Baraka (2024-06-01 → 2024-07-01)" in overlap.iloc[0]["Detail"]
 
@@ -236,9 +226,7 @@ class TestOverlaps:
                 _link("b1", "baraka", "st1001", "2024-03-07T00:00:00+00:00", OPEN_END),
             ]
         )
-        assert _issues(
-            get_subject_source_issues(subjects, links, sources), OVERLAP
-        ).empty
+        assert _issues(get_subject_source_issues(subjects, links, sources), OVERLAP).empty
 
     def test_open_start_counts_as_unbounded(self, subjects, sources):
         links = pd.DataFrame(
@@ -247,10 +235,7 @@ class TestOverlaps:
                 _link("b1", "baraka", "st1001", "2024-03-07T00:00:00+00:00", OPEN_END),
             ]
         )
-        assert (
-            len(_issues(get_subject_source_issues(subjects, links, sources), OVERLAP))
-            == 1
-        )
+        assert len(_issues(get_subject_source_issues(subjects, links, sources), OVERLAP)) == 1
 
     def test_same_subject_reassigned_is_not_an_overlap(self, subjects, sources):
         links = pd.DataFrame(
@@ -259,9 +244,7 @@ class TestOverlaps:
                 _link("a2", "amani", "st1001", "2024-02-01T00:00:00+00:00", OPEN_END),
             ]
         )
-        assert _issues(
-            get_subject_source_issues(subjects, links, sources), OVERLAP
-        ).empty
+        assert _issues(get_subject_source_issues(subjects, links, sources), OVERLAP).empty
 
     def test_can_be_turned_off(self, subjects, sources):
         links = pd.DataFrame(
@@ -270,33 +253,20 @@ class TestOverlaps:
                 _link("b1", "baraka", "st1001", "2024-06-01T00:00:00+00:00", OPEN_END),
             ]
         )
-        issues = get_subject_source_issues(
-            subjects, links, sources, check_overlaps=False
-        )
+        issues = get_subject_source_issues(subjects, links, sources, check_overlaps=False)
         assert _issues(issues, OVERLAP).empty
 
 
 class TestOtherChecks:
     def test_assignment_to_missing_source(self, subjects, sources):
-        links = pd.DataFrame(
-            [_link("a1", "amani", "ghost", "2024-03-01T00:00:00+00:00", OPEN_END)]
-        )
-        missing = _issues(
-            get_subject_source_issues(subjects, links, sources), MISSING_SOURCE
-        )
+        links = pd.DataFrame([_link("a1", "amani", "ghost", "2024-03-01T00:00:00+00:00", OPEN_END)])
+        missing = _issues(get_subject_source_issues(subjects, links, sources), MISSING_SOURCE)
         assert missing[["Name", "ID", "Detail"]].values.tolist() == [
             ["Amani → ghost", "a1", "Source ghost is not in the sources list"]
         ]
 
-    def test_source_only_on_excluded_subject_says_why(
-        self, subjects, subjectsources, sources
-    ):
+    def test_source_only_on_excluded_subject_says_why(self, subjects, subjectsources, sources):
         active_only = subjects[subjects["is_active"]]
-        no_subject = _issues(
-            get_subject_source_issues(active_only, subjectsources, sources), NO_SUBJECT
-        )
+        no_subject = _issues(get_subject_source_issues(active_only, subjectsources, sources), NO_SUBJECT)
         awt = no_subject[no_subject["Name"] == "AWT-2001"].iloc[0]
-        assert (
-            awt["Detail"]
-            == "awt. Only assigned to subjects not in this report (e.g. inactive)"
-        )
+        assert awt["Detail"] == "awt. Only assigned to subjects not in this report (e.g. inactive)"

@@ -54,9 +54,7 @@ def get_subject_source_issues(
     sources: AnyDataFrame,
     check_overlaps: Annotated[
         bool,
-        Field(
-            description="Flag sources assigned to more than one subject over the same period."
-        ),
+        Field(description="Flag sources assigned to more than one subject over the same period."),
     ] = True,
 ) -> AnyDataFrame:
     """List subject-source configuration problems, one row per issue.
@@ -83,9 +81,7 @@ def get_subject_source_issues(
     """
     subject_ids = set(_ids(subjects))
     source_ids = set(_ids(sources))
-    subject_names = {
-        str(r["id"]): str(_first(r, "name", "id")) for _, r in subjects.iterrows()
-    }
+    subject_names = {str(r["id"]): str(_first(r, "name", "id")) for _, r in subjects.iterrows()}
     source_names = {str(r["id"]): _source_label(r) for _, r in sources.iterrows()}
 
     links = subjectsources.copy()
@@ -113,8 +109,7 @@ def get_subject_source_issues(
                     "Record type": "Assignment",
                     "Name": name,
                     "ID": link_id,
-                    "Detail": " and ".join(p for p in parts if p).capitalize()
-                    + " is out of range",
+                    "Detail": " and ".join(p for p in parts if p).capitalize() + " is out of range",
                 }
             )
         if link["source"] not in source_ids:
