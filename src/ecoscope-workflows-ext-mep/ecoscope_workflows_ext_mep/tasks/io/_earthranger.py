@@ -33,7 +33,12 @@ def get_subjects(
     updated_until: Annotated[
         str | None, Field(description="Only include subjects updated until this timestamp (ISO).")
     ] = None,
-    tracks: Annotated[bool, AdvancedField(default=False, description="Whether to include recent tracks for each subject.")] =False,
+    tracks: Annotated[
+        bool, 
+        AdvancedField(
+            default=False, 
+            description="Whether to include recent tracks for each subject.")
+    ] = False,
     ids: Annotated[
         list[str] | None,
         Field(description="List of subject IDs to fetch. Splits requests in chunks if large."),
