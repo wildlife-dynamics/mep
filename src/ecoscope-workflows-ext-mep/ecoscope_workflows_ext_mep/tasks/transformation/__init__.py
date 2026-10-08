@@ -10,6 +10,7 @@ from ._tabular import (
 )
 
 from ._bins import add_visit_bins, add_bin_colors, order_bin_categories
+from ._subject_source_issues import get_subject_source_issues
 
 __all__ = [
     "compute_subject_maturity",
@@ -23,4 +24,5 @@ __all__ = [
     "operational_days",
     "order_bin_categories",
     "compute_patrol_effort_fraction",
+    "get_subject_source_issues",
 ]
