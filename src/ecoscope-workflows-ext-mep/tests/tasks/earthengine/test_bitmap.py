@@ -15,12 +15,13 @@ import rasterio
 from matplotlib import colormaps
 from matplotlib.colors import to_hex
 from PIL import Image
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from rasterio.transform import from_origin
 
 from ecoscope_workflows_ext_mep.tasks.earthengine._bitmap import (
     DEFAULT_COLORMAPS,
     ColormapPalette,
+    ColorPalette,
     CustomPalette,
     composite_to_bitmap_layer,
 )
@@ -141,3 +142,43 @@ class TestCompositeToBitmapLayer:
         layer = composite_to_bitmap_layer(composite_path, band="false_color")
 
         assert _decode(layer).shape[2] == 4
+
+
+class TestPaletteParams:
+    """Palette params as they arrive from the workflow form, validated like the task's inputs."""
+
+    adapter = TypeAdapter(ColorPalette | None)
+
+    def test_named_colormap_without_type_tag(self):
+        # The form leaves out `type_` (it has a default, so it isn't required).
+        palette = self.adapter.validate_python({"name": "RdYlGn"})
+        assert palette == ColormapPalette(name="RdYlGn")
+
+    def test_custom_colours_without_type_tag(self):
+        palette = self.adapter.validate_python({"colors": ["#ffffff", "#000000"]})
+        assert palette == CustomPalette(colors=["#ffffff", "#000000"])
+
+    @pytest.mark.parametrize(
+        "params, expected",
+        [
+            ({"type_": "palette", "name": "BrBG", "reverse": True}, ColormapPalette(name="BrBG", reverse=True)),
+            ({"type_": "custom", "colors": ["#123456"]}, CustomPalette(colors=["#123456"])),
+        ],
+    )
+    def test_explicit_type_tag_still_works(self, params, expected):
+        assert self.adapter.validate_python(params) == expected
+
+    def test_model_instances_pass_through(self):
+        palette = ColormapPalette(name="magma")
+        assert self.adapter.validate_python(palette) is palette
+
+    def test_none_means_band_default(self):
+        assert self.adapter.validate_python(None) is None
+
+    def test_unknown_colormap_still_rejected(self):
+        with pytest.raises(ValidationError):
+            self.adapter.validate_python({"name": "tab10"})
+
+    def test_json_schema_still_offers_both_palettes(self):
+        schema = self.adapter.json_schema()
+        assert {"ColormapPalette", "CustomPalette"} <= set(schema["$defs"])

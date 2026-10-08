@@ -21,7 +21,11 @@ def get_subjects(
         ),
     ] = None,
     subject_group_id: Annotated[str | None, Field(description="Subject group ID to filter subjects by.")] = None,
-    subject_group_name: Annotated[str | None, Field(description="Subject group name to filter subjects by.")] = None,
+    subject_group_name: Annotated[
+        Annotated[str, Field(title="Filter by subject group name")]
+        | Annotated[None, Field(title="All subject groups (no filter)")],
+        Field(description="Subject group name to filter subjects by."),
+    ] = None,
     name: Annotated[str | None, Field(description="Filter subjects by name.")] = None,
     updated_since: Annotated[
         str | None, Field(description="Only include subjects updated since this timestamp (ISO).")

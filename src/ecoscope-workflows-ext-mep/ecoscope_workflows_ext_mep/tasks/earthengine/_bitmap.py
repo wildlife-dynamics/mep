@@ -6,12 +6,11 @@ embedded as a PNG in a `BitmapLayerDefinition` for `merge_tile_layers` / the map
 """
 
 import math
-from typing import Annotated, Literal, Optional, Union
-
-from pydantic import BaseModel, Field
-from wt_registry import register
+from typing import Annotated, Any, Literal
 
 from ecoscope.platform.tasks.results._pydeck import BitmapLayerDefinition, LegendSegment, LegendValue
+from pydantic import BaseModel, Discriminator, Field, Tag
+from wt_registry import register
 
 from ._composite import NODATA, SCALE_FACTOR, VALID_COUNT_BAND
 
@@ -61,7 +60,22 @@ class CustomPalette(BaseModel):
     colors: Annotated[list[str], Field(description="Hex colours from low to high values, e.g. ['#f7fcb9', '#31a354'].")]
 
 
-ColorPalette = Annotated[Union[ColormapPalette, CustomPalette], Field(discriminator="type_")]
+def _palette_type(value: Any) -> str | None:
+    """Pick the palette model, inferring it when `type_` is missing.
+
+    `type_` has a default, so the form doesn't mark it required and params can arrive
+    as just `{"name": "RdYlGn"}`. A plain `discriminator="type_"` rejects that, so fall
+    back to the fields present: `colors` means a custom palette, anything else a colormap.
+    """
+    if isinstance(value, dict):
+        return value.get("type_") or ("custom" if "colors" in value else "palette")
+    return getattr(value, "type_", None)
+
+
+ColorPalette = Annotated[
+    Annotated[ColormapPalette, Tag("palette")] | Annotated[CustomPalette, Tag("custom")],
+    Discriminator(_palette_type),
+]
 
 # Used when no palette is given: each band gets a colormap that suits what it measures.
 DEFAULT_COLORMAPS: dict[str, ColormapPalette] = {
@@ -87,7 +101,7 @@ FALLBACK_COLORMAP = ColormapPalette(name="viridis")
 LEGEND_STEPS = 6
 
 
-def _colormap(palette: Union[ColormapPalette, CustomPalette], name: str):
+def _colormap(palette: ColormapPalette | CustomPalette, name: str):
     import matplotlib as mpl
     from matplotlib.colors import LinearSegmentedColormap
 
@@ -133,7 +147,7 @@ def _read_web_mercator(src, band_names: list[str], max_size: int):
     return out, transform, width, height
 
 
-def _stretch(values, vmin: Optional[float], vmax: Optional[float]) -> tuple[float, float]:
+def _stretch(values, vmin: float | None, vmax: float | None) -> tuple[float, float]:
     import numpy as np
 
     finite = values[np.isfinite(values)]
@@ -166,17 +180,17 @@ def composite_to_bitmap_layer(
         ),
     ] = "NDVI",
     palette: Annotated[
-        Optional[ColorPalette],
+        ColorPalette | None,
         Field(
             description="A named colormap or custom hex colours (single bands only). "
             "Defaults to a colormap suited to the band, e.g. RdYlGn for NDVI."
         ),
     ] = None,
     vmin: Annotated[
-        Optional[float], Field(description="Value mapped to the first colour. Defaults to the 2nd percentile")
+        float | None, Field(description="Value mapped to the first colour. Defaults to the 2nd percentile")
     ] = None,
     vmax: Annotated[
-        Optional[float], Field(description="Value mapped to the last colour. Defaults to the 98th percentile")
+        float | None, Field(description="Value mapped to the last colour. Defaults to the 98th percentile")
     ] = None,
     opacity: Annotated[float, Field(description="Layer opacity", ge=0, le=1)] = 0.8,
     max_size: Annotated[int, Field(description="Longest side of the rendered image, in pixels", gt=0)] = 2048,
@@ -187,10 +201,9 @@ def composite_to_bitmap_layer(
 
     import numpy as np
     import rasterio
+    from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
     from matplotlib.colors import to_hex
     from PIL import Image
-
-    from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 
     path = remove_file_scheme(composite_path)
     band_names = COLOR_COMPOSITES.get(band, [band])
