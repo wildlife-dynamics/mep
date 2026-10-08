@@ -11,8 +11,8 @@ def get_subjects(
     client: EarthRangerClient,
     include_inactive: Annotated[
         bool,
-        AdvancedField(default=None, description="Include inactive subjects in the list."),
-    ] = None,
+        AdvancedField(default=True, description="Include inactive subjects in the list."),
+    ] = True,
     bbox: Annotated[
         tuple[float, float, float, float] | None,
         Field(
@@ -33,7 +33,7 @@ def get_subjects(
     updated_until: Annotated[
         str | None, Field(description="Only include subjects updated until this timestamp (ISO).")
     ] = None,
-    tracks: Annotated[bool | None, Field(description="Whether to include recent tracks for each subject.")] = None,
+    tracks: Annotated[bool, AdvancedField(default=False, description="Whether to include recent tracks for each subject.")] =False,
     ids: Annotated[
         list[str] | None,
         Field(description="List of subject IDs to fetch. Splits requests in chunks if large."),
