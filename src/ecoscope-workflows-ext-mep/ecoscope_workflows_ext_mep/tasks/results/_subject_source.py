@@ -1,4 +1,5 @@
 import html
+import json
 from typing import Annotated, Any
 
 import pandas as pd
@@ -494,8 +495,31 @@ def _legend(node_style: NodeStyle, link_style: LinkStyle) -> str:
             ns.flagged_border_width,
             "source not found",
         )
-        + '<span class="hint">Hover a pill to trace its links.</span></div>'
+        + '<span class="hint">Hover a pill to trace its links; click it for details to copy.</span></div>'
     )
+
+
+def node_details(layout: dict[str, Any]) -> dict[str, str]:
+    """Plain-text details for each pill, keyed like its data-k (s-<i> / c-<j>).
+
+    Shown in the card that opens when a pill is clicked: the full label, the EarthRanger
+    id, the tooltip fields, and every assignment with the pill on the other end.
+    """
+    labels = {n["id"]: n["label"] for n in layout["subjects"] + layout["sources"]}
+    details: dict[str, str] = {}
+    for group, key_prefix, end, other_end, heading in (
+        ("subjects", "s", "from", "to", "Sources"),
+        ("sources", "c", "to", "from", "Subjects"),
+    ):
+        for i, node in enumerate(layout[group]):
+            lines = [node["label"], f"ID: {node['id'].split(':', 1)[1]}"]
+            lines += node["title"].split("\n")[1:]
+            assigned = [
+                f"  {labels[link[other_end]]}  {link['label']}" for link in layout["links"] if link[end] == node["id"]
+            ]
+            lines += [f"{heading}:", *assigned] if assigned else [f"{heading}: none"]
+            details[f"{key_prefix}-{i}"] = "\n".join(lines)
+    return details
 
 
 def _render_html(
@@ -535,7 +559,18 @@ def _render_html(
         subject_classes[link["from"]].add(f"c-{source_idx[link['to']]}")
         source_classes[link["to"]].add(f"s-{subject_idx[link['from']]}")
 
+    # Text is drawn as HTML labels over the SVG rather than as SVG <text>, so it can be
+    # selected and copied the same way in every browser (SVG text selection is unreliable,
+    # notably in Safari). Labels are kept per column so a drag down a column selects only it.
+    def label(text: str, x: float, y: float, classes: str, extra: str = "", color: str | None = None) -> str:
+        color_css = f";color:{esc(color)}" if color else ""
+        return f'<span class="lbl {classes}" style="left:{x}px;top:{y}px{color_css}"{extra}>{text}</span>'
+
     parts: list[str] = []
+    subject_labels: list[str] = []
+    date_labels: list[str] = []
+    source_labels: list[str] = []
+    section_labels: list[str] = []
     for link in layout["links"]:
         y0, y1, y2 = subject_y[link["from"]], y_of(link["row"]), source_y[link["to"]]
         x0, x1, x2 = subject_x + ns.width, label_x, source_x
@@ -548,36 +583,55 @@ def _render_html(
         parts.append(
             f'<g class="{classes}"><title>{esc(link["title"])}</title>'
             f'<path d="M{x0},{y0} C{x0 + LABEL_GAP / 2},{y0} {x1 - LABEL_GAP / 2},{y1} {x1},{y1}" {stroke_attrs}/>'
-            f'<text x="{x1 + 4}" y="{y1}" class="date" fill="{esc(text_fill)}">{esc(link["label"])}</text>'
             f'<path d="M{lx},{y1} C{lx + ly.link_width / 2},{y1} {x2 - ly.link_width / 2},{y2} {x2},{y2}" '
             f"{stroke_attrs}/></g>"
         )
+        date_labels.append(
+            label(
+                esc(link["label"]),
+                x1 + 4,
+                y1,
+                f"date {classes}",
+                f' title="{esc(link["title"])}"',
+                text_fill,
+            )
+        )
 
-    def pill(node: dict, x: float, y: float, classes: set[str], key: str) -> str:
+    def pill(node: dict, x: float, y: float, classes: set[str], key: str) -> tuple[str, str]:
         fill, border, border_w = node_colors(node, ns)
-        return (
-            f'<g class="el node {" ".join(sorted(classes))}" data-k="{key}">'
+        cls = " ".join(sorted(classes))
+        shape = (
+            f'<g class="el node {cls}" data-k="{key}">'
             f"<title>{esc(node['title'])}</title>"
             f'<rect x="{x}" y="{y - pill_h / 2}" width="{ns.width}" height="{pill_h}" rx="{pill_h / 2}" '
-            f'fill="{esc(fill)}" stroke="{esc(border)}" stroke-width="{border_w}"/>'
-            f'<text x="{x + 12}" y="{y}">{esc(truncate(node["label"]))}</text></g>'
+            f'fill="{esc(fill)}" stroke="{esc(border)}" stroke-width="{border_w}"/></g>'
         )
+        text = label(
+            esc(truncate(node["label"])),
+            x + 12,
+            y,
+            f"el {cls}",
+            f' data-k="{key}" data-full="{esc(node["label"])}" title="{esc(node["title"])}"',
+        )
+        return shape, text
 
     for node in layout["subjects"]:
         key = f"s-{subject_idx[node['id']]}"
-        parts.append(pill(node, subject_x, subject_y[node["id"]], subject_classes[node["id"]], key))
+        shape, text = pill(node, subject_x, subject_y[node["id"]], subject_classes[node["id"]], key)
+        parts.append(shape)
+        subject_labels.append(text)
     for node in layout["sources"]:
         key = f"c-{source_idx[node['id']]}"
-        parts.append(pill(node, source_x, source_y[node["id"]], source_classes[node["id"]], key))
+        shape, text = pill(node, source_x, source_y[node["id"]], source_classes[node["id"]], key)
+        parts.append(shape)
+        source_labels.append(text)
 
     if layout["unlinked_row"] is not None:
         y = y_of(layout["unlinked_row"])
         rule_y = y - row_height / 2
-        parts.append(
-            f'<line x1="{PAD}" x2="{diagram_w - PAD}" y1="{rule_y}" y2="{rule_y}" class="rule"/>'
-            f'<text x="{subject_x}" y="{y}" class="section">Subjects with no source</text>'
-            f'<text x="{source_x}" y="{y}" class="section">Sources with no subject</text>'
-        )
+        parts.append(f'<line x1="{PAD}" x2="{diagram_w - PAD}" y1="{rule_y}" y2="{rule_y}" class="rule"/>')
+        section_labels.append(label("Subjects with no source", subject_x, y, "section"))
+        section_labels.append(label("Sources with no subject", source_x, y, "section"))
 
     height = HEADER_H + layout["n_rows"] * row_height + PAD
     heading = f"<h3>{esc(title)}</h3>" if title else ""
@@ -585,13 +639,32 @@ def _render_html(
         body = '<p class="empty">No subjects or sources to show.</p>'
     else:
         legend = _legend(ns, ls) if ly.showlegend else ""
+        headers = [
+            label(esc(ly.subject_header), subject_x, HEADER_H / 2, "col"),
+            label(esc(ly.assigned_header), label_x, HEADER_H / 2, "col"),
+            label(esc(ly.source_header), source_x, HEADER_H / 2, "col"),
+        ]
+        labels = headers + subject_labels + date_labels + source_labels + section_labels
+        # JSON inside <script>: escape <, > and & so a label can't close the tag.
+        details_json = (
+            json.dumps(node_details(layout), ensure_ascii=False)
+            .replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026")
+        )
+        card = (
+            '<div class="card" hidden role="dialog" aria-label="Details">'
+            '<div class="card-bar"><button type="button" class="card-copy">Copy</button>'
+            '<span class="card-done" hidden>Copied</span>'
+            '<button type="button" class="card-close" aria-label="Close">×</button></div>'
+            '<pre class="card-text"></pre></div>'
+        )
         body = (
-            f'{legend}<div class="scroll"><svg id="{div_id}" width="{diagram_w}" height="{height}" '
+            f'{legend}<div class="scroll"><div class="diagram" style="width:{diagram_w}px;height:{height}px">'
+            f'<svg id="{div_id}" width="{diagram_w}" height="{height}" '
             f'viewBox="0 0 {diagram_w} {height}" xmlns="http://www.w3.org/2000/svg">'
-            f'<text x="{subject_x}" y="{HEADER_H / 2}" class="col">{esc(ly.subject_header)}</text>'
-            f'<text x="{label_x}" y="{HEADER_H / 2}" class="col">{esc(ly.assigned_header)}</text>'
-            f'<text x="{source_x}" y="{HEADER_H / 2}" class="col">{esc(ly.source_header)}</text>'
-            f"{''.join(parts)}</svg></div>"
+            f"{''.join(parts)}</svg>{''.join(labels)}{card}</div></div>"
+            f'<script type="application/json" class="node-details">{details_json}</script>'
         )
     return f"""<!DOCTYPE html>
 <html>
@@ -605,31 +678,106 @@ def _render_html(
   .legend .key {{ display: inline-flex; align-items: center; gap: 5px; }}
   .empty {{ margin: {PAD}px; color: {ly.muted_color}; }}
   .scroll {{ overflow-x: auto; }}
-  svg text {{ font-size: {ly.font_size}px; dominant-baseline: central; fill: {ly.font_color}; }}
-  svg text.date {{ font-size: {ls.label_font_size}px; font-variant-numeric: tabular-nums; }}
-  svg text.col {{ font-weight: 600; fill: {ly.header_color}; text-transform: uppercase; letter-spacing: .04em; }}
-  svg text.section {{ font-weight: 600; fill: {ly.section_color}; }}
+  .diagram {{ position: relative; }}
+  .diagram svg {{ display: block; }}
+  .lbl {{ position: absolute; transform: translateY(-50%); white-space: nowrap; line-height: 1.2;
+          font-size: {ly.font_size}px; color: {ly.font_color};
+          -webkit-user-select: text; user-select: text; cursor: text; }}
+  .lbl.date {{ font-size: {ls.label_font_size}px; font-variant-numeric: tabular-nums; }}
+  .lbl.col {{ font-weight: 600; color: {ly.header_color}; text-transform: uppercase; letter-spacing: .04em; }}
+  .lbl.section {{ font-weight: 600; color: {ly.section_color}; }}
   svg line.rule {{ stroke: {ly.rule_color}; }}
   svg .node {{ cursor: pointer; }}
-  svg.dim .el {{ opacity: {ly.hover_dim_opacity}; }}
-  svg.dim .el.on {{ opacity: 1; }}
+  .diagram.dim .el {{ opacity: {ly.hover_dim_opacity}; }}
+  .diagram.dim .el.on {{ opacity: 1; }}
+  .card {{ position: absolute; z-index: 2; min-width: 180px; max-width: 360px; padding: 6px 10px 10px;
+           background: {ly.plot_bgcolor}; border: 1px solid {ly.rule_color}; border-radius: 8px;
+           box-shadow: 0 4px 16px rgba(15, 23, 42, .18); font-size: {ly.font_size + 1}px; }}
+  .card[hidden], .card-done[hidden] {{ display: none; }}
+  .card-bar {{ display: flex; align-items: center; gap: 8px; }}
+  .card-bar button {{ font: inherit; font-size: {ly.font_size}px; cursor: pointer; background: none;
+                      border: 1px solid {ly.rule_color}; 
+                      border-radius: 4px; padding: 2px 8px; color: {ly.font_color}; }}
+  .card-bar .card-close {{ margin-left: auto; border: none; font-size: {ly.font_size + 4}px; line-height: 1; }}
+  .card-done {{ color: {ly.muted_color}; font-size: {ly.font_size}px; }}
+  .card-text {{ margin: 6px 0 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere;
+                -webkit-user-select: text; user-select: text; cursor: text; }}
 </style>
 </head>
 <body>
 {heading}{body}
 <script>
   const svg = document.getElementById("{div_id}");
-  if (svg) {{
-    svg.querySelectorAll("[data-k]").forEach((node) => {{
+  const root = svg && svg.parentElement;
+  if (root) {{
+    root.querySelectorAll("[data-k]").forEach((node) => {{
       const key = node.dataset.k;
       node.addEventListener("mouseenter", () => {{
-        svg.classList.add("dim");
-        svg.querySelectorAll("." + key).forEach((el) => el.classList.add("on"));
+        root.classList.add("dim");
+        root.querySelectorAll("." + key).forEach((el) => el.classList.add("on"));
       }});
       node.addEventListener("mouseleave", () => {{
-        svg.classList.remove("dim");
-        svg.querySelectorAll(".on").forEach((el) => el.classList.remove("on"));
+        root.classList.remove("dim");
+        root.querySelectorAll(".on").forEach((el) => el.classList.remove("on"));
       }});
+      node.addEventListener("click", (e) => {{
+        // a mouse-up that ends a drag-selection is not a click on the pill
+        if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return;
+        e.stopPropagation();
+        openCard(key);
+      }});
+    }});
+
+    // Details card: opens beside a clicked pill; its text is selectable and Copy copies it all.
+    const details = JSON.parse(document.querySelector(".node-details").textContent);
+    const card = root.querySelector(".card");
+    const cardText = card.querySelector(".card-text");
+    const copied = card.querySelector(".card-done");
+    let down = null;
+    root.addEventListener("mousedown", (e) => {{ down = [e.clientX, e.clientY]; }});
+    function openCard(key) {{
+      cardText.textContent = details[key];
+      copied.hidden = true;
+      card.style.left = card.style.top = "0px";
+      card.hidden = false;
+      const pill = svg.querySelector('[data-k="' + key + '"] rect').getBoundingClientRect();
+      const box = root.getBoundingClientRect();
+      let left = pill.right - box.left + 8;
+      if (left + card.offsetWidth > root.clientWidth) left = pill.left - box.left - card.offsetWidth - 8;
+      card.style.left = Math.max(0, left) + "px";
+      card.style.top = Math.max(0, Math.min(pill.top - box.top, root.clientHeight - card.offsetHeight)) + "px";
+    }}
+    const closeCard = () => {{ card.hidden = true; }};
+    card.querySelector(".card-close").addEventListener("click", closeCard);
+    document.addEventListener("click", (e) => {{ if (!card.contains(e.target)) closeCard(); }});
+    document.addEventListener("keydown", (e) => {{ if (e.key === "Escape") closeCard(); }});
+    card.querySelector(".card-copy").addEventListener("click", () => {{
+      const done = () => {{ copied.hidden = false; }};
+      // Dashboards embed this page in a sandboxed frame where the Clipboard API can be
+      // blocked; fall back to selecting the text and copying it the classic way.
+      const fallback = () => {{
+        const range = document.createRange();
+        range.selectNodeContents(cardText);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        if (document.execCommand("copy")) done();
+      }};
+      if (navigator.clipboard && window.isSecureContext) {{
+        navigator.clipboard.writeText(cardText.textContent).then(done, fallback);
+      }} else {{
+        fallback();
+      }}
+    }});
+    // Copy whole values, one per line: a partly selected label copies in full, and
+    // truncated labels copy their untruncated text.
+    document.addEventListener("copy", (e) => {{
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed) return;
+      const texts = [...root.querySelectorAll(".lbl")].filter((t) => sel.containsNode(t, true));
+      if (!texts.length) return;
+      e.clipboardData.setData("text/plain", texts.map((t) => t.dataset.full ?? t.textContent).join("\\n"));
+      e.preventDefault();
     }});
   }}
 </script>
