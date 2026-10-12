@@ -23,6 +23,7 @@ from ecoscope_workflows_ext_mep.tasks.results._subject_source import (
     layout_subject_source_diagram,
     link_colors,
     node_colors,
+    node_details,
 )
 
 
@@ -283,6 +284,32 @@ class TestDrawSubjectSourceDiagram:
         html = draw_subject_source_diagram(subjects=evil, subjectsources=subjectsources, sources=sources)
         assert "</script><b>" not in html
 
+    def test_text_is_selectable_and_copies_full_labels(self, subjectsources, sources):
+        long_name = pd.DataFrame([{"id": "amani", "name": "A very long subject name that gets truncated"}])
+        html = draw_subject_source_diagram(subjects=long_name, subjectsources=subjectsources, sources=sources)
+        assert "user-select: text" in html
+        assert 'data-full="A very long subject name that gets truncated"' in html
+        assert 'addEventListener("copy"' in html
+        # text is HTML, not SVG <text>, so selection works the same in every browser
+        assert "<text" not in html.split('<div class="diagram"', 1)[1]
+
+    def test_clicked_pill_details_list_id_fields_and_assignments(self, subjects, subjectsources, sources):
+        nodes, edges = build_subject_source_graph(subjects, subjectsources, sources)
+        layout = layout_subject_source_diagram(nodes, edges)
+        details = node_details(layout)
+        amani = details[f"s-{[n['label'] for n in layout['subjects']].index('Amani')}"]
+        assert amani.splitlines()[:2] == ["Amani", "ID: amani"]
+        assert "Sources:" in amani
+        assert "2024-03-01 → present" in amani
+        lonely = details[f"s-{[n['label'] for n in layout['subjects']].index('Lonely')}"]
+        assert lonely.endswith("Sources: none")
+
+    def test_details_json_cannot_close_the_script_tag(self, subjectsources, sources):
+        evil = pd.DataFrame([{"id": "amani", "name": "</script><b>x</b>"}])
+        html = draw_subject_source_diagram(subjects=evil, subjectsources=subjectsources, sources=sources)
+        details = html.split('class="node-details">', 1)[1].split("</script>", 1)[0]
+        assert "<" not in details and "\\u003c/script\\u003e" in details
+
 
 class TestRegressions:
     def test_er_open_start_sentinel_is_not_flagged(self, subjects, sources):
@@ -353,7 +380,7 @@ class TestStyles:
         assert 'stroke="rgb(1, 2, 3)"' in html
         assert "stroke-dasharray" not in html
         assert "font-family: Georgia, serif" in html
-        assert ">Animals</text>" in html
+        assert ">Animals</span>" in html
         assert 'class="legend"' not in html
         assert 'fill="#dbeafe"' not in html
 
