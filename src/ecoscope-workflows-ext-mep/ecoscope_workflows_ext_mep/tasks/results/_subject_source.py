@@ -1,15 +1,17 @@
 import html
-import json
+import math
 from typing import Annotated, Any
 
 import pandas as pd
+import plotly.graph_objs as go  # type: ignore[import-untyped]
 from ecoscope.platform.annotations import AdvancedField, AnyDataFrame
+from ecoscope.platform.tasks.results._ecoplot import ExportArgs
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 from wt_registry import register
 
-# CSS colour values: hex, names, rgb()/hsl() and the like. Restricted so a style value
-# can't break out of the attribute or <style> block it is written into.
+# Colour values: hex, names, rgb()/hsl() and the like. Restricted to plain values so a
+# style can't smuggle markup into the exported page.
 COLOR_PATTERN = r"^[#\w(),.%\s-]+$"
 FONT_PATTERN = r"^[\w\s,'\"-]+$"
 DASH_PATTERN = r"^[\d.\s,]*$"
@@ -84,7 +86,8 @@ class LinkStyle(BaseModel):
         AdvancedField(
             default="4 3",
             pattern=DASH_PATTERN,
-            description="Dash pattern of ended assignments as SVG stroke-dasharray (e.g. '4 3'). Empty for solid.",
+            description="Dash pattern of ended assignments as dash and gap lengths in pixels (e.g. '4 3'). "
+            "Empty for solid.",
         ),
     ] = "4 3"
     label_color: Annotated[str, _color("#334155", "Date label colour of current assignments.")] = "#334155"
@@ -132,15 +135,6 @@ class DiagramLayoutStyle(BaseModel):
             description="Horizontal space for the lines into the sources column.",
         ),
     ] = 130
-    hover_dim_opacity: Annotated[
-        float,
-        AdvancedField(
-            default=0.12,
-            ge=0.0,
-            le=1.0,
-            description="Opacity of unrelated items while hovering a subject or source.",
-        ),
-    ] = 0.12
 
 
 # ER stores open-ended assignments with an upper bound in year 9999, and a missing
@@ -428,6 +422,11 @@ def layout_subject_source_diagram(nodes: list[dict], edges: list[dict]) -> dict[
 PAD = 16
 HEADER_H = 34
 LABEL_GAP = 14
+TITLE_H = 32
+LEGEND_H = 34
+# Points sampled along each assignment curve and around each rounded pill end.
+CURVE_STEPS = 16
+CAP_STEPS = 8
 
 
 def node_colors(node: dict, style: NodeStyle) -> tuple[str, str, float]:
@@ -454,90 +453,98 @@ def link_colors(link: dict, style: LinkStyle) -> tuple[str, str, float, str]:
     return style.ended_color, style.ended_label_color, width, dash
 
 
-def _legend(node_style: NodeStyle, link_style: LinkStyle) -> str:
-    """Legend built from the active styles, so it always matches the diagram."""
-    esc = html.escape
-
-    def line(color: str, width: float, dash: str, text: str) -> str:
-        dash_attr = f' stroke-dasharray="{esc(dash)}"' if dash else ""
-        return (
-            f'<span class="key"><svg width="26" height="10"><line x1="1" x2="25" y1="5" y2="5" '
-            f'stroke="{esc(color)}" stroke-width="{width}"{dash_attr}/></svg>{text}</span>'
-        )
-
-    def swatch(fill: str, border: str, width: float, text: str) -> str:
-        return (
-            f'<span class="key"><svg width="26" height="14"><rect x="1" y="1" width="24" height="12" rx="6" '
-            f'fill="{esc(fill)}" stroke="{esc(border)}" stroke-width="{width}"/></svg>{text}</span>'
-        )
-
-    ns, ls = node_style, link_style
-    return (
-        '<div class="legend">'
-        + line(ls.current_color, ls.current_width, "", "current")
-        + line(ls.ended_color, ls.ended_width, ls.ended_dash, "ended")
-        + line(ls.bad_date_color, ls.current_width, "", "bad date")
-        + swatch(
-            ns.subject_fill,
-            ns.unlinked_border_color,
-            ns.flagged_border_width,
-            "no link",
-        )
-        + swatch(
-            ns.inactive_subject_fill,
-            ns.border_color,
-            ns.border_width,
-            "inactive subject",
-        )
-        + swatch(
-            ns.source_fill,
-            ns.missing_source_border_color,
-            ns.flagged_border_width,
-            "source not found",
-        )
-        + '<span class="hint">Hover a pill to trace its links; click it for details to copy.</span></div>'
-    )
+def plotly_dash(dash: str) -> str:
+    """Turn a dash pattern like '4 3' into Plotly's '4px,3px'; empty means solid."""
+    lengths = dash.replace(",", " ").split()
+    return ",".join(f"{n}px" for n in lengths) if lengths else "solid"
 
 
 def node_details(layout: dict[str, Any]) -> dict[str, str]:
-    """Plain-text details for each pill, keyed like its data-k (s-<i> / c-<j>).
+    """Plain-text details for each pill, keyed by node id.
 
-    Shown in the card that opens when a pill is clicked: the full label, the EarthRanger
-    id, the tooltip fields, and every assignment with the pill on the other end.
+    Shown when hovering the pill: the full label, the EarthRanger id, the tooltip
+    fields, and every assignment with the pill on the other end.
     """
     labels = {n["id"]: n["label"] for n in layout["subjects"] + layout["sources"]}
     details: dict[str, str] = {}
-    for group, key_prefix, end, other_end, heading in (
-        ("subjects", "s", "from", "to", "Sources"),
-        ("sources", "c", "to", "from", "Subjects"),
+    for group, end, other_end, heading in (
+        ("subjects", "from", "to", "Sources"),
+        ("sources", "to", "from", "Subjects"),
     ):
-        for i, node in enumerate(layout[group]):
+        for node in layout[group]:
             lines = [node["label"], f"ID: {node['id'].split(':', 1)[1]}"]
             lines += node["title"].split("\n")[1:]
             assigned = [
                 f"  {labels[link[other_end]]}  {link['label']}" for link in layout["links"] if link[end] == node["id"]
             ]
             lines += [f"{heading}:", *assigned] if assigned else [f"{heading}: none"]
-            details[f"{key_prefix}-{i}"] = "\n".join(lines)
+            details[node["id"]] = "\n".join(lines)
     return details
 
 
-def _render_html(
+def _hover_html(text: str) -> str:
+    return html.escape(text, quote=False).replace("\n", "<br>")
+
+
+def _bezier(p0: tuple, p1: tuple, p2: tuple, p3: tuple) -> list[tuple[float, float]]:
+    points = []
+    for i in range(CURVE_STEPS + 1):
+        t = i / CURVE_STEPS
+        u = 1 - t
+        points.append(
+            (
+                u**3 * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t**3 * p3[0],
+                u**3 * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t**3 * p3[1],
+            )
+        )
+    return points
+
+
+def _pill_outline(x: float, y: float, width: float, height: float) -> list[tuple[float, float]]:
+    """Closed outline of a pill whose left edge is at x and centre line at y."""
+    r = height / 2
+    points = []
+    for i in range(CAP_STEPS + 1):  # right end
+        a = -math.pi / 2 + math.pi * i / CAP_STEPS
+        points.append((x + width - r + r * math.cos(a), y + r * math.sin(a)))
+    for i in range(CAP_STEPS + 1):  # left end
+        a = math.pi / 2 + math.pi * i / CAP_STEPS
+        points.append((x + r + r * math.cos(a), y + r * math.sin(a)))
+    return points + [points[0]]
+
+
+def _append_segment(xy: tuple[list, list], points: list[tuple[float, float]]) -> None:
+    """Add a polyline to a trace's x/y lists, separated from the previous one by a gap."""
+    xs, ys = xy
+    xs.extend(p[0] for p in points)
+    ys.extend(p[1] for p in points)
+    xs.append(None)
+    ys.append(None)
+
+
+def build_subject_source_figure(
     layout: dict[str, Any],
     title: str,
     row_height: int,
-    div_id: str,
     node_style: NodeStyle,
     link_style: LinkStyle,
     layout_style: DiagramLayoutStyle,
-) -> str:
-    esc = html.escape
+) -> go.Figure:
+    """Draw a laid-out diagram as a Plotly figure.
+
+    Axes are hidden and map one unit to one pixel, with y growing downwards, so the
+    pills, curves and labels keep the sizes set on the style models. Lines and pills
+    sharing a style are drawn as one trace each (segments split by gaps), and an
+    invisible marker strip along each pill and date label carries the hover text.
+    """
     ns, ls, ly = node_style, link_style, layout_style
     pill_h = max(16, min(30, row_height - 10))
     subject_x = PAD
     label_x = subject_x + ns.width + LABEL_GAP
     source_x = label_x + ly.label_column_width + ly.link_width
     diagram_w = source_x + ns.width + PAD
+    has_nodes = bool(layout["subjects"] or layout["sources"])
+    plot_h = HEADER_H + (layout["n_rows"] * row_height if has_nodes else 0) + PAD
 
     def y_of(row: float) -> float:
         return HEADER_H + row * row_height + row_height / 2
@@ -546,243 +553,232 @@ def _render_html(
         n = ns.max_label_chars
         return text if len(text) <= n else text[: n - 1] + "…"
 
-    subject_idx = {n["id"]: i for i, n in enumerate(layout["subjects"])}
-    source_idx = {n["id"]: i for i, n in enumerate(layout["sources"])}
-    subject_y = {n["id"]: y_of(n["row"]) for n in layout["subjects"]}
-    source_y = {n["id"]: y_of(n["row"]) for n in layout["sources"]}
-
-    # Every element carries the s-<i>/c-<j> classes of what it is connected to, so
-    # hovering a subject (or source) can highlight everything sharing its class.
-    subject_classes: dict[str, set[str]] = {n["id"]: {f"s-{subject_idx[n['id']]}"} for n in layout["subjects"]}
-    source_classes: dict[str, set[str]] = {n["id"]: {f"c-{source_idx[n['id']]}"} for n in layout["sources"]}
-    for link in layout["links"]:
-        subject_classes[link["from"]].add(f"c-{source_idx[link['to']]}")
-        source_classes[link["to"]].add(f"s-{subject_idx[link['from']]}")
-
-    # Text is drawn as HTML labels over the SVG rather than as SVG <text>, so it can be
-    # selected and copied the same way in every browser (SVG text selection is unreliable,
-    # notably in Safari). Labels are kept per column so a drag down a column selects only it.
-    def label(text: str, x: float, y: float, classes: str, extra: str = "", color: str | None = None) -> str:
-        color_css = f";color:{esc(color)}" if color else ""
-        return f'<span class="lbl {classes}" style="left:{x}px;top:{y}px{color_css}"{extra}>{text}</span>'
-
-    parts: list[str] = []
-    subject_labels: list[str] = []
-    date_labels: list[str] = []
-    source_labels: list[str] = []
-    section_labels: list[str] = []
-    for link in layout["links"]:
-        y0, y1, y2 = subject_y[link["from"]], y_of(link["row"]), source_y[link["to"]]
-        x0, x1, x2 = subject_x + ns.width, label_x, source_x
-        lx = label_x + ly.label_column_width
-        stroke, text_fill, width, dash = link_colors(link, ls)
-        stroke_attrs = f'stroke="{esc(stroke)}" stroke-width="{width}" fill="none"' + (
-            f' stroke-dasharray="{esc(dash)}"' if dash else ""
+    def text_at(text: str, x: float, y: float, color: str, bold: bool = False) -> None:
+        fig.add_annotation(
+            text=f"<b>{text}</b>" if bold else text,
+            x=x,
+            y=y,
+            xanchor="left",
+            yanchor="middle",
+            showarrow=False,
+            font={"color": color},
         )
-        classes = f"el s-{subject_idx[link['from']]} c-{source_idx[link['to']]}"
-        parts.append(
-            f'<g class="{classes}"><title>{esc(link["title"])}</title>'
-            f'<path d="M{x0},{y0} C{x0 + LABEL_GAP / 2},{y0} {x1 - LABEL_GAP / 2},{y1} {x1},{y1}" {stroke_attrs}/>'
-            f'<path d="M{lx},{y1} C{lx + ly.link_width / 2},{y1} {x2 - ly.link_width / 2},{y2} {x2},{y2}" '
-            f"{stroke_attrs}/></g>"
-        )
-        date_labels.append(
-            label(
-                esc(link["label"]),
-                x1 + 4,
+
+    def hover_strip(x0: float, x1: float, y: float, text: str) -> None:
+        # Hover points every half pill-height so the whole strip responds, not just its centre.
+        n = max(2, int((x1 - x0) / (pill_h / 2)) + 1)
+        for i in range(n):
+            hover_x.append(x0 + (x1 - x0) * i / (n - 1))
+            hover_y.append(y)
+            hover_text.append(text)
+
+    fig = go.Figure()
+    hover_x: list[float] = []
+    hover_y: list[float] = []
+    hover_text: list[str] = []
+
+    if not has_nodes:
+        text_at("No subjects or sources to show.", PAD, HEADER_H / 2, ly.muted_color)
+    else:
+        subject_y = {n["id"]: y_of(n["row"]) for n in layout["subjects"]}
+        source_y = {n["id"]: y_of(n["row"]) for n in layout["sources"]}
+        labels = {n["id"]: n["label"] for n in layout["subjects"] + layout["sources"]}
+        details = node_details(layout)
+
+        lines: dict[tuple, tuple[list, list]] = {}
+        date_x, date_y, date_text, date_color = [], [], [], []
+        for link in layout["links"]:
+            y0, y1, y2 = subject_y[link["from"]], y_of(link["row"]), source_y[link["to"]]
+            x0, x1, x2 = subject_x + ns.width, label_x, source_x
+            lx = label_x + ly.label_column_width
+            stroke, text_fill, width, dash = link_colors(link, ls)
+            segments = lines.setdefault((stroke, width, dash), ([], []))
+            _append_segment(segments, _bezier((x0, y0), (x0 + LABEL_GAP / 2, y0), (x1 - LABEL_GAP / 2, y1), (x1, y1)))
+            _append_segment(
+                segments,
+                _bezier((lx, y1), (lx + ly.link_width / 2, y1), (x2 - ly.link_width / 2, y2), (x2, y2)),
+            )
+            date_x.append(x1 + 4)
+            date_y.append(y1)
+            date_text.append(html.escape(link["label"], quote=False))
+            date_color.append(text_fill)
+            hover_strip(
+                x1,
+                lx,
                 y1,
-                f"date {classes}",
-                f' title="{esc(link["title"])}"',
-                text_fill,
+                _hover_html(f"{labels[link['from']]} → {labels[link['to']]}\n{link['label']}"),
+            )
+        for (stroke, width, dash), (xs, ys) in lines.items():
+            fig.add_trace(
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="lines",
+                    line={"color": stroke, "width": width, "dash": plotly_dash(dash)},
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+
+        pills: dict[tuple, tuple[list, list]] = {}
+        name_x, name_y, name_text = [], [], []
+        for nodes, x, ys in (
+            (layout["subjects"], subject_x, subject_y),
+            (layout["sources"], source_x, source_y),
+        ):
+            for node in nodes:
+                y = ys[node["id"]]
+                outline = _pill_outline(x, y, ns.width, pill_h)
+                _append_segment(pills.setdefault(node_colors(node, ns), ([], [])), outline)
+                name_x.append(x + 12)
+                name_y.append(y)
+                name_text.append(html.escape(truncate(node["label"]), quote=False))
+                hover_strip(x, x + ns.width, y, _hover_html(details[node["id"]]))
+        for (fill, border, border_w), (xs, ys) in pills.items():
+            fig.add_trace(
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="lines",
+                    fill="toself",
+                    fillcolor=fill,
+                    line={"color": border, "width": border_w},
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+
+        fig.add_trace(
+            go.Scatter(
+                x=name_x,
+                y=name_y,
+                mode="text",
+                text=name_text,
+                textposition="middle right",
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=date_x,
+                y=date_y,
+                mode="text",
+                text=date_text,
+                textposition="middle right",
+                textfont={"color": date_color, "size": ls.label_font_size},
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=hover_x,
+                y=hover_y,
+                mode="markers",
+                marker={"size": pill_h, "symbol": "square", "color": "rgba(0,0,0,0)"},
+                hovertext=hover_text,
+                hovertemplate="%{hovertext}<extra></extra>",
+                showlegend=False,
             )
         )
 
-    def pill(node: dict, x: float, y: float, classes: set[str], key: str) -> tuple[str, str]:
-        fill, border, border_w = node_colors(node, ns)
-        cls = " ".join(sorted(classes))
-        shape = (
-            f'<g class="el node {cls}" data-k="{key}">'
-            f"<title>{esc(node['title'])}</title>"
-            f'<rect x="{x}" y="{y - pill_h / 2}" width="{ns.width}" height="{pill_h}" rx="{pill_h / 2}" '
-            f'fill="{esc(fill)}" stroke="{esc(border)}" stroke-width="{border_w}"/></g>'
-        )
-        text = label(
-            esc(truncate(node["label"])),
-            x + 12,
-            y,
-            f"el {cls}",
-            f' data-k="{key}" data-full="{esc(node["label"])}" title="{esc(node["title"])}"',
-        )
-        return shape, text
+        for text, x in (
+            (ly.subject_header, subject_x),
+            (ly.assigned_header, label_x),
+            (ly.source_header, source_x),
+        ):
+            text_at(html.escape(text.upper(), quote=False), x, HEADER_H / 2, ly.header_color, bold=True)
 
-    for node in layout["subjects"]:
-        key = f"s-{subject_idx[node['id']]}"
-        shape, text = pill(node, subject_x, subject_y[node["id"]], subject_classes[node["id"]], key)
-        parts.append(shape)
-        subject_labels.append(text)
-    for node in layout["sources"]:
-        key = f"c-{source_idx[node['id']]}"
-        shape, text = pill(node, source_x, source_y[node["id"]], source_classes[node["id"]], key)
-        parts.append(shape)
-        source_labels.append(text)
+        if layout["unlinked_row"] is not None:
+            y = y_of(layout["unlinked_row"])
+            rule_y = y - row_height / 2
+            fig.add_shape(
+                type="line",
+                x0=PAD,
+                x1=diagram_w - PAD,
+                y0=rule_y,
+                y1=rule_y,
+                line={"color": ly.rule_color, "width": 1},
+                layer="below",
+            )
+            text_at("Subjects with no source", subject_x, y, ly.section_color, bold=True)
+            text_at("Sources with no subject", source_x, y, ly.section_color, bold=True)
 
-    if layout["unlinked_row"] is not None:
-        y = y_of(layout["unlinked_row"])
-        rule_y = y - row_height / 2
-        parts.append(f'<line x1="{PAD}" x2="{diagram_w - PAD}" y1="{rule_y}" y2="{rule_y}" class="rule"/>')
-        section_labels.append(label("Subjects with no source", subject_x, y, "section"))
-        section_labels.append(label("Sources with no subject", source_x, y, "section"))
+    showlegend = ly.showlegend and has_nodes
+    if showlegend:
+        # Legend-only traces: no data, so they draw nothing on the diagram itself.
+        for name, color, width, dash in (
+            ("current", ls.current_color, ls.current_width, ""),
+            ("ended", ls.ended_color, ls.ended_width, ls.ended_dash),
+            ("bad date", ls.bad_date_color, ls.current_width, ""),
+        ):
+            fig.add_trace(
+                go.Scatter(
+                    x=[None],
+                    y=[None],
+                    mode="lines",
+                    name=name,
+                    line={"color": color, "width": width, "dash": plotly_dash(dash)},
+                    hoverinfo="skip",
+                )
+            )
+        for name, fill, border, width in (
+            ("no link", ns.subject_fill, ns.unlinked_border_color, ns.flagged_border_width),
+            ("inactive subject", ns.inactive_subject_fill, ns.border_color, ns.border_width),
+            ("source not found", ns.source_fill, ns.missing_source_border_color, ns.flagged_border_width),
+        ):
+            fig.add_trace(
+                go.Scatter(
+                    x=[None],
+                    y=[None],
+                    mode="markers",
+                    name=name,
+                    marker={"symbol": "square", "size": 12, "color": fill, "line": {"color": border, "width": width}},
+                    hoverinfo="skip",
+                )
+            )
 
-    height = HEADER_H + layout["n_rows"] * row_height + PAD
-    heading = f"<h3>{esc(title)}</h3>" if title else ""
-    if not layout["subjects"] and not layout["sources"]:
-        body = '<p class="empty">No subjects or sources to show.</p>'
-    else:
-        legend = _legend(ns, ls) if ly.showlegend else ""
-        headers = [
-            label(esc(ly.subject_header), subject_x, HEADER_H / 2, "col"),
-            label(esc(ly.assigned_header), label_x, HEADER_H / 2, "col"),
-            label(esc(ly.source_header), source_x, HEADER_H / 2, "col"),
-        ]
-        labels = headers + subject_labels + date_labels + source_labels + section_labels
-        # JSON inside <script>: escape <, > and & so a label can't close the tag.
-        details_json = (
-            json.dumps(node_details(layout), ensure_ascii=False)
-            .replace("<", "\\u003c")
-            .replace(">", "\\u003e")
-            .replace("&", "\\u0026")
-        )
-        card = (
-            '<div class="card" hidden role="dialog" aria-label="Details">'
-            '<div class="card-bar"><button type="button" class="card-copy">Copy</button>'
-            '<span class="card-done" hidden>Copied</span>'
-            '<button type="button" class="card-close" aria-label="Close">×</button></div>'
-            '<pre class="card-text"></pre></div>'
-        )
-        body = (
-            f'{legend}<div class="scroll"><div class="diagram" style="width:{diagram_w}px;height:{height}px">'
-            f'<svg id="{div_id}" width="{diagram_w}" height="{height}" '
-            f'viewBox="0 0 {diagram_w} {height}" xmlns="http://www.w3.org/2000/svg">'
-            f"{''.join(parts)}</svg>{''.join(labels)}{card}</div></div>"
-            f'<script type="application/json" class="node-details">{details_json}</script>'
-        )
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  html, body {{ margin: 0; background: {ly.plot_bgcolor}; font-family: {ly.font_family}; color: {ly.font_color}; }}
-  h3 {{ margin: 8px {PAD}px; }}
-  .legend {{ display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center;
-             margin: 8px {PAD}px 0; font-size: {ly.font_size}px; color: {ly.muted_color}; }}
-  .legend .key {{ display: inline-flex; align-items: center; gap: 5px; }}
-  .empty {{ margin: {PAD}px; color: {ly.muted_color}; }}
-  .scroll {{ overflow-x: auto; }}
-  .diagram {{ position: relative; }}
-  .diagram svg {{ display: block; }}
-  .lbl {{ position: absolute; transform: translateY(-50%); white-space: nowrap; line-height: 1.2;
-          font-size: {ly.font_size}px; color: {ly.font_color};
-          -webkit-user-select: text; user-select: text; cursor: text; }}
-  .lbl.date {{ font-size: {ls.label_font_size}px; font-variant-numeric: tabular-nums; }}
-  .lbl.col {{ font-weight: 600; color: {ly.header_color}; text-transform: uppercase; letter-spacing: .04em; }}
-  .lbl.section {{ font-weight: 600; color: {ly.section_color}; }}
-  svg line.rule {{ stroke: {ly.rule_color}; }}
-  svg .node {{ cursor: pointer; }}
-  .diagram.dim .el {{ opacity: {ly.hover_dim_opacity}; }}
-  .diagram.dim .el.on {{ opacity: 1; }}
-  .card {{ position: absolute; z-index: 2; min-width: 180px; max-width: 360px; padding: 6px 10px 10px;
-           background: {ly.plot_bgcolor}; border: 1px solid {ly.rule_color}; border-radius: 8px;
-           box-shadow: 0 4px 16px rgba(15, 23, 42, .18); font-size: {ly.font_size + 1}px; }}
-  .card[hidden], .card-done[hidden] {{ display: none; }}
-  .card-bar {{ display: flex; align-items: center; gap: 8px; }}
-  .card-bar button {{ font: inherit; font-size: {ly.font_size}px; cursor: pointer; background: none;
-                      border: 1px solid {ly.rule_color}; 
-                      border-radius: 4px; padding: 2px 8px; color: {ly.font_color}; }}
-  .card-bar .card-close {{ margin-left: auto; border: none; font-size: {ly.font_size + 4}px; line-height: 1; }}
-  .card-done {{ color: {ly.muted_color}; font-size: {ly.font_size}px; }}
-  .card-text {{ margin: 6px 0 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere;
-                -webkit-user-select: text; user-select: text; cursor: text; }}
-</style>
-</head>
-<body>
-{heading}{body}
-<script>
-  const svg = document.getElementById("{div_id}");
-  const root = svg && svg.parentElement;
-  if (root) {{
-    root.querySelectorAll("[data-k]").forEach((node) => {{
-      const key = node.dataset.k;
-      node.addEventListener("mouseenter", () => {{
-        root.classList.add("dim");
-        root.querySelectorAll("." + key).forEach((el) => el.classList.add("on"));
-      }});
-      node.addEventListener("mouseleave", () => {{
-        root.classList.remove("dim");
-        root.querySelectorAll(".on").forEach((el) => el.classList.remove("on"));
-      }});
-      node.addEventListener("click", (e) => {{
-        // a mouse-up that ends a drag-selection is not a click on the pill
-        if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return;
-        e.stopPropagation();
-        openCard(key);
-      }});
-    }});
-
-    // Details card: opens beside a clicked pill; its text is selectable and Copy copies it all.
-    const details = JSON.parse(document.querySelector(".node-details").textContent);
-    const card = root.querySelector(".card");
-    const cardText = card.querySelector(".card-text");
-    const copied = card.querySelector(".card-done");
-    let down = null;
-    root.addEventListener("mousedown", (e) => {{ down = [e.clientX, e.clientY]; }});
-    function openCard(key) {{
-      cardText.textContent = details[key];
-      copied.hidden = true;
-      card.style.left = card.style.top = "0px";
-      card.hidden = false;
-      const pill = svg.querySelector('[data-k="' + key + '"] rect').getBoundingClientRect();
-      const box = root.getBoundingClientRect();
-      let left = pill.right - box.left + 8;
-      if (left + card.offsetWidth > root.clientWidth) left = pill.left - box.left - card.offsetWidth - 8;
-      card.style.left = Math.max(0, left) + "px";
-      card.style.top = Math.max(0, Math.min(pill.top - box.top, root.clientHeight - card.offsetHeight)) + "px";
-    }}
-    const closeCard = () => {{ card.hidden = true; }};
-    card.querySelector(".card-close").addEventListener("click", closeCard);
-    document.addEventListener("click", (e) => {{ if (!card.contains(e.target)) closeCard(); }});
-    document.addEventListener("keydown", (e) => {{ if (e.key === "Escape") closeCard(); }});
-    card.querySelector(".card-copy").addEventListener("click", () => {{
-      const done = () => {{ copied.hidden = false; }};
-      // Dashboards embed this page in a sandboxed frame where the Clipboard API can be
-      // blocked; fall back to selecting the text and copying it the classic way.
-      const fallback = () => {{
-        const range = document.createRange();
-        range.selectNodeContents(cardText);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-        if (document.execCommand("copy")) done();
-      }};
-      if (navigator.clipboard && window.isSecureContext) {{
-        navigator.clipboard.writeText(cardText.textContent).then(done, fallback);
-      }} else {{
-        fallback();
-      }}
-    }});
-    // Copy whole values, one per line: a partly selected label copies in full, and
-    // truncated labels copy their untruncated text.
-    document.addEventListener("copy", (e) => {{
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) return;
-      const texts = [...root.querySelectorAll(".lbl")].filter((t) => sel.containsNode(t, true));
-      if (!texts.length) return;
-      e.clipboardData.setData("text/plain", texts.map((t) => t.dataset.full ?? t.textContent).join("\\n"));
-      e.preventDefault();
-    }});
-  }}
-</script>
-</body>
-</html>"""
+    top = (TITLE_H if title else 0) + (LEGEND_H if showlegend else 0)
+    fig.update_layout(
+        width=diagram_w,
+        height=plot_h + top,
+        autosize=False,
+        margin={"l": 0, "r": 0, "t": top, "b": 0},
+        paper_bgcolor=ly.plot_bgcolor,
+        plot_bgcolor=ly.plot_bgcolor,
+        font={"family": ly.font_family, "size": ly.font_size, "color": ly.font_color},
+        title=(
+            {
+                "text": html.escape(title, quote=False),
+                "x": 0,
+                "xanchor": "left",
+                "y": 1,
+                "yref": "container",
+                "yanchor": "top",
+                "pad": {"l": PAD, "t": 8},
+            }
+            if title
+            else None
+        ),
+        showlegend=showlegend,
+        legend={
+            "orientation": "h",
+            "x": PAD / diagram_w,
+            "xanchor": "left",
+            "y": 1,
+            "yanchor": "bottom",
+            "font": {"color": ly.muted_color},
+            "itemclick": False,
+            "itemdoubleclick": False,
+        },
+        hovermode="closest",
+        hoverlabel={"align": "left"},
+        dragmode=False,
+        xaxis={"range": [0, diagram_w], "visible": False, "fixedrange": True},
+        yaxis={"range": [plot_h, 0], "visible": False, "fixedrange": True},
+    )
+    return fig
 
 
 @register()
@@ -842,13 +838,14 @@ def draw_subject_source_diagram(
     line between them, labelled with its date range. Current assignments are solid,
     ended ones are dashed, and lines with unreadable dates are flagged. Subjects with
     no source and sources with no subject are listed at the bottom with a highlighted
-    outline. Hovering a subject or source highlights everything it is linked to.
+    outline. Hovering a subject or source lists its id, details and assignments.
 
     All colours, widths and fonts come from `node_style`, `link_style` and
     `layout_style`; any field left unset keeps its default.
 
     Returns:
-        A self-contained HTML document with the diagram as inline SVG.
+        The diagram as a Plotly figure exported to HTML, like the ecoplot charts, so
+        it gets the standard plot controls (e.g. download as PNG).
     """
     nodes, edges = build_subject_source_graph(
         subjects=subjects,
@@ -856,14 +853,23 @@ def draw_subject_source_diagram(
         sources=sources,
         include_unlinked_sources=include_unlinked_sources,
     )
-    layout = layout_subject_source_diagram(nodes, edges)
-    div_id = "".join(c if c.isalnum() else "-" for c in (widget_id or "subject-source-diagram"))
-    return _render_html(
-        layout,
+    figure = build_subject_source_figure(
+        layout_subject_source_diagram(nodes, edges),
         title=title,
         row_height=row_height,
-        div_id=div_id,
         node_style=node_style or NodeStyle(),
         link_style=link_style or LinkStyle(),
         layout_style=layout_style or DiagramLayoutStyle(),
     )
+    export = ExportArgs(div_id=widget_id).model_dump(exclude_none=True)
+    # Sizes are in pixels, so keep the figure at its own size (the frame scrolls) rather
+    # than stretching it to the widget, and export the whole diagram as the PNG.
+    export["default_width"] = f"{figure.layout.width}px"
+    export["default_height"] = f"{figure.layout.height}px"
+    export["config"].update(
+        responsive=False,
+        autosizable=False,
+        fillFrame=False,
+        toImageButtonOptions={"filename": "subject-source-diagram", "scale": 2},
+    )
+    return figure.to_html(**export)

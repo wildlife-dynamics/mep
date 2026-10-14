@@ -8,8 +8,6 @@ EarthRanger's responses.
 
 from __future__ import annotations
 
-import re
-
 import pandas as pd
 import pytest
 from pydantic import ValidationError
@@ -18,12 +16,14 @@ from ecoscope_workflows_ext_mep.tasks.results._subject_source import (
     DiagramLayoutStyle,
     LinkStyle,
     NodeStyle,
+    build_subject_source_figure,
     build_subject_source_graph,
     draw_subject_source_diagram,
     layout_subject_source_diagram,
     link_colors,
     node_colors,
     node_details,
+    plotly_dash,
 )
 
 
@@ -116,6 +116,31 @@ def _edge(edges, subject, source):
 
 def _node(nodes, node_id):
     return next(n for n in nodes if n["id"] == node_id)
+
+
+def _figure(subjects, subjectsources, sources, title="", node_style=None, link_style=None, layout_style=None):
+    layout = layout_subject_source_diagram(*build_subject_source_graph(subjects, subjectsources, sources))
+    return build_subject_source_figure(
+        layout,
+        title=title,
+        row_height=42,
+        node_style=node_style or NodeStyle(),
+        link_style=link_style or LinkStyle(),
+        layout_style=layout_style or DiagramLayoutStyle(),
+    )
+
+
+def _text_trace(fig, mode="text"):
+    return [t for t in fig.data if t.mode == mode and t.showlegend is False]
+
+
+def _hover_text(fig):
+    hover = next(t for t in fig.data if t.mode == "markers" and t.hovertext is not None)
+    return list(hover.hovertext)
+
+
+def _annotations(fig):
+    return [a.text for a in fig.layout.annotations]
 
 
 class TestBuildSubjectSourceGraph:
@@ -246,69 +271,73 @@ class TestLayout:
 
 
 class TestDrawSubjectSourceDiagram:
-    def test_returns_static_svg_html(self, subjects, subjectsources, sources):
+    def test_returns_plotly_html_with_export_controls(self, subjects, subjectsources, sources):
         html = draw_subject_source_diagram(
             subjects=subjects,
             subjectsources=subjectsources,
             sources=sources,
             widget_id="Subject-source links",
         )
-        assert '<svg id="Subject-source-links"' in html
-        assert "<script src=" not in html  # no CDN dependency
-        assert html.count('class="el node') == 9
-        assert "2024-03-01 → present" in html
-        assert "Subjects with no source" in html
+        assert "Plotly.newPlot" in html
+        assert '"toImageButtonOptions"' in html
+        assert '"displaylogo": false' in html
+        assert '"responsive": false' in html
+
+    def test_one_pill_and_label_per_node(self, subjects, subjectsources, sources):
+        fig = _figure(subjects, subjectsources, sources)
+        names, dates = _text_trace(fig)
+        assert len(names.text) == 9
+        assert "2024-03-01 → present" in dates.text
+        pills = [t for t in fig.data if t.fill == "toself"]
+        assert sum(list(t.x).count(None) for t in pills) == 9
+        assert "<b>Subjects with no source</b>" in _annotations(fig)
+
+    def test_figure_maps_one_unit_to_one_pixel(self, subjects, subjectsources, sources):
+        fig = _figure(subjects, subjectsources, sources)
+        assert fig.layout.xaxis.range == (0, fig.layout.width)
+        top = fig.layout.margin.t
+        assert fig.layout.yaxis.range == (fig.layout.height - top, 0)
 
     def test_height_grows_with_rows(self, subjects, subjectsources):
         many_sources = pd.DataFrame([{"id": f"x{i}", "manufacturer_id": f"X-{i}"} for i in range(300)])
-        html = draw_subject_source_diagram(
-            subjects=subjects,
-            subjectsources=subjectsources,
-            sources=many_sources,
-            row_height=20,
-        )
-        height = int(re.search(r'<svg id=[^>]*height="(\d+)"', html).group(1))
-        assert height > 300 * 20
+        layout = layout_subject_source_diagram(*build_subject_source_graph(subjects, subjectsources, many_sources))
+        fig = build_subject_source_figure(layout, "", 20, NodeStyle(), LinkStyle(), DiagramLayoutStyle())
+        assert fig.layout.height > 300 * 20
 
     def test_empty_inputs_render_message(self):
         empty = pd.DataFrame(columns=["id"])
-        html = draw_subject_source_diagram(
-            subjects=empty,
-            subjectsources=pd.DataFrame(columns=["subject", "source"]),
-            sources=empty,
-        )
-        assert "No subjects or sources to show." in html
+        fig = _figure(empty, pd.DataFrame(columns=["subject", "source"]), empty)
+        assert _annotations(fig) == ["No subjects or sources to show."]
+        assert fig.layout.showlegend is False
 
     def test_labels_are_escaped(self, subjectsources, sources):
         evil = pd.DataFrame([{"id": "amani", "name": "</script><b>x</b>"}])
+        fig = _figure(evil, subjectsources, sources)
+        names = _text_trace(fig)[0].text
+        assert "&lt;/script&gt;&lt;b&gt;x&lt;/b&gt;" in names
+        assert all("<b>" not in h.split("<br>", 1)[0] for h in _hover_text(fig))
         html = draw_subject_source_diagram(subjects=evil, subjectsources=subjectsources, sources=sources)
         assert "</script><b>" not in html
 
-    def test_text_is_selectable_and_copies_full_labels(self, subjectsources, sources):
+    def test_long_labels_are_truncated_but_hover_shows_full_name(self, subjectsources, sources):
         long_name = pd.DataFrame([{"id": "amani", "name": "A very long subject name that gets truncated"}])
-        html = draw_subject_source_diagram(subjects=long_name, subjectsources=subjectsources, sources=sources)
-        assert "user-select: text" in html
-        assert 'data-full="A very long subject name that gets truncated"' in html
-        assert 'addEventListener("copy"' in html
-        # text is HTML, not SVG <text>, so selection works the same in every browser
-        assert "<text" not in html.split('<div class="diagram"', 1)[1]
+        fig = _figure(long_name, subjectsources, sources)
+        assert "A very long subject name th…" in _text_trace(fig)[0].text
+        assert any(h.startswith("A very long subject name that gets truncated<br>") for h in _hover_text(fig))
 
-    def test_clicked_pill_details_list_id_fields_and_assignments(self, subjects, subjectsources, sources):
+    def test_pill_details_list_id_fields_and_assignments(self, subjects, subjectsources, sources):
         nodes, edges = build_subject_source_graph(subjects, subjectsources, sources)
-        layout = layout_subject_source_diagram(nodes, edges)
-        details = node_details(layout)
-        amani = details[f"s-{[n['label'] for n in layout['subjects']].index('Amani')}"]
+        details = node_details(layout_subject_source_diagram(nodes, edges))
+        amani = details["subject:amani"]
         assert amani.splitlines()[:2] == ["Amani", "ID: amani"]
         assert "Sources:" in amani
         assert "2024-03-01 → present" in amani
-        lonely = details[f"s-{[n['label'] for n in layout['subjects']].index('Lonely')}"]
-        assert lonely.endswith("Sources: none")
+        assert details["subject:lonely"].endswith("Sources: none")
 
-    def test_details_json_cannot_close_the_script_tag(self, subjectsources, sources):
-        evil = pd.DataFrame([{"id": "amani", "name": "</script><b>x</b>"}])
-        html = draw_subject_source_diagram(subjects=evil, subjectsources=subjectsources, sources=sources)
-        details = html.split('class="node-details">', 1)[1].split("</script>", 1)[0]
-        assert "<" not in details and "\\u003c/script\\u003e" in details
+    def test_hovering_a_pill_shows_its_details(self, subjects, subjectsources, sources):
+        hover = _hover_text(_figure(subjects, subjectsources, sources))
+        assert any(h.startswith("Amani<br>ID: amani<br>") for h in hover)
+        assert any(h == "Amani → ST-1001<br>2024-03-01 → present" for h in hover)
 
 
 class TestRegressions:
@@ -367,22 +396,24 @@ class TestStyles:
         )
 
     def test_custom_styles_are_rendered(self, subjects, subjectsources, sources):
-        html = draw_subject_source_diagram(
-            subjects=subjects,
-            subjectsources=subjectsources,
-            sources=sources,
+        fig = _figure(
+            subjects,
+            subjectsources,
+            sources,
             node_style=NodeStyle(subject_fill="#ff00aa", unlinked_border_color="purple"),
             link_style=LinkStyle(current_color="rgb(1, 2, 3)", ended_dash=""),
             layout_style=DiagramLayoutStyle(font_family="Georgia, serif", subject_header="Animals", showlegend=False),
         )
-        assert 'fill="#ff00aa"' in html
-        assert 'stroke="purple"' in html
-        assert 'stroke="rgb(1, 2, 3)"' in html
-        assert "stroke-dasharray" not in html
-        assert "font-family: Georgia, serif" in html
-        assert ">Animals</span>" in html
-        assert 'class="legend"' not in html
-        assert 'fill="#dbeafe"' not in html
+        pills = [t for t in fig.data if t.fill == "toself"]
+        lines = [t for t in fig.data if t.mode == "lines" and t.fill is None]
+        assert "#ff00aa" in {t.fillcolor for t in pills}
+        assert "#dbeafe" not in {t.fillcolor for t in pills}
+        assert "purple" in {t.line.color for t in pills}
+        assert "rgb(1, 2, 3)" in {t.line.color for t in lines}
+        assert {t.line.dash for t in lines} == {"solid"}
+        assert fig.layout.font.family == "Georgia, serif"
+        assert "<b>ANIMALS</b>" in _annotations(fig)
+        assert fig.layout.showlegend is False
 
     def test_styles_accept_spec_style_dicts(self):
         # Workflow specs pass styles as plain mappings; pydantic fills in the rest.
@@ -391,14 +422,17 @@ class TestStyles:
         assert style.subject_fill == "#dbeafe"
 
     def test_legend_uses_active_colors(self, subjects, subjectsources, sources):
-        html = draw_subject_source_diagram(
-            subjects=subjects,
-            subjectsources=subjectsources,
-            sources=sources,
-            link_style=LinkStyle(bad_date_color="#123456"),
-        )
-        legend = html[html.index('class="legend"') : html.index('class="scroll"')]
-        assert "#123456" in legend
+        fig = _figure(subjects, subjectsources, sources, link_style=LinkStyle(bad_date_color="#123456"))
+        legend = {t.name: t for t in fig.data if t.showlegend is not False}
+        assert legend["bad date"].line.color == "#123456"
+        assert set(legend) == {"current", "ended", "bad date", "no link", "inactive subject", "source not found"}
+
+    @pytest.mark.parametrize(
+        ("dash", "expected"),
+        [("4 3", "4px,3px"), ("4,3,1", "4px,3px,1px"), ("", "solid")],
+    )
+    def test_dash_pattern_converts_to_plotly(self, dash, expected):
+        assert plotly_dash(dash) == expected
 
     @pytest.mark.parametrize(
         "bad",

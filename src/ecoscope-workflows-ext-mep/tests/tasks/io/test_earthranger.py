@@ -77,6 +77,21 @@ class TestGetSubjects:
         assert call["tracks"] is True
         assert call["max_ids_per_request"] == 25
 
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_blank_subject_group_name_is_treated_as_all_groups(self, blank):
+        client = _FakeClient(pd.DataFrame({"name": ["a"]}))
+
+        get_subjects(client=client, subject_group_name=blank)
+
+        assert client.calls[0]["subject_group_name"] is None
+
+    def test_no_subject_group_name_passes_none(self):
+        client = _FakeClient(pd.DataFrame({"name": ["a"]}))
+
+        get_subjects(client=client)
+
+        assert client.calls[0]["subject_group_name"] is None
+
     def test_raise_on_empty_true_and_empty_result_raises(self):
         client = _FakeClient(pd.DataFrame())
 

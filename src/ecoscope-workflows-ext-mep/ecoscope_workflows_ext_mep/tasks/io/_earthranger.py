@@ -54,6 +54,11 @@ def get_subjects(
 ) -> AnyDataFrame:
     """Fetch subjects from EarthRanger with filtering options."""
 
+    # A blank group name means "all groups". ecoscope only drops None, so an empty
+    # string would reach ER as `group_name=` and silently match the first group.
+    if subject_group_name is not None and not subject_group_name.strip():
+        subject_group_name = None
+
     df = client.get_subjects(
         include_inactive=include_inactive,
         bbox=bbox,
