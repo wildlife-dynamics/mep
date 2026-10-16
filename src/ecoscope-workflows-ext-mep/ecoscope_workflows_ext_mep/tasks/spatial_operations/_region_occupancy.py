@@ -4,7 +4,6 @@ import geopandas as gpd
 import pandas as pd
 from ecoscope.platform.annotations import AdvancedField, AnyDataFrame, AnyGeoDataFrame
 from pydantic import Field
-from shapely.geometry import Polygon
 from wt_registry import register
 
 # Columns tried, in order, for region names when no `region_column` is given.
