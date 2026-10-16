@@ -57,13 +57,12 @@ def compute_region_occupancy(
         ),
     ] = "subject_name",
 ) -> AnyDataFrame:
-    """The share of each subject's home range (its `percentile` time density range) that falls in each region.
+    """How much of each region each subject's home range (its `percentile` time density range) covers.
 
-    Returns one row per subject and region: `region`, `region_area_sqkm` (the whole region; empty for the
-    outside row), `area_sqkm` (home range inside the region), `home_range_sqkm` and `occupancy_pct`.
-    Regions may overlap, so their percentages can add up to more than 100. The "Outside regions" row is
-    the part of the range in no region at all, so it never double counts. Areas are measured in meters
-    in the local UTM zone of the ranges.
+    Returns one row per subject and region: `region`, `region_area_sqkm` (the whole region), `area_sqkm`
+    (the part of the region inside the home range) and `occupancy_pct` (`area_sqkm / region_area_sqkm * 100`).
+    Regions with no area, such as lines or points, are skipped. Areas are measured in meters in the local
+    UTM zone of the ranges.
     """
     from shapely import make_valid
 
@@ -85,6 +84,8 @@ def compute_region_occupancy(
     ).to_crs(crs)
     regions = regions[_has_area(regions.geometry)]
     regions = regions.assign(geometry=regions.geometry.map(make_valid)).dissolve(by="region", sort=False)
+    # Lines and points have no area, so there is nothing to take a share of.
+    regions = regions[regions.area > 0]
     by_subject = ranges.groupby(subject_column, sort=False) if subject_column in ranges.columns else [(None, ranges)]
 
     rows = []
@@ -100,7 +101,7 @@ def compute_region_occupancy(
                 {
                     **row,
                     "region": region,
-                    "region_area_sqkm": None if region_area is None else round(region_area / 1e6, 3),
+                    "region_area_sqkm": round(region_area / 1e6, 3),
                     "area_sqkm": round(area / 1e6, 3),
                     "occupancy_pct": round(100 * area / region_area, 1),
                 }
