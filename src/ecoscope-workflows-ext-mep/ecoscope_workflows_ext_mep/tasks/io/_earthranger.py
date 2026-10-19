@@ -3,7 +3,6 @@ from typing import Annotated, cast
 from ecoscope.platform.annotations import AdvancedField, AnyDataFrame, AnyGeoDataFrame
 from ecoscope.platform.connections import EarthRangerClient
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic.json_schema import SkipJsonSchema
 from wt_registry import register
 
 # Columns every feature GeoDataFrame starts with, whichever endpoint the features came from.
@@ -301,13 +300,15 @@ def get_features_by_id(
 
 class FeaturesBySet(BaseModel):
     model_config = ConfigDict(title="Feature sets", extra="forbid")
+    # An empty list (not None) means every set, so the form's list starts empty rather than null.
     feature_set_names: Annotated[
-        list[str] | SkipJsonSchema[None],
+        list[str],
         Field(
+            default=[],
             title="Feature set names",
             description="Names of the feature sets to fetch, e.g. Boundaries. Leave empty to fetch every set.",
         ),
-    ] = None
+    ] = []
 
 
 class FeaturesByType(BaseModel):
