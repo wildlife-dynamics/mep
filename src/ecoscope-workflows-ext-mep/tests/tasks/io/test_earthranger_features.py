@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 from erclient.client import ERClientNotFound
-from pydantic import TypeAdapter, ValidationError
+from pydantic import TypeAdapter
 
 from ecoscope_workflows_ext_mep.tasks.io._earthranger import (
     FEATURE_COLUMNS,
@@ -172,14 +172,19 @@ class TestGetFeatures:
     def test_default_is_every_feature_set(self, client):
         assert len(get_features(client=client)) == 3
 
-    def test_selection_matches_exactly_one_option(self):
+    def test_selection_picks_the_option_whose_field_is_given(self):
         adapter = TypeAdapter(FeatureSelection)
 
         assert isinstance(adapter.validate_python({"feature_type_names": ["Park"]}), FeaturesByType)
         assert isinstance(adapter.validate_python({"feature_ids": ["x"]}), FeaturesById)
-        assert isinstance(adapter.validate_python({}), FeaturesBySet)
-        with pytest.raises(ValidationError):
-            adapter.validate_python({"feature_type_names": ["Park"], "feature_ids": ["x"]})
+        assert adapter.validate_python({}) == FeaturesBySet(feature_set_names=[])
+
+    def test_form_options_allow_extra_fields(self):
+        # Ecoscope Desktop validates with AJV's removeAdditional; `additionalProperties: false` on the
+        # options would make it delete the list from the form data, so Add appeared to do nothing.
+        schema = TypeAdapter(FeatureSelection).json_schema()
+
+        assert all("additionalProperties" not in option for option in schema["$defs"].values())
 
     def test_form_offers_the_three_options(self):
         schema = TypeAdapter(FeatureSelection).json_schema()

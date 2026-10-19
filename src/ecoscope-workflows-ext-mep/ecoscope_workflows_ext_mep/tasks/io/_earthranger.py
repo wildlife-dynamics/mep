@@ -299,7 +299,7 @@ def get_features_by_id(
 
 
 class FeaturesBySet(BaseModel):
-    model_config = ConfigDict(title="Feature sets", extra="forbid")
+    model_config = ConfigDict(title="Feature sets")
     # An empty list (not None) means every set, so the form's list starts empty rather than null.
     feature_set_names: Annotated[
         list[str],
@@ -312,7 +312,7 @@ class FeaturesBySet(BaseModel):
 
 
 class FeaturesByType(BaseModel):
-    model_config = ConfigDict(title="Feature types", extra="forbid")
+    model_config = ConfigDict(title="Feature types")
     feature_type_names: Annotated[
         list[str],
         Field(
@@ -322,13 +322,15 @@ class FeaturesByType(BaseModel):
 
 
 class FeaturesById(BaseModel):
-    model_config = ConfigDict(title="Feature IDs", extra="forbid")
+    model_config = ConfigDict(title="Feature IDs")
     feature_ids: Annotated[
         list[str], Field(title="Feature IDs", description="IDs of the EarthRanger features to fetch.")
     ]
 
 
-# Each option forbids the others' fields, so the form's data always matches exactly one of them.
+# The options don't forbid extra fields (no `additionalProperties: false`): Ecoscope Desktop validates with
+# AJV's removeAdditional, which would then delete the list from the form data while RJSF tries each option.
+# Pydantic still picks the option whose field is given.
 FeatureSelection = FeaturesBySet | FeaturesByType | FeaturesById
 
 
