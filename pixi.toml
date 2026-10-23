@@ -25,9 +25,9 @@ graphviz = "*"
 imageio-ffmpeg="*"
 
 [feature.compile.dependencies]
-#ecoscope-workflows-ext-mep = "*"
-ecoscope-workflows-ext-ste ="0.0.0rc1.*"
-ecoscope-workflows-ext-custom = "0.1.0rc14.*"
+ecoscope-workflows-ext-mep = "*"
+ecoscope-workflows-ext-ste ="0.0.24.*"
+ecoscope-workflows-ext-custom = "0.1.4.*"
 
 graphviz = "*"
 wt-compiler = "==0.8.0"

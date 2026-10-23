@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 
 import geopandas as gpd
 import pytest
 from shapely.geometry import LineString
 
+from ecoscope_workflows_ext_mep.tasks.animate._animate import camera_panel_schema
 from ecoscope_workflows_ext_mep.tasks.animate._draw_map import (
     LayerDefinition,
     TimelineAnimation,
@@ -48,11 +48,17 @@ def trips_layer():
     return LayerDefinition(layer_type="TripsLayer", layer_style=style, legend=None, geodataframe=gdf)
 
 
+def _widget_props(html: str) -> dict:
+    """The TimelineAnimationWidget's props, from the pydeck spec embedded in the page."""
+    start = html.index("window.jsonInput = ") + len("window.jsonInput = ")
+    spec, _ = json.JSONDecoder().raw_decode(html, start)
+    return next(w for w in spec["widgets"] if w["@@type"] == "TimelineAnimationWidget")
+
+
 def _page_settings(html: str) -> tuple[dict, dict]:
-    """The trips layer spec and the sun settings the page script was given."""
-    specs = json.loads(re.search(r"const LAYER_SPECS\s+= (\[.*?\]);\n", html).group(1))
-    sun = json.loads(re.search(r"const SUN\s+= (\{.*?\});", html).group(1))
-    return specs[0], sun
+    """The trips layer spec and the sun settings the widget was given."""
+    props = _widget_props(html)
+    return props["layerSpecs"][0], props["sun"]
 
 
 def _draw(layer, animation, **timeline):
@@ -147,8 +153,7 @@ class TestPageSettings:
     def test_clock_offset_reaches_the_page(self, trips_layer):
         controls = create_playback_controls(utc_offset_hours=3)
         html = _draw(trips_layer, TripsAnimation(), controls=controls)
-        page_controls = json.loads(re.search(r"const CONTROLS\s+= (\{.*?\});", html).group(1))
-        assert page_controls["utc_offset_hours"] == 3
+        assert _widget_props(html)["controls"]["utc_offset_hours"] == 3
 
     def test_gap_hours_become_seconds(self, trips_layer):
         spec, _ = _page_settings(_draw(trips_layer, TripsAnimation(gap_hours=2.5)))
@@ -164,6 +169,22 @@ class TestPageSettings:
         assert spec["labelCol"] == "" and spec["tipCol"] == ""
         assert "nickname" in caplog.text
 
-    def test_no_placeholder_is_left_unfilled(self, trips_layer):
+    def test_timeline_reaches_the_widget(self, trips_layer):
+        props = _widget_props(_draw(trips_layer, TripsAnimation(), duration_s=12, fps_limit=30))
+        assert (props["durationS"], props["fpsLimit"], props["autoRotateSpeed"]) == (12, 30, 0)
+        assert props["t0"] == 1_790_000_000.0 and props["maxTime"] == pytest.approx(60_000 * 1.02)
+
+    def test_camera_panel_widget_gets_the_camera_schema(self, trips_layer):
         html = _draw(trips_layer, TripsAnimation())
-        assert not re.search(r"__[A-Z_]+__", html.split("const LAYER_SPECS", 1)[1].split("</script>", 1)[0])
+        spec = json.JSONDecoder().raw_decode(html, html.index("window.jsonInput = ") + len("window.jsonInput = "))[0]
+        panel = next(w for w in spec["widgets"] if w["@@type"] == "CameraPanelWidget")
+        assert panel["cameras"] == camera_panel_schema()
+        assert "window.__cam = " in html
+
+    def test_no_camera_panel_without_the_camera_button(self, trips_layer):
+        html = _draw(trips_layer, TripsAnimation(), controls=create_playback_controls(show_camera=False))
+        assert "CameraPanelWidget" not in html and "window.__cam = " not in html
+
+    def test_widget_bundle_is_registered(self, trips_layer):
+        html = _draw(trips_layer, TripsAnimation())
+        assert "my-deck-widgets" in html and "<script>\n// === Timeline animation" not in html

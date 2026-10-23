@@ -9,7 +9,7 @@ from ecoscope_workflows_ext_custom.tasks.results._map import (
     LayerStyleBase,
     ColorAccessor,
     PydeckString,
-    LayerDefinition,
+    PydeckLayerDefinition,
     FloatAccessor,
     UnitType,
     TextAnchor,
@@ -30,7 +30,7 @@ from ecoscope_workflows_ext_custom.tasks.results._map import (
     BitmapLayerDefinition,
     LegendStyle,
     ViewState,
-    _model_dump_with_pydeck_literals,
+    _model_dump_for_pydeck,
     LegendSegment,
     LegendFromDataframe,
     PYDECK_CUSTOM_LIBRARIES,
@@ -368,7 +368,7 @@ def create_clustered_labeled_scatterplot_layer(
             "legend instead of colour swatches.",
         ),
     ] = None,
-) -> Annotated[LayerDefinition, Field()]:
+) -> Annotated[PydeckLayerDefinition, Field()]:
     """
     Creates a clustered labeled scatterplot layer definition.
 
@@ -379,7 +379,7 @@ def create_clustered_labeled_scatterplot_layer(
     expects an in-memory ``geodataframe`` rather than a ``data_url`` (a URL is not
     fetched-and-clustered by the layer).
     """
-    return LayerDefinition(
+    return PydeckLayerDefinition(
         layer_type="ClusteredLabeledScatterplotLayer",
         layer_style=layer_style or ClusteredLabeledScatterplotLayerStyle(),
         legend=legend,
@@ -415,7 +415,7 @@ def create_trips_layer(
             description="If present, includes this layer in the map legend",
         ),
     ] = None,
-) -> Annotated[LayerDefinition, Field()]:
+) -> Annotated[PydeckLayerDefinition, Field()]:
     """
     Creates an animated trips layer definition based on the provided configuration.
 
@@ -423,7 +423,7 @@ def create_trips_layer(
     trail_length and current_time are derived from the timeline span of the
     timestamps column referenced by layer_style.get_timestamps.
     """
-    return LayerDefinition(
+    return PydeckLayerDefinition(
         layer_type="TripsLayer",
         layer_style=layer_style,
         legend=legend,
@@ -455,7 +455,7 @@ def create_head_marker_layer(
     size_scale: Annotated[float, AdvancedField(default=50.0)] = 50.0,
     size_min_pixels: Annotated[float, AdvancedField(default=12.0)] = 12.0,
     size_max_pixels: Annotated[float | SkipJsonSchema[None], AdvancedField(default=None)] = None,
-) -> Annotated[LayerDefinition, Field()]:
+) -> Annotated[PydeckLayerDefinition, Field()]:
     """
     Builds the initial (frame-0) head-marker layer from a trips geodataframe: a
     flat dot (ScatterplotLayer) by default, or a 3D glTF model (ScenegraphLayer)
@@ -496,7 +496,7 @@ def create_head_marker_layer(
         )
         layer_type = "ScenegraphLayer"
 
-    return LayerDefinition(
+    return PydeckLayerDefinition(
         layer_type=layer_type,
         layer_style=style,
         legend=None,
@@ -507,7 +507,7 @@ def create_head_marker_layer(
 @register()
 def draw_map(
     geo_layers: Annotated[
-        LayerDefinition | list[LayerDefinition] | SkipJsonSchema[None],
+        PydeckLayerDefinition | list[PydeckLayerDefinition] | SkipJsonSchema[None],
         BeforeValidator(_unwrap),
         Field(description="A list of map layers to add to the map.", exclude=True),
     ] = None,
@@ -578,7 +578,7 @@ def draw_map(
     Creates a map based on the provided layer definitions and configuration.
 
     Args:
-    geo_layers (LayerDefinition | list[LayerDefinition] | None): Map layers to add to the map.
+    geo_layers (PydeckLayerDefinition | list[PydeckLayerDefinition] | None): Map layers to add to the map.
     tile_layers (list): A named tile layer, ie OpenStreetMap.
     static (bool): Set to true to disable map pan/zoom.
     title (str): The map title.
@@ -622,7 +622,7 @@ def draw_map(
 
     for tile_layer in tile_layers:
         if isinstance(tile_layer, BitmapLayerDefinition):
-            dump = _model_dump_with_pydeck_literals(tile_layer)
+            dump = _model_dump_for_pydeck(tile_layer)
             dump.pop("legend", None)
             layer = pdk.Layer("BitmapLayer", **dump)
             map_layers.append(layer)
@@ -645,7 +645,7 @@ def draw_map(
     # Normalize geo_layers to a list
     if geo_layers is None:
         geo_layers = []
-    elif isinstance(geo_layers, LayerDefinition):
+    elif isinstance(geo_layers, PydeckLayerDefinition):
         geo_layers = [geo_layers]
     for layer_def in geo_layers:
         # Rendering: prefer data_url if set, fall back to geodataframe
@@ -663,7 +663,7 @@ def draw_map(
                 )
             data = gdf
 
-        style_dump = _model_dump_with_pydeck_literals(layer_def.layer_style)
+        style_dump = _model_dump_for_pydeck(layer_def.layer_style)
         style_dump = {k: _camel_case_nested_dicts(v) for k, v in style_dump.items()}
         layer = pdk.Layer(
             type=layer_def.layer_type,
