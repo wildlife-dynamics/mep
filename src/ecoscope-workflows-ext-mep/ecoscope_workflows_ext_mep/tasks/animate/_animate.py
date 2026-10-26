@@ -1,7 +1,9 @@
 import asyncio
+import hashlib
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +19,21 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from pydantic.json_schema import SkipJsonSchema
 
 _browsers_ensured = False
+
+
+def _use_bundled_chromium() -> None:
+    """Point Playwright at a Chromium bundled in the environment (the playwright-chromium-headless-shell
+    conda package installs it under <env>/share/ms-playwright), so nothing is downloaded at run time.
+    Its activation script sets PLAYWRIGHT_BROWSERS_PATH; this covers launches that skip activation."""
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        return
+    bundled = Path(sys.prefix) / "share" / "ms-playwright"
+    if bundled.is_dir() and any(bundled.iterdir()):
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(bundled)
+        # Linux: the env's fonts, or the browser draws no text where the system has no /etc/fonts.
+        fonts_conf = Path(sys.prefix) / "etc" / "fonts" / "fonts.conf"
+        if sys.platform.startswith("linux") and fonts_conf.exists():
+            os.environ.setdefault("FONTCONFIG_FILE", str(fonts_conf))
 
 
 def _ensure_playwright_browsers(force: bool = False) -> None:
@@ -60,6 +77,9 @@ _RESOLUTION_PRESETS = {
     "720p": (1280, 720),
     "1080p": (1920, 1080),
     "4k": (3840, 2160),
+    "720p-vertical": (720, 1280),  # 9:16, for Reels / Shorts / WhatsApp status
+    "1080p-vertical": (1080, 1920),
+    "1080p-square": (1080, 1080),  # 1:1
 }
 
 
@@ -68,8 +88,13 @@ class PresetResolution(BaseModel):
 
     model_config = ConfigDict(json_schema_extra={"title": "Preset"})
     preset: Annotated[
-        Literal["720p", "1080p", "4k"],
-        Field(default="720p", title="Resolution", description="Common output video resolution preset."),
+        Literal["720p", "1080p", "4k", "720p-vertical", "1080p-vertical", "1080p-square"],
+        Field(
+            default="720p",
+            title="Resolution",
+            description="Common output video resolution preset: landscape 16:9 (720p, 1080p, 4k), "
+            "vertical 9:16 for phone stories and reels (720p-vertical, 1080p-vertical) or square 1:1 (1080p-square).",
+        ),
     ] = "720p"
 
 
@@ -100,613 +125,146 @@ def _resolve_resolution(resolution: ResolutionConfig) -> tuple[int, int]:
     return _RESOLUTION_PRESETS[resolution.preset]
 
 
-class CameraKeyframe(BaseModel):
-    """One waypoint on a user-defined camera path.
+# Cameras are described the Google Maps 3D way (camera-position and altitude-modes docs): a center
+# the camera looks at, its range (distance in metres), tilt, heading and lens angle (fov), and an
+# altitude mode for the center's height. The page converts that to deck's view state.
+AltitudeMode = Literal["clamp_to_ground", "relative_to_ground", "absolute"]
 
-    Only ``lon``/``lat`` are required. ``t`` places the keyframe on the clip
-    timeline (0 = first captured frame, 1 = last); when omitted on every
-    keyframe they are spaced evenly. ``zoom``/``pitch``/``bearing`` left as
-    None are interpolated between the nearest keyframes that define them, or
-    fall back to the whole-scene framing (zoom) and the map's pitch/bearing.
-    """
-
-    lon: Annotated[float, Field(description="Longitude of the camera look-at point.")]
-    lat: Annotated[float, Field(description="Latitude of the camera look-at point.")]
-    t: Annotated[
-        float | None,
-        Field(
-            default=None,
-            description="Position on the clip timeline (0 = start, 1 = end). "
-            "Any monotonically increasing numbers work (they are normalized to 0–1); "
-            "leave blank on every keyframe to space them evenly.",
-        ),
-    ] = None
-    zoom: Annotated[
-        float | None,
-        Field(
-            default=None,
-            description="Zoom level at this keyframe. Leave blank to blend from neighbouring keyframes, "
-            "or fit the whole scene if none set it.",
-        ),
-    ] = None
-    pitch: Annotated[
-        float | None,
-        Field(
-            default=None,
-            description="Camera tilt in degrees at this keyframe. Leave blank to blend from neighbouring keyframes, "
-            "or use the map's pitch if none set it.",
-        ),
-    ] = None
-    bearing: Annotated[
-        float | None,
-        Field(
-            default=None,
-            description="Camera heading in degrees at this keyframe. Leave blank to blend from neighbouring "
-            "keyframes, or use the map's bearing if none set it.",
-        ),
-    ] = None
-
-
-_KF_CHANNELS = ("zoom", "pitch", "bearing")
-
-
-def _load_keyframes_file(path: str) -> list[dict]:
-    """Load camera keyframes from a .json (list of objects), .geojson
-    (Point features; t/zoom/pitch/bearing read from properties), or .csv/.tsv
-    (lon/lat columns, optional t/zoom/pitch/bearing columns) file."""
-    import csv
-    import json
-
-    p = Path(remove_file_scheme(path))
-    suffix = p.suffix.lower()
-
-    def norm(d: dict) -> dict:
-        out: dict = {}
-        for key, aliases in (
-            ("lon", ("lon", "longitude", "lng", "x")),
-            ("lat", ("lat", "latitude", "y")),
-            ("t", ("t", "time", "frac")),
-            ("zoom", ("zoom",)),
-            ("pitch", ("pitch",)),
-            ("bearing", ("bearing", "heading")),
-        ):
-            for a in aliases:
-                if a in d and d[a] not in (None, ""):
-                    out[key] = float(d[a])
-                    break
-        return out
-
-    if suffix in (".json", ".geojson"):
-        data = json.loads(p.read_text())
-        if isinstance(data, dict) and data.get("type") == "FeatureCollection":
-            rows = []
-            for f in data.get("features", []):
-                g = f.get("geometry") or {}
-                if g.get("type") != "Point":
-                    continue
-                d = {str(k).lower(): v for k, v in (f.get("properties") or {}).items()}
-                d["lon"], d["lat"] = g["coordinates"][:2]
-                rows.append(norm(d))
-            return rows
-        if isinstance(data, list):
-            return [norm({str(k).lower(): v for k, v in d.items()}) for d in data]
-        raise ValueError(f"Unsupported keyframe JSON structure in {path}")
-    if suffix in (".csv", ".tsv"):
-        with open(p, newline="") as fh:
-            reader = csv.DictReader(fh, delimiter="\t" if suffix == ".tsv" else ",")
-            return [norm({(k or "").strip().lower(): v for k, v in row.items()}) for row in reader]
-    raise ValueError(f"Unsupported keyframe file type: {path} (use .json, .geojson, .csv, or .tsv)")
-
-
-def _resolve_keyframes(raw: list[dict], base_view: dict) -> list[dict]:
-    """Turn sparse user keyframes into a complete, sorted camera path.
-
-    - Missing ``t`` -> even spacing; any monotone times are normalized to 0–1.
-    - Missing zoom/pitch/bearing -> interpolated between the nearest keyframes
-      that define them (held flat past the ends). When no keyframe defines a
-      channel, pitch/bearing come from the map and zoom stays None for the page
-      to fill with the whole-scene framing at the video's size.
-    - Bearings are unwrapped so in-browser lerp always rotates the short way.
-    """
-    kf = [dict(k) for k in raw]
-    if len(kf) < 2:
-        raise ValueError("camera='keyframes' needs at least 2 keyframes")
-    for k in kf:
-        if k.get("lon") is None or k.get("lat") is None:
-            raise ValueError(f"keyframe is missing lon/lat: {k}")
-    n = len(kf)
-    if any(k.get("t") is None for k in kf):
-        for i, k in enumerate(kf):
-            k["t"] = i / (n - 1)
-    kf.sort(key=lambda k: k["t"])
-    t0, t1 = kf[0]["t"], kf[-1]["t"]
-    if t1 > t0:
-        for k in kf:
-            k["t"] = (k["t"] - t0) / (t1 - t0)
-    defaults = {
-        "zoom": None,
-        "pitch": base_view.get("pitch", 0),
-        "bearing": base_view.get("bearing", 0),
-    }
-    for ch in _KF_CHANNELS:
-        idxs = [i for i, k in enumerate(kf) if k.get(ch) is not None]
-        if not idxs:
-            for k in kf:
-                k[ch] = defaults[ch]
-            continue
-        if ch == "bearing":  # unwrap defined values -> shortest-path rotation
-            for a, b in zip(idxs, idxs[1:]):
-                d = (kf[b][ch] - kf[a][ch] + 180) % 360 - 180
-                kf[b][ch] = kf[a][ch] + d
-        for i in range(idxs[0]):  # hold flat before the first defined value
-            kf[i][ch] = kf[idxs[0]][ch]
-        for i in range(idxs[-1] + 1, n):  # ...and after the last
-            kf[i][ch] = kf[idxs[-1]][ch]
-        for a, b in zip(idxs, idxs[1:]):  # linear fill between defined values
-            span_t = max(kf[b]["t"] - kf[a]["t"], 1e-9)
-            for i in range(a + 1, b):
-                fr = (kf[i]["t"] - kf[a]["t"]) / span_t
-                kf[i][ch] = kf[a][ch] + (kf[b][ch] - kf[a][ch]) * fr
-    return [
-        {"t": k["t"], "lon": k["lon"], "lat": k["lat"], "zoom": k["zoom"], "pitch": k["pitch"], "bearing": k["bearing"]}
-        for k in kf
-    ]
-
-
-def keyframes_from_gdf(
-    gdf,
-    subject: str | int | None = None,
-    n_keyframes: int = 12,
-    bearing_from_travel: bool = False,
-    smooth_window: int = 3,
-    span: float | None = None,
-) -> list[CameraKeyframe]:
-    """Derive camera keyframes from a trajectory GeoDataFrame.
-
-    Expects the same shape the animated TripsLayer is built from: one row per
-    subject with a ``timestamps`` sequence and a (2D or Z) LineString whose
-    vertices align with those timestamps. Zoom is left to the renderer's framing
-    and pitch to the map.
-
-    - ``subject``: row to follow — a value in any column (e.g. its name or group id),
-      a positional index, ``"all"`` for the mean position of every subject, or
-      None to pick the longest-running track.
-    - Keyframe ``t`` is the time since the earliest timestamp divided by ``span``
-      (default: the gdf's full time range) — the same timeline the animation plays
-      over — so the camera is where the subject is *at that moment*. If other
-      animated layers start earlier, or you trim with start_frac/end_frac, pass
-      span accordingly.
-    - ``bearing_from_travel``: also set each keyframe's bearing to the local
-      direction of travel (the resolver unwraps them for shortest rotation).
-    - ``smooth_window``: odd rolling-mean width applied to the sampled lon/lat
-      to keep the camera from inheriting GPS jitter. 0/1 disables.
-    """
-    import numpy as np
-
-    if n_keyframes < 2:
-        raise ValueError("n_keyframes must be >= 2")
-
-    def track(row):
-        T = np.asarray(list(row.timestamps), dtype=float)
-        C = np.asarray(row.geometry.coords, dtype=float)[:, :2]  # drop Z
-        if len(T) != len(C):
-            m = min(len(T), len(C))
-            T, C = T[:m], C[:m]
-        order = np.argsort(T)
-        return T[order], C[order]
-
-    tracks = [track(r) for r in gdf.itertuples(index=False)]
-    if not tracks:
-        raise ValueError("gdf has no rows")
-    t_start = min(float(T[0]) for T, _ in tracks if len(T))
-    global_span = float(span) if span else max(float(T[-1]) for T, _ in tracks if len(T)) - t_start
-    if global_span <= 0:
-        raise ValueError("could not determine a positive time span from the gdf")
-
-    if isinstance(subject, str) and subject != "all":
-        attrs = gdf.drop(columns=[gdf.geometry.name, "timestamps"], errors="ignore").astype(str)
-        mask = (attrs == subject).any(axis=1)
-        if not mask.any():
-            raise ValueError(f"subject {subject!r} not found in any column")
-        chosen = [tracks[i] for i in np.flatnonzero(mask.to_numpy())][:1]
-    elif subject == "all":
-        chosen = tracks
-    elif isinstance(subject, int):
-        chosen = [tracks[subject]]
-    else:  # None -> longest-running track
-        chosen = [max(tracks, key=lambda tc: tc[0][-1] if len(tc[0]) else -1)]
-
-    t0 = min(float(T[0]) for T, _ in chosen)
-    t1 = max(float(T[-1]) for T, _ in chosen)
-    sample_times = np.linspace(t0, t1, n_keyframes)
-
-    def at(T, C, ts):
-        return np.stack([np.interp(ts, T, C[:, 0]), np.interp(ts, T, C[:, 1])], axis=1)
-
-    pts = np.mean([at(T, C, sample_times) for T, C in chosen], axis=0)
-
-    w = int(smooth_window)
-    if w > 1:
-        if w % 2 == 0:
-            w += 1
-        pad = w // 2
-        padded = np.pad(pts, ((pad, pad), (0, 0)), mode="edge")
-        kernel = np.ones(w) / w
-        pts = np.stack([np.convolve(padded[:, 0], kernel, "valid"), np.convolve(padded[:, 1], kernel, "valid")], axis=1)
-
-    bearings: list[float | None] = [None] * n_keyframes
-    if bearing_from_travel:
-        for i in range(n_keyframes):
-            a = pts[max(0, i - 1)], pts[min(n_keyframes - 1, i + 1)]
-            dx = (a[1][0] - a[0][0]) * np.cos(np.radians((a[0][1] + a[1][1]) / 2))
-            dy = a[1][1] - a[0][1]
-            bearings[i] = float(np.degrees(np.arctan2(dx, dy))) if (dx or dy) else None
-
-    return [
-        CameraKeyframe(
-            lon=float(pts[i, 0]),
-            lat=float(pts[i, 1]),
-            t=float(min(1.0, max(0.0, (sample_times[i] - t_start) / global_span))),
-            bearing=bearings[i],
-        )
-        for i in range(n_keyframes)
-    ]
-
-
-@register()
-def derive_camera_keyframes(
-    trajectory_gdf: Annotated[
-        object,
-        Field(description="Trajectory GeoDataFrame with per-subject LineString geometry and a 'timestamps' column."),
-    ],
-    subject: Annotated[
-        str | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            description="Subject to follow: its value in any column (e.g. name or group id), 'all' for the group "
-            "mean position, or empty for the longest-running track.",
-        ),
-    ] = None,
-    n_keyframes: Annotated[
-        int, AdvancedField(default=12, ge=2, description="Number of camera keyframes to sample along the track.")
-    ] = 12,
-    bearing_from_travel: Annotated[
-        bool,
-        AdvancedField(default=False, description="Rotate the camera to face the subject's direction of travel."),
-    ] = False,
-    smooth_window: Annotated[
-        int,
-        AdvancedField(default=3, ge=0, description="Rolling-mean window (keyframes) to smooth GPS jitter. 0 = off."),
-    ] = 0,
-) -> list[CameraKeyframe]:
-    """Auto-generate camera keyframes for render_animation from a trajectory gdf."""
-    return keyframes_from_gdf(
-        trajectory_gdf,
-        subject=subject,
-        n_keyframes=n_keyframes,
-        bearing_from_travel=bearing_from_travel,
-        smooth_window=smooth_window,
-    )
-
-
-# Every camera frames whatever is animating -- trips, points, polygons -- at the video's
-# own size, with the map's pitch and bearing; this nudges that automatic framing.
-ZoomOffset = Annotated[
-    float,
-    AdvancedField(default=0.0, description="Zoom levels added to the automatic framing (+1 = twice as close)."),
-]
-SubjectFilter = Annotated[
-    list[str] | SkipJsonSchema[None],
-    AdvancedField(
-        default=None,
-        description="Only frame these subjects (their value in any column, e.g. names), zooming out as they spread "
-        "apart. Leave blank for everything that animates.",
-    ),
-]
-SubjectName = Annotated[
-    str | SkipJsonSchema[None],
+Range = Annotated[
+    float | SkipJsonSchema[None],
     Field(
         default=None,
-        description="Value identifying the subject in any column (e.g. its name or group id). "
-        "Leave blank to use the longest-running track.",
+        gt=0,
+        title="Range (m)",
+        description="Camera distance from the center in metres. Leave blank to fit the data in the frame.",
     ),
 ]
-SpeedZoom = Annotated[
-    float,
-    AdvancedField(
-        default=0.0,
-        ge=0,
-        le=4,
-        description="Zoom levels to pull out while moving fastest, easing back in when slow or resting. 0 = off.",
-    ),
+CameraTilt = Annotated[
+    float | SkipJsonSchema[None],
+    Field(default=None, ge=0, le=80, description="Tilt in degrees (0 = straight down). Leave blank for the map's."),
 ]
-MinHeight = Annotated[
+CameraHeading = Annotated[
+    float | SkipJsonSchema[None],
+    Field(default=None, ge=-360, le=360, description="Compass heading in degrees. Leave blank for the map's."),
+]
+Fov = Annotated[
     float | SkipJsonSchema[None],
     AdvancedField(
         default=None,
-        title="Min height (m)",
-        description="Keep the camera at least this many metres above what it looks at, and aim at the data's height "
-        "on 3D terrain, so hills don't hide the view. Blank = off.",
+        ge=5,
+        le=80,
+        title="Field of view (°)",
+        description="Vertical lens angle: wider is a wide-angle look, narrower a telephoto one. Leave blank for "
+        "the map's (about 37°).",
     ),
 ]
-TurnSmoothing = Annotated[
-    float,
+CameraAltitudeMode = Annotated[
+    AltitudeMode,
     AdvancedField(
-        default=0.15,
-        ge=0,
-        le=1,
-        description="Share of the turn towards the direction of travel made every 1/30 s: low = slow, sweeping "
-        "turns, 1 = snaps.",
+        default="clamp_to_ground",
+        description="Height of the point the camera looks at: on the ground (clamp_to_ground), `altitude` metres "
+        "above the ground (relative_to_ground), or at `altitude` metres above sea level (absolute). The ground is "
+        "the height of the draped tracks nearest the center.",
     ),
 ]
-Tilt = Annotated[float, AdvancedField(default=60.0, ge=0, le=80, description="Camera tilt (0 = straight down).")]
+CameraAltitude = Annotated[
+    float | SkipJsonSchema[None],
+    AdvancedField(
+        default=None,
+        title="Altitude (m)",
+        description="Metres above the ground (relative_to_ground) or above sea level (absolute). "
+        "Ignored by clamp_to_ground.",
+    ),
+]
+CenterLon = Annotated[
+    float | SkipJsonSchema[None],
+    Field(default=None, ge=-180, le=180, description="Center longitude. Leave blank for the center of the data."),
+]
+CenterLat = Annotated[
+    float | SkipJsonSchema[None],
+    Field(default=None, ge=-90, le=90, description="Center latitude. Leave blank for the center of the data."),
+]
 
 
-class StaticCamera(BaseModel):
-    """Holds one view that fits all the animated data for the whole clip."""
+class FixedCamera(BaseModel):
+    """One view for the whole clip: by default the whole scene, at the map's tilt and heading."""
 
-    model_config = ConfigDict(json_schema_extra={"title": "Static"})
-    type_: Annotated[Literal["static"], Field(default="static", title="Camera")] = "static"
-    zoom_offset: ZoomOffset = 0.0
-    min_height_m: MinHeight = None
-
-
-class FollowCamera(BaseModel):
-    """Follows the action: frames whatever animated in the last `follow_window` of the
-    timeline, re-fitting smoothly as it moves."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "Follow the action"})
-    type_: Annotated[Literal["follow"], Field(default="follow", title="Camera")] = "follow"
-    zoom_offset: ZoomOffset = 0.0
-    follow_window: Annotated[
-        float,
-        AdvancedField(default=0.1, gt=0, le=1, description="Share of the timeline treated as 'recent' when framing."),
-    ] = 0.1
-    follow_smoothing: Annotated[
-        float,
-        AdvancedField(
-            default=0.25,
-            ge=0,
-            le=1,
-            description="Share of the gap to the action closed every 1/30 s: "
-            "low = smooth but laggy, 1 = snaps to it. Independent of fps.",
-        ),
-    ] = 0.25
-    heading_lock: Annotated[
-        bool, AdvancedField(default=False, description="Rotate the camera to face the direction of travel.")
-    ] = False
-    subjects: SubjectFilter = None
-    speed_zoom: SpeedZoom = 0.0
-    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")] = (
-        80
-    )
-    min_height_m: MinHeight = None
-
-
-class OrbitCamera(BaseModel):
-    """Circles the center of all the animated data."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "Orbit"})
-    type_: Annotated[Literal["orbit"], Field(default="orbit", title="Camera")] = "orbit"
-    zoom_offset: ZoomOffset = 0.0
-    rounds: Annotated[float, AdvancedField(default=1.0, gt=0, description="Full turns over the clip.")] = 1.0
-    min_height_m: MinHeight = None
-
-
-class FitCamera(BaseModel):
-    """Zooms to keep everything shown so far in frame."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "Fit everything so far"})
-    type_: Annotated[Literal["fit"], Field(default="fit", title="Camera")] = "fit"
-    zoom_offset: ZoomOffset = 0.0
-    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the data.")] = 80
-    subjects: SubjectFilter = None
-    min_height_m: MinHeight = None
-
-
-class CinematicCamera(BaseModel):
-    """Fly-through: opens on the whole scene, then follows the action with a slowly
-    turning, tilted camera (after the Mapbox 'cinematic route' technique)."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "Cinematic fly-through"})
-    type_: Annotated[Literal["cinematic"], Field(default="cinematic", title="Camera")] = "cinematic"
-    zoom_offset: ZoomOffset = 0.0
-    follow_window: Annotated[
-        float,
-        AdvancedField(default=0.1, gt=0, le=1, description="Share of the timeline treated as 'recent' when framing."),
-    ] = 0.1
-    follow_smoothing: Annotated[
-        float,
-        AdvancedField(
-            default=0.25,
-            ge=0,
-            le=1,
-            description="Share of the gap to the action closed every 1/30 s: "
-            "low = smooth but laggy, 1 = snaps to it. Independent of fps.",
-        ),
-    ] = 0.25
-    lead_frac: Annotated[
-        float,
-        AdvancedField(
-            default=0.0, ge=0, le=0.5, description="Look ahead by this share of the timeline, so the camera leads."
-        ),
-    ] = 0.0
-    bearing_mode: Annotated[
-        Literal["rotate", "heading", "fixed"],
-        AdvancedField(
-            default="rotate",
-            description="'rotate' turns at a constant rate, 'heading' faces the direction of travel, 'fixed' "
-            "keeps the map's bearing.",
-        ),
-    ] = "rotate"
-    rotate_deg: Annotated[
-        float, AdvancedField(default=45.0, description="Total turn over the clip for bearing_mode='rotate'.")
-    ] = 45.0
-    intro_frac: Annotated[
-        float,
-        AdvancedField(
-            default=0.12, ge=0, le=0.5, description="Share of the clip spent flying in from the whole-scene view."
-        ),
-    ] = 0.12
-    subjects: SubjectFilter = None
-    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")] = (
-        80
-    )
-    min_height_m: MinHeight = None
-
-
-class KeyframesFromFile(BaseModel):
-    """Camera path loaded from an uploaded waypoint file."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "Upload waypoint file"})
-    type_: Annotated[Literal["file"], Field(default="file", title="Source")] = "file"
-    keyframes_file: Annotated[
-        str | SkipJsonSchema[None],
-        Field(
-            default=None,
-            description="Path to an uploaded keyframe file: a .json list of {lon, lat, t?, zoom?, pitch?, bearing?} "
-            "objects, a .geojson of Point features (extras read from properties), or a .csv/.tsv with lon/lat "
-            "columns. Required for this source.",
-        ),
-    ] = None
-
-
-class KeyframesFromSubject(BaseModel):
-    """Camera path auto-derived by following one subject through the animated data.
-
-    The subject is matched against every column, so it works for trips and for point or
-    polygon layers that carry the subject's column.
-    """
-
-    model_config = ConfigDict(json_schema_extra={"title": "Follow a subject"})
-    type_: Annotated[Literal["subject"], Field(default="subject", title="Source")] = "subject"
-    subject: Annotated[
-        str | SkipJsonSchema[None],
-        Field(
-            default=None,
-            description="Value identifying the subject in any column (e.g. its name or group id). "
-            "Leave blank to follow the longest-running track.",
-        ),
-    ] = None
-
-
-KeyframeSource = Annotated[KeyframesFromSubject | KeyframesFromFile, Field(discriminator="type_")]
-
-
-class KeyframesCamera(BaseModel):
-    """Flies through waypoints while the data animates.
-
-    Pick a `source`: upload a waypoint file, or follow a subject. Waypoints supplied
-    directly in ``keyframes`` (e.g. from derive_camera_keyframes) take priority.
-    Waypoints without a zoom use the whole-scene framing (plus zoom_offset).
-    """
-
-    model_config = ConfigDict(json_schema_extra={"title": "Keyframes"})
-    type_: Annotated[Literal["keyframes"], Field(default="keyframes", title="Camera")] = "keyframes"
-    zoom_offset: ZoomOffset = 0.0
-    keyframes: Annotated[
-        list[CameraKeyframe] | SkipJsonSchema[None],
-        Field(
-            default=None,
-            description="Camera waypoints, flown through in order. Each needs lon/lat; t (0–1 clip position), "
-            "zoom, pitch and bearing are optional. Leave empty to build the path from Source instead.",
-        ),
-    ] = None
-    source: Annotated[
-        KeyframeSource,
-        AdvancedField(
-            default=KeyframesFromSubject(),
-            description="How to build the path when `keyframes` is empty: upload a file, or follow a subject.",
-        ),
-    ] = KeyframesFromSubject()
-    keyframe_easing: Annotated[
-        Literal["smooth", "linear", "spline"],
-        AdvancedField(
-            default="smooth",
-            description="How the camera moves between keyframes: 'smooth' eases in/out of each waypoint, 'linear' "
-            "moves at constant speed, 'spline' curves through waypoints (Catmull-Rom) without pausing at them.",
-        ),
-    ] = "smooth"
-    min_height_m: MinHeight = None
+    model_config = ConfigDict(json_schema_extra={"title": "Fixed view"})
+    type_: Annotated[Literal["fixed"], Field(default="fixed", title="Camera")] = "fixed"
+    lon: CenterLon = None
+    lat: CenterLat = None
+    range_m: Range = None
+    tilt: CameraTilt = None
+    heading: CameraHeading = None
+    fov: Fov = None
+    altitude_mode: CameraAltitudeMode = "clamp_to_ground"
+    altitude: CameraAltitude = None
 
 
 class FlyAroundCamera(BaseModel):
     """Fly to a point, then circle it -- the Google Maps 3D flyCameraTo + flyCameraAround pair.
 
-    The camera is described the Google way (center, altitude, range, tilt, heading) and
-    converted to deck's view state. The fly-to uses deck's FlyToInterpolator, the same
-    zoom-out-and-back-in arc; the orbit then turns at a constant rate for `rounds` turns.
-    Unset values come from the data (center, framing) and the map (tilt, heading).
+    The fly-to follows deck's FlyToInterpolator arc (out, across and back in) from the whole-scene
+    view; the orbit then turns at a constant rate for `rounds` turns.
     """
 
     model_config = ConfigDict(json_schema_extra={"title": "Fly to & around"})
     type_: Annotated[Literal["fly_around"], Field(default="fly_around", title="Camera")] = "fly_around"
-    zoom_offset: ZoomOffset = 0.0
-    lon: Annotated[
-        float | SkipJsonSchema[None],
-        Field(
-            default=None, ge=-180, le=180, description="Center longitude. Leave blank to use the center of the data."
-        ),
-    ] = None
-    lat: Annotated[
-        float | SkipJsonSchema[None],
-        Field(default=None, ge=-90, le=90, description="Center latitude. Leave blank to use the center of the data."),
-    ] = None
-    altitude: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            description="Height of the center point in metres. Leave blank to use the data's mean height, so the "
-            "camera circles draped tracks rather than a point under the terrain.",
-        ),
-    ] = None
-    range_m: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(
-            default=None, gt=0, description="Camera distance from the center in metres. Leave blank to fit the data."
-        ),
-    ] = None
-    tilt: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            ge=0,
-            le=80,
-            description="Tilt on arrival (0 = straight down). Leave blank to use the map's pitch.",
-        ),
-    ] = None
+    lon: CenterLon = None
+    lat: CenterLat = None
+    range_m: Range = None
+    tilt: CameraTilt = None
     heading: Annotated[
         float | SkipJsonSchema[None],
-        AdvancedField(default=None, description="Compass heading on arrival. Leave blank to use the map's bearing."),
+        Field(default=None, ge=-360, le=360, description="Compass heading on arrival. Leave blank for the map's."),
     ] = None
+    fov: Fov = None
+    altitude_mode: CameraAltitudeMode = "clamp_to_ground"
+    altitude: CameraAltitude = None
     fly_frac: Annotated[
         float,
         Field(
             default=0.25,
             ge=0,
             le=1,
-            description="Share of the clip spent flying in from the whole-scene view. 0 -> start at the target.",
+            description="Share of the clip spent flying in from the whole-scene view. 0 = start at the center.",
         ),
     ] = 0.25
     rounds: Annotated[
-        float, Field(default=1.0, ge=0, description="Full turns around the center after arriving. 0 -> hold.")
+        float, Field(default=1.0, ge=0, description="Full turns around the center after arriving. 0 = hold.")
     ] = 1.0
-    min_height_m: MinHeight = None
 
 
-class ChaseCamera(BaseModel):
-    """Drone shot of one subject: sits behind it at a set distance and tilt, faces where it is heading and
-    lags a little behind its moves."""
+class FollowSubjectCamera(BaseModel):
+    """Stays on one subject at a set range and tilt, behind it and facing where it is heading, lagging a
+    little behind its moves."""
 
-    model_config = ConfigDict(json_schema_extra={"title": "Chase a subject"})
+    model_config = ConfigDict(json_schema_extra={"title": "Follow a subject"})
     type_: Annotated[Literal["chase"], Field(default="chase", title="Camera")] = "chase"
-    zoom_offset: ZoomOffset = 0.0
-    subject: SubjectName = None
-    distance_m: Annotated[
-        float,
-        Field(default=800.0, gt=0, title="Distance (m)", description="Camera distance from the subject in metres."),
+    subject: Annotated[
+        str | SkipJsonSchema[None],
+        Field(
+            default=None,
+            description="Value identifying the subject in any column (e.g. its name or group id). "
+            "Leave blank for the longest-running track.",
+        ),
+    ] = None
+    range_m: Annotated[
+        float, Field(default=800.0, gt=0, title="Range (m)", description="Camera distance from the subject in metres.")
     ] = 800.0
-    tilt: Tilt = 60.0
+    tilt: Annotated[float, Field(default=60.0, ge=0, le=80, description="Tilt in degrees (0 = straight down).")] = 60.0
+    heading: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            ge=-360,
+            le=360,
+            description="Compass heading in degrees. Leave blank to face the subject's direction of travel.",
+        ),
+    ] = None
+    fov: Fov = None
+    altitude_mode: CameraAltitudeMode = "clamp_to_ground"
+    altitude: CameraAltitude = None
     follow_smoothing: Annotated[
         float,
         AdvancedField(
@@ -716,181 +274,65 @@ class ChaseCamera(BaseModel):
             description="Share of the gap to the subject closed every 1/30 s: low = drifts behind, 1 = locked on.",
         ),
     ] = 0.3
-    turn_smoothing: TurnSmoothing = 0.15
-    speed_zoom: SpeedZoom = 0.0
-    min_height_m: MinHeight = None
+    turn_smoothing: Annotated[
+        float,
+        AdvancedField(
+            default=0.15,
+            ge=0,
+            le=1,
+            description="Share of the turn towards the direction of travel made every 1/30 s: low = slow, "
+            "sweeping turns, 1 = snaps.",
+        ),
+    ] = 0.15
 
 
-class TourCamera(BaseModel):
-    """Visits subjects one after another: the clip is split into one stop per subject, each framing that
-    subject's track so far, with a flight between stops."""
+class FollowActionCamera(BaseModel):
+    """Keeps the moving subjects in frame: frames what animated in the last `follow_window` of the
+    timeline, re-fitting smoothly as they move and spread."""
 
-    model_config = ConfigDict(json_schema_extra={"title": "Subject tour"})
-    type_: Annotated[Literal["tour"], Field(default="tour", title="Camera")] = "tour"
-    zoom_offset: ZoomOffset = 0.0
+    model_config = ConfigDict(json_schema_extra={"title": "Follow the action"})
+    type_: Annotated[Literal["follow"], Field(default="follow", title="Camera")] = "follow"
     subjects: Annotated[
         list[str] | SkipJsonSchema[None],
-        Field(
+        AdvancedField(
             default=None,
-            description="Subjects to visit, in order (their value in any column, e.g. names). Leave blank to visit "
-            "every track in order of first appearance.",
+            description="Only frame these subjects (their value in any column, e.g. names), zooming out as they "
+            "spread apart. Leave blank for everything that animates.",
         ),
     ] = None
-    transition_frac: Annotated[
+    tilt: CameraTilt = None
+    heading: CameraHeading = None
+    face_travel: Annotated[
+        bool, AdvancedField(default=False, description="Turn the camera to face the direction of travel.")
+    ] = False
+    fov: Fov = None
+    altitude_mode: CameraAltitudeMode = "clamp_to_ground"
+    altitude: CameraAltitude = None
+    follow_window: Annotated[
         float,
-        AdvancedField(default=0.25, ge=0, le=0.9, description="Share of each stop spent flying in from the last one."),
+        AdvancedField(default=0.1, gt=0, le=1, description="Share of the timeline treated as 'recent' when framing."),
+    ] = 0.1
+    follow_smoothing: Annotated[
+        float,
+        AdvancedField(
+            default=0.25,
+            ge=0,
+            le=1,
+            description="Share of the gap to the action closed every 1/30 s: low = smooth but laggy, 1 = snaps to "
+            "it. Independent of fps.",
+        ),
     ] = 0.25
-    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the track.")] = 80
-    min_height_m: MinHeight = None
+    fit_padding: Annotated[
+        int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")
+    ] = 80
 
 
-class SpotlightCamera(BaseModel):
-    """Flies to each new event as it appears (rows of a time-window layer), holds on it, then goes back to
-    the camera used between events."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "Event spotlight"})
-    type_: Annotated[Literal["spotlight"], Field(default="spotlight", title="Camera")] = "spotlight"
-    zoom_offset: ZoomOffset = 0.0
-    layer: Annotated[
-        str | SkipJsonSchema[None],
-        Field(
-            default=None,
-            description="Time-window layer whose rows are the events. Leave blank to use every time-window layer.",
-        ),
-    ] = None
-    between: Annotated[
-        Literal["fit", "follow", "static"],
-        Field(default="fit", description="Camera between events: fit everything so far, follow the action, or static."),
-    ] = "fit"
-    hold_frac: Annotated[
-        float,
-        AdvancedField(
-            default=0.08, gt=0, le=0.5, description="Share of the clip spent on each event, flights included."
-        ),
-    ] = 0.08
-    min_gap_frac: Annotated[
-        float,
-        AdvancedField(
-            default=0.05,
-            ge=0,
-            le=1,
-            description="Least share of the clip between two spotlights; events closer together are skipped.",
-        ),
-    ] = 0.05
-    event_zoom: Annotated[
-        float | SkipJsonSchema[None],
-        AdvancedField(default=None, description="Zoom level on an event. Leave blank to frame about 2 km around it."),
-    ] = None
-    min_height_m: MinHeight = None
-
-
-class PanCamera(BaseModel):
-    """Slow pan and zoom across the whole scene (the 'Ken Burns' move), for short or mostly static clips."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "Pan across"})
-    type_: Annotated[Literal["pan"], Field(default="pan", title="Camera")] = "pan"
-    zoom_offset: ZoomOffset = 0.0
-    direction: Annotated[
-        Literal["west_to_east", "east_to_west", "south_to_north", "north_to_south", "diagonal"],
-        Field(default="west_to_east", description="Which way the camera drifts across the scene."),
-    ] = "west_to_east"
-    start_zoom_offset: Annotated[
-        float, AdvancedField(default=1.0, description="Zoom levels closer than the whole scene at the start.")
-    ] = 1.0
-    end_zoom_offset: Annotated[
-        float, AdvancedField(default=0.0, description="Zoom levels closer than the whole scene at the end.")
-    ] = 0.0
-    easing: Annotated[
-        Literal["smooth", "linear"],
-        AdvancedField(default="smooth", description="'smooth' eases in and out; 'linear' moves at a constant rate."),
-    ] = "smooth"
-    min_height_m: MinHeight = None
-
-
-class RouteCamera(BaseModel):
-    """Flies along one subject's whole route at an even pace over the clip, independent of when the subject
-    travelled it -- a route preview."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "Route flythrough"})
-    type_: Annotated[Literal["route"], Field(default="route", title="Camera")] = "route"
-    zoom_offset: ZoomOffset = 0.0
-    subject: SubjectName = None
-    distance_m: Annotated[
-        float,
-        Field(default=1500.0, gt=0, title="Distance (m)", description="Camera distance from the route in metres."),
-    ] = 1500.0
-    tilt: Tilt = 60.0
-    look_ahead_m: Annotated[
-        float,
-        AdvancedField(
-            default=300.0,
-            ge=0,
-            title="Look ahead (m)",
-            description="Face the route this many metres ahead, smoothing out small wiggles.",
-        ),
-    ] = 300.0
-    turn_smoothing: TurnSmoothing = 0.15
-    easing: Annotated[
-        Literal["smooth", "linear"],
-        AdvancedField(default="smooth", description="'smooth' eases in and out; 'linear' moves at a constant pace."),
-    ] = "smooth"
-    min_height_m: MinHeight = None
-
-
-SingleCameraOptions = (
-    StaticCamera
-    | FollowCamera
-    | OrbitCamera
-    | FitCamera
-    | CinematicCamera
-    | KeyframesCamera
-    | FlyAroundCamera
-    | ChaseCamera
-    | TourCamera
-    | SpotlightCamera
-    | PanCamera
-    | RouteCamera
-)
-
-
-class SequenceSegment(BaseModel):
-    """One part of a SequenceCamera: a camera used up to a position on the clip."""
-
-    until: Annotated[
-        float,
-        Field(
-            default=1.0,
-            gt=0,
-            le=1,
-            description="Clip position (0–1) where this segment ends. The last segment always runs to the end.",
-        ),
-    ] = 1.0
-    camera: Annotated[SingleCameraOptions, Field(discriminator="type_", description="Camera for this segment.")]
-
-
-class SequenceCamera(BaseModel):
-    """Combines cameras over the clip: each segment uses its own camera up to its end position, blending
-    smoothly into the next."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "Sequence"})
-    type_: Annotated[Literal["sequence"], Field(default="sequence", title="Camera")] = "sequence"
-    segments: Annotated[
-        list[SequenceSegment],
-        Field(min_length=1, description="Cameras in order, each with the clip position it runs until."),
-    ]
-    blend_frac: Annotated[
-        float,
-        AdvancedField(default=0.04, ge=0, le=0.5, description="Share of the clip spent blending between segments."),
-    ] = 0.04
-    min_height_m: MinHeight = None
-
-
-CameraOptions = SingleCameraOptions | SequenceCamera
+CameraOptions = FixedCamera | FlyAroundCamera | FollowSubjectCamera | FollowActionCamera
 CameraConfig = Annotated[CameraOptions, Field(discriminator="type_")]
 _CAMERA_ADAPTER: TypeAdapter = TypeAdapter(CameraConfig)
 
 # Fields the animated map's Camera panel edits with its own controls rather than a form input.
-_PANEL_CUSTOM_FIELDS = ("type_", "keyframes", "source", "segments")
+_PANEL_CUSTOM_FIELDS = ("type_",)
 
 
 def camera_panel_schema() -> list[dict]:
@@ -1070,20 +512,24 @@ window.__cam = (function () {
     });
     return b;
   }
-  // Everything shown up to t (tracks' traversed paths, rows that have appeared).
-  function seenBox(t, keys) {
-    var S = scene(), b = new Box();
-    S.tracks.forEach(function (tr) {
-      if (!matches(tr.d, keys)) return;
-      for (var k = 0; k < tr.T.length && tr.T[k] <= t; k++) b.add(tr.C[k]);
-    });
-    S.rows.forEach(function (r) { if (r.t <= t && matches(r.d, keys)) r.P.forEach(function (p) { b.add(p); }); });
-    return b;
-  }
-
   // Fit a box to the video frame; boxes under MIN_BOX_DEG are widened around their center.
+  // With the widget's tilt-aware fit (my-deck-widgets >= 0.15) the box fills the frame as seen
+  // at the camera's tilt, heading and lens (path() puts them in o); otherwise it is fitted as if
+  // looking straight down.
   function fitBox(b, o) {
     if (!b || b.empty) return null;
+    var A = window.__tripsAnim, init = initialView() || {};
+    if (A && typeof A.fitBounds === 'function') {
+      try {
+        var v = A.fitBounds([b.w, b.s, b.e, b.n], {
+          width: o.width, height: o.height, padding: o.fit_padding == null ? 80 : o.fit_padding,
+          pitch: o._pitch != null ? o._pitch : (init.pitch || 0),
+          bearing: o._bearing != null ? o._bearing : (init.bearing || 0),
+          fovy: o.fov || undefined, minDeg: MIN_BOX_DEG, maxZoom: MAX_ZOOM,
+        });
+        return { longitude: v.longitude, latitude: v.latitude, zoom: v.zoom };
+      } catch (e) {}
+    }
     var c = b.center(), VP = (window.deck || {}).WebMercatorViewport, z = MAX_ZOOM;
     var hw = Math.max(b.e - b.w, MIN_BOX_DEG) / 2, hh = Math.max(b.n - b.s, MIN_BOX_DEG) / 2;
     if (VP) {
@@ -1094,7 +540,7 @@ window.__cam = (function () {
         c = { lon: f.longitude, lat: f.latitude }; z = Math.min(f.zoom, MAX_ZOOM);
       } catch (e) {}
     }
-    return { longitude: c.lon, latitude: c.lat, zoom: z + (o.zoom_offset || 0) };
+    return { longitude: c.lon, latitude: c.lat, zoom: z };
   }
 
   function span() { return scene().end; }
@@ -1112,41 +558,15 @@ window.__cam = (function () {
     var s = clamp01(share == null ? fallback : share);
     return s > 0 ? 1 - Math.pow(1 - s, 30 / (fps || 30)) : 1;
   }
-  // Google's `range` (camera-to-center metres) -> deck zoom. deck's MapView keeps the
-  // camera 1.5 viewport-heights from the target, and the world is 512 * 2^zoom px wide.
-  function zoomForRange(rangeM, lat, height) {
-    return Math.log2(1.5 * height * EARTH_M * Math.cos(lat * Math.PI / 180) / (512 * rangeM));
-  }
-  function rangeForZoom(zoom, lat, height) {
-    return 1.5 * height * EARTH_M * Math.cos(lat * Math.PI / 180) / (512 * Math.pow(2, zoom));
+  // Google's `range` (camera-to-center metres) -> deck zoom. deck's MapView keeps the camera
+  // `altitude` viewport-heights from the target (1.5 at its default ~37° field of view; a wider fov
+  // brings it closer), and the world is 512 * 2^zoom px wide.
+  function zoomForRange(rangeM, lat, height, fov) {
+    var altitude = fov ? 0.5 / Math.tan(fov * Math.PI / 360) : 1.5;
+    return Math.log2(altitude * height * EARTH_M * Math.cos(lat * Math.PI / 180) / (512 * rangeM));
   }
   function copies(v, n) { var out = []; for (var i = 0; i < n; i++) out.push(Object.assign({}, v)); return out; }
 
-  // Blend two views; bearings turn the short way and target heights blend too.
-  function lerpView(a, b, e) {
-    var v = { longitude: a.longitude + (b.longitude - a.longitude) * e,
-              latitude:  a.latitude  + (b.latitude  - a.latitude ) * e,
-              zoom:      a.zoom      + (b.zoom      - a.zoom     ) * e,
-              pitch:   (a.pitch || 0) + ((b.pitch || 0) - (a.pitch || 0)) * e,
-              bearing: (a.bearing || 0) + shortestAngle(a.bearing || 0, b.bearing || 0) * e };
-    if (a.position || b.position) {
-      var za = a.position ? a.position[2] : 0, zb = b.position ? b.position[2] : 0;
-      v.position = [0, 0, za + (zb - za) * e];
-    }
-    return v;
-  }
-  // Same, but along deck's FlyToInterpolator arc (zoom out, travel, zoom in) when available.
-  function flyView(fly, a, b, e, o) {
-    var v = lerpView(a, b, e);
-    if (fly && e > 0 && e < 1) {
-      try {
-        var dims = { width: o.width, height: o.height };
-        var f = fly.interpolateProps(Object.assign({}, dims, a), Object.assign({}, dims, b), e);
-        v.longitude = f.longitude; v.latitude = f.latitude; v.zoom = f.zoom;
-      } catch (err) {}
-    }
-    return v;
-  }
   function flyer() { var FTI = (window.deck || {}).FlyToInterpolator; return FTI ? new FTI({ curve: 1.414 }) : null; }
 
   // ---------------------------------------------------------------------------
@@ -1188,61 +608,14 @@ window.__cam = (function () {
   }
 
   // ---------------------------------------------------------------------------
-  // Keyframes
-  // ---------------------------------------------------------------------------
-  function catmullRom(p0, p1, p2, p3, u) {
-    return 0.5 * ((2 * p1) + (-p0 + p2) * u
-           + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u
-           + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u);
-  }
-  // Keyframes arrive resolved from Python: sorted, t in [0,1], bearings unwrapped;
-  // zoom may be null there and is filled with the whole-scene framing.
-  function keyframeView(K, prog, easing) {
-    var hi = K.length - 1, s = 0;
-    while (s + 1 < hi && K[s + 1].t <= prog) s++;
-    var A = K[s], B = K[Math.min(s + 1, hi)];
-    var u = (B.t > A.t) ? (prog - A.t) / (B.t - A.t) : 1;
-    u = clamp01(u);
-    var eased = (easing === 'linear' || easing === 'spline') ? u : u * u * (3 - 2 * u);
-    var lon, lat;
-    if (easing === 'spline') {
-      var P0 = K[Math.max(0, s - 1)], P3 = K[Math.min(hi, s + 2)];
-      lon = catmullRom(P0.lon, A.lon, B.lon, P3.lon, u);
-      lat = catmullRom(P0.lat, A.lat, B.lat, P3.lat, u);
-    } else {
-      lon = A.lon + (B.lon - A.lon) * eased;
-      lat = A.lat + (B.lat - A.lat) * eased;
-    }
-    return { longitude: lon, latitude: lat,
-             zoom:    A.zoom    + (B.zoom    - A.zoom   ) * eased,
-             pitch:   A.pitch   + (B.pitch   - A.pitch  ) * eased,
-             bearing: A.bearing + (B.bearing - A.bearing) * eased };
-  }
-  function autoKeyframes(o, base) {
-    var tr = subjectTrack(o.subject);
-    if (!tr || tr.T.length < 2) return [];
-    var n = o.auto_keyframe_count || 12, END = span() || 1, b = new Box();
-    tr.C.forEach(function (p) { b.add(p); });
-    var zoom = (fitBox(b, o) || base).zoom, out = [], T0 = tr.T[0], T1 = tr.T[tr.T.length - 1];
-    for (var i = 0; i < n; i++) {
-      var tt = T0 + (T1 - T0) * (i / (n - 1)), p = posAt(tr, tt);
-      out.push({ t: Math.min(1, tt / END), lon: p[0], lat: p[1], zoom: zoom,
-                 pitch: base.pitch, bearing: base.bearing });
-    }
-    return out;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Fly to & around (Google Maps 3D flyCameraTo + flyCameraAround)
+  // Fly to & around (Google Maps 3D flyCameraTo + flyCameraAround); Fixed view is
+  // its end point held for the whole clip.
   // ---------------------------------------------------------------------------
   function flyAroundSetup(o, base) {
-    var S = scene(), c = S.box.empty ? { lon: base.longitude, lat: base.latitude } : S.box.center();
-    var lon = (o.lon != null) ? o.lon : c.lon, lat = (o.lat != null) ? o.lat : c.lat;
-    var zoom = (o.range_m != null) ? zoomForRange(o.range_m, lat, o.height) + (o.zoom_offset || 0) : base.zoom;
-    var end = { longitude: lon, latitude: lat, zoom: zoom,
-                pitch: (o.tilt != null) ? o.tilt : base.pitch,
-                bearing: base.bearing + shortestAngle(base.bearing, (o.heading != null) ? o.heading : base.bearing) };
-    return { start: base, end: end, alt: (o.altitude != null) ? o.altitude : S.meanZ, fly: flyer(),
+    var lon = (o.lon != null) ? o.lon : base.longitude, lat = (o.lat != null) ? o.lat : base.latitude;
+    var zoom = (o.range_m != null) ? zoomForRange(o.range_m, lat, o.height, o.fov) : base.zoom;
+    var end = { longitude: lon, latitude: lat, zoom: zoom, pitch: base.pitch, bearing: base.bearing };
+    return { start: base, end: end, fly: flyer(),
              frac: o.fly_frac == null ? 0.25 : o.fly_frac, rounds: o.rounds == null ? 1 : o.rounds,
              width: o.width, height: o.height };
   }
@@ -1259,216 +632,55 @@ window.__cam = (function () {
                     latitude:  A.start.latitude  + (A.end.latitude  - A.start.latitude ) * e,
                     zoom:      A.start.zoom      + (A.end.zoom      - A.start.zoom     ) * e };
       return { longitude: v.longitude, latitude: v.latitude, zoom: v.zoom,
-               pitch:   A.start.pitch   + (A.end.pitch   - A.start.pitch  ) * e,
-               bearing: A.start.bearing + (A.end.bearing - A.start.bearing) * e,
-               position: [0, 0, A.alt * e] };
+               pitch: A.start.pitch, bearing: A.start.bearing };
     }
     var u = (A.frac < 1) ? (prog - A.frac) / (1 - A.frac) : 1;   // flyCameraAround
     return { longitude: A.end.longitude, latitude: A.end.latitude, zoom: A.end.zoom, pitch: A.end.pitch,
-             bearing: (A.end.bearing + 360 * A.rounds * u) % 360, position: [0, 0, A.alt] };
+             bearing: (A.end.bearing + 360 * A.rounds * u) % 360 };
   }
 
   // ---------------------------------------------------------------------------
-  // Chase: behind one subject, facing where it is heading
+  // Follow a subject: behind it, facing where it is heading (or a set heading)
   // ---------------------------------------------------------------------------
   function chasePath(times, o, base) {
     var tr = subjectTrack(o.subject);
     if (!tr) return copies(base, times.length);
     var dt = Math.max((span() || 1) * 0.005, 1e-6);
-    var dist = o.distance_m || 800, tilt = o.tilt == null ? 60 : o.tilt;
+    var dist = o.range_m || 800, tilt = o.tilt == null ? 60 : o.tilt;
     var kPos = rate(o.follow_smoothing, 0.3, o.fps), kTurn = rate(o.turn_smoothing, 0.15, o.fps);
     var cur = null, brg = null;
     return times.map(function (t) {
-      var p = posAt(tr, t), h = headingLL(posAt(tr, t - dt), posAt(tr, t + dt));
-      if (brg == null) brg = (h == null) ? base.bearing : h;
-      else if (h != null) brg += shortestAngle(brg, h) * kTurn;
+      var p = posAt(tr, t);
+      if (o.heading != null) brg = o.heading;
+      else {
+        var h = headingLL(posAt(tr, t - dt), posAt(tr, t + dt));
+        if (brg == null) brg = (h == null) ? base.bearing : h;
+        else if (h != null) brg += shortestAngle(brg, h) * kTurn;
+      }
       cur = cur ? [cur[0] + (p[0] - cur[0]) * kPos, cur[1] + (p[1] - cur[1]) * kPos,
                    cur[2] + ((p[2] || 0) - cur[2]) * kPos]
                 : [p[0], p[1], p[2] || 0];
-      return { longitude: cur[0], latitude: cur[1], zoom: zoomForRange(dist, cur[1], o.height) + (o.zoom_offset || 0),
+      return { longitude: cur[0], latitude: cur[1], zoom: zoomForRange(dist, cur[1], o.height, o.fov),
                pitch: tilt, bearing: brg, position: [0, 0, cur[2]] };
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Route flythrough: along a subject's whole route at an even pace
+  // Lens and altitude mode, applied to every camera's views
   // ---------------------------------------------------------------------------
-  function routePath(times, o, base) {
-    var tr = subjectTrack(o.subject);
-    if (!tr || tr.C.length < 2) return copies(base, times.length);
-    var C = tr.C, cum = [0];
-    for (var k = 1; k < C.length; k++) cum.push(cum[k - 1] + groundDist(C[k - 1], C[k]));
-    var total = cum[cum.length - 1];
-    function along(d) {
-      var j = Math.max(1, Math.min(C.length - 1, lowerBound(cum, d)));
-      var seg = cum[j] - cum[j - 1], f = seg > 0 ? (d - cum[j - 1]) / seg : 0;
-      f = clamp01(f);
-      var a = C[j - 1], b = C[j];
-      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, (a[2] || 0) + ((b[2] || 0) - (a[2] || 0)) * f];
-    }
-    var dist = o.distance_m || 1500, tilt = o.tilt == null ? 60 : o.tilt;
-    var look = o.look_ahead_m == null ? 300 : o.look_ahead_m, kTurn = rate(o.turn_smoothing, 0.15, o.fps);
-    var n = times.length, brg = null;
-    return times.map(function (t, i) {
-      var prog = n > 1 ? i / (n - 1) : 1;
-      var d = total * (o.easing === 'linear' ? prog : ease(prog));
-      var p = along(d), h = headingLL(along(Math.max(0, d - look)), along(Math.min(total, d + Math.max(look, 1))));
-      if (brg == null) brg = (h == null) ? base.bearing : h;
-      else if (h != null) brg += shortestAngle(brg, h) * kTurn;
-      return { longitude: p[0], latitude: p[1], zoom: zoomForRange(dist, p[1], o.height) + (o.zoom_offset || 0),
-               pitch: tilt, bearing: brg, position: [0, 0, p[2]] };
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Subject tour: one stop per subject, flying between stops
-  // ---------------------------------------------------------------------------
-  function tourPath(times, o, base) {
-    var S = scene(), keys = subjectKeys(o), list = [];
-    if (keys) keys.forEach(function (k) { var tr = subjectTrack(k); if (tr) list.push(tr); });
-    else list = S.tracks.slice().sort(function (a, b) { return a.T[0] - b.T[0]; });
-    if (!list.length) return copies(base, times.length);
-    var N = list.length, n = times.length, tf = clamp01(o.transition_frac == null ? 0.25 : o.transition_frac);
-    var fly = flyer();
-    function stop(tr, t) {      // the subject's track so far, or all of it before it starts
-      var b = new Box();
-      for (var k = 0; k < tr.T.length && tr.T[k] <= t; k++) b.add(tr.C[k]);
-      if (b.empty) tr.C.forEach(function (p) { b.add(p); }); else b.add(posAt(tr, t));
-      var f = fitBox(b, o);
-      return { longitude: f.longitude, latitude: f.latitude, zoom: f.zoom, pitch: base.pitch, bearing: base.bearing };
-    }
-    return times.map(function (t, i) {
-      var prog = n > 1 ? i / (n - 1) : 1, s = Math.min(N - 1, Math.floor(prog * N)), u = prog * N - s;
-      var v = stop(list[s], t);
-      if (tf > 0 && u < tf) v = flyView(fly, s > 0 ? stop(list[s - 1], t) : base, v, ease(u / tf), o);
-      return v;
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Event spotlight: fly to each new event, hold, return to the camera between events
-  // ---------------------------------------------------------------------------
-  function spotlightPath(times, o, base) {
-    var S = scene(), END = span() || 1, n = times.length;
-    var between = path(times, Object.assign({}, o, { preset: o.between || 'fit', min_height_m: null, speed_zoom: 0 }));
-    var hold = (o.hold_frac == null ? 0.08 : o.hold_frac) * END;
-    var gap = Math.max(hold, (o.min_gap_frac == null ? 0.05 : o.min_gap_frac) * END);
-    var events = S.rows.filter(function (r) { return !o.layer || r.id === o.layer; })
-                       .sort(function (a, b) { return a.t - b.t; });
-    var picks = [], last = -Infinity;
-    events.forEach(function (r) {
-      if (r.t - last < gap) return;
-      last = r.t;
-      var b = new Box(); r.P.forEach(function (p) { b.add(p); });
-      var f = fitBox(b, o), c = b.center();
-      var zoom = o.event_zoom != null ? o.event_zoom + (o.zoom_offset || 0) : (f ? f.zoom : base.zoom);
-      picks.push({ from: r.t - 0.3 * hold, to: r.t + 0.7 * hold,
-                   view: { longitude: f ? f.longitude : c.lon, latitude: f ? f.latitude : c.lat, zoom: zoom,
-                           pitch: base.pitch, bearing: base.bearing } });
-    });
-    var fly = flyer();
-    return times.map(function (t, i) {
-      var v = between[i], p = picks.find(function (x) { return t >= x.from && t <= x.to; });
-      if (!p) return v;
-      var u = (t - p.from) / (p.to - p.from), w = u < 0.3 ? ease(u / 0.3) : (u > 0.7 ? ease((1 - u) / 0.3) : 1);
-      return flyView(fly, v, p.view, w, o);
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Pan across: slow drift and zoom over the whole scene
-  // ---------------------------------------------------------------------------
-  function panPath(times, o, base) {
-    var b = scene().box, n = times.length;
-    if (b.empty) return copies(base, n);
-    var c = b.center(), dx = (b.e - b.w) / 4, dy = (b.n - b.s) / 4;
-    var ends = {
-      west_to_east:   [[c.lon - dx, c.lat], [c.lon + dx, c.lat]],
-      east_to_west:   [[c.lon + dx, c.lat], [c.lon - dx, c.lat]],
-      south_to_north: [[c.lon, c.lat - dy], [c.lon, c.lat + dy]],
-      north_to_south: [[c.lon, c.lat + dy], [c.lon, c.lat - dy]],
-      diagonal:       [[c.lon - dx, c.lat - dy], [c.lon + dx, c.lat + dy]],
-    }[o.direction || 'west_to_east'] || [[c.lon, c.lat], [c.lon, c.lat]];
-    var z0 = base.zoom + (o.start_zoom_offset == null ? 1 : o.start_zoom_offset);
-    var z1 = base.zoom + (o.end_zoom_offset == null ? 0 : o.end_zoom_offset);
-    return times.map(function (t, i) {
-      var prog = n > 1 ? i / (n - 1) : 1, e = o.easing === 'linear' ? prog : ease(prog);
-      return { longitude: ends[0][0] + (ends[1][0] - ends[0][0]) * e,
-               latitude:  ends[0][1] + (ends[1][1] - ends[0][1]) * e,
-               zoom: z0 + (z1 - z0) * e, pitch: base.pitch, bearing: base.bearing };
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Sequence: each segment's camera over its part of the clip, blended at the joins
-  // ---------------------------------------------------------------------------
-  function sequencePath(times, o, base) {
-    var segs = o.segments || [], n = times.length;
-    if (!segs.length) return copies(base, n);
-    var blend = Math.max(0, o.blend_frac == null ? 0.04 : o.blend_frac), prev = 0, bounds = [];
-    segs.forEach(function (s, i) {
-      var end = (i === segs.length - 1) ? 1 : Math.max(prev, Math.min(1, s.until == null ? 1 : s.until));
-      bounds.push([prev, end]);
-      prev = end;
-    });
-    var progs = times.map(function (t, j) { return n > 1 ? j / (n - 1) : 1; });
-    // Each segment runs over its own range (plus half a blend each side), so progress-based
-    // cameras (orbit, keyframes, fly-around, ...) play out within their segment.
-    var parts = segs.map(function (s, i) {
-      var a = Math.max(0, bounds[i][0] - blend / 2), b = Math.min(1, bounds[i][1] + blend / 2), idx = {}, sub = [];
-      progs.forEach(function (p, j) { if (p >= a && p <= b) { idx[j] = sub.length; sub.push(times[j]); } });
-      var so = Object.assign({ width: o.width, height: o.height, fps: o.fps }, s.camera);
-      return { idx: idx, views: sub.length ? path(sub, so) : [] };
-    });
-    function viewOf(i, j) { var k = parts[i].idx[j]; return k == null ? null : parts[i].views[k]; }
-    return progs.map(function (p, j) {
-      var i = 0;
-      while (i < segs.length - 1 && p >= bounds[i][1]) i++;
-      var v = viewOf(i, j) || base;
-      if (blend > 0 && i > 0 && p < bounds[i][0] + blend / 2) {
-        var a = viewOf(i - 1, j);
-        if (a) v = lerpView(a, v, ease((p - (bounds[i][0] - blend / 2)) / blend));
-      }
-      if (blend > 0 && i < segs.length - 1 && p > bounds[i][1] - blend / 2) {
-        var b = viewOf(i + 1, j);
-        if (b) v = lerpView(v, b, ease((p - (bounds[i][1] - blend / 2)) / blend));
-      }
-      return v;
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Shared finishing steps
-  // ---------------------------------------------------------------------------
-  // Pull the zoom out with the camera's ground speed (normalised to its 95th percentile).
-  function speedZoom(out, times, amount, k) {
-    var n = out.length;
-    if (!amount || n < 3) return;
-    var sp = out.map(function (v, i) {
-      var a = out[Math.max(0, i - 1)], b = out[Math.min(n - 1, i + 1)];
-      var dt = times[Math.min(n - 1, i + 1)] - times[Math.max(0, i - 1)];
-      return dt > 0 ? groundDist([a.longitude, a.latitude], [b.longitude, b.latitude]) / dt : 0;
-    });
-    var ref = sp.slice().sort(function (a, b) { return a - b; })[Math.floor(0.95 * (n - 1))];
-    if (!(ref > 0)) return;
-    var z = 0;
-    out.forEach(function (v, i) {
-      z += (amount * Math.min(1, sp[i] / ref) - z) * k;
-      out[i] = Object.assign({}, v, { zoom: v.zoom - z });
-    });
-  }
-  // Keep the camera at least min_height_m above its target, aimed at the data's height.
-  function keepAbove(out, o) {
-    var minH = o.min_height_m, S = scene();
-    if (!(minH > 0)) return;
-    out.forEach(function (v, i) {
+  // fov -> the view's fovy. altitude_mode -> the height of the point looked at: the ground under it
+  // (the draped tracks nearest it), `altitude` m above that, or `altitude` m above sea level.
+  function applyLens(out, o) {
+    var S = scene(), mode = o.altitude_mode || 'clamp_to_ground', alt = o.altitude;
+    return out.map(function (v) {
       v = Object.assign({}, v);
-      if (S.hasZ && !v.position) v.position = [0, 0, groundZ(v.longitude, v.latitude)];
-      var D = rangeForZoom(v.zoom, v.latitude, o.height);       // eye-to-target metres
-      if (D < minH) { v.zoom = zoomForRange(minH, v.latitude, o.height); D = minH; }
-      var maxPitch = Math.acos(Math.min(1, minH / D)) * 180 / Math.PI;
-      if ((v.pitch || 0) > maxPitch) v.pitch = maxPitch;
-      out[i] = v;
+      if (o.fov) v.fovy = o.fov;
+      var ground = S.hasZ ? groundZ(v.longitude, v.latitude) : 0;
+      var z = mode === 'absolute' ? (alt != null ? alt : ground)
+            : mode === 'relative_to_ground' ? ground + (alt || 0)
+            : (v.position ? v.position[2] : ground);          // clamp: a followed subject's own height
+      v.position = [0, 0, z];
+      return v;
     });
   }
 
@@ -1478,7 +690,10 @@ window.__cam = (function () {
   function path(times, o) {
     o = o || {};
     var preset = o.preset, init = initialView() || {}, S = scene();
-    var pitch = init.pitch || 0, bearing = init.bearing || 0;          // from the map
+    // Tilt and heading: the camera's own, else the map's. Framing is fitted at these.
+    var pitch = (o.tilt != null) ? o.tilt : (init.pitch || 0);
+    var bearing = (o.heading != null) ? o.heading : (init.bearing || 0);
+    o = Object.assign({}, o, { _pitch: pitch, _bearing: bearing });
     var whole = fitBox(S.box, o) || { longitude: init.longitude, latitude: init.latitude, zoom: init.zoom || 8 };
     var base = {
       longitude: whole.longitude, latitude: whole.latitude, zoom: whole.zoom, pitch: pitch, bearing: bearing
@@ -1486,80 +701,34 @@ window.__cam = (function () {
     var END = span() || 1, win = (o.follow_window == null ? 0.1 : o.follow_window) * END;
     // follow_smoothing is per 1/30 s; rescale so the camera keeps up equally at any fps.
     var k = rate(o.follow_smoothing, 0.25, o.fps), keys = subjectKeys(o);
-    var out;
+    var out = [], n = times.length;
 
     if (preset === 'chase') out = chasePath(times, o, base);
-    else if (preset === 'route') out = routePath(times, o, base);
-    else if (preset === 'tour') out = tourPath(times, o, base);
-    else if (preset === 'spotlight') out = spotlightPath(times, o, base);
-    else if (preset === 'pan') out = panPath(times, o, base);
-    else if (preset === 'sequence') out = sequencePath(times, o, base);
-    else {
-      var KF = null, FA = null;
-      if (preset === 'keyframes') {
-        KF = (o.keyframes && o.keyframes.length >= 2) ? o.keyframes : autoKeyframes(o, base);
-        KF.forEach(function (q) { if (q.zoom == null) q.zoom = base.zoom; });
-      }
-      if (preset === 'fly_around') FA = flyAroundSetup(o, base);
-
-      var cur = null, prevTarget = null, cb = bearing, n = times.length;
-      out = [];
-      var follow = function (t) {                          // smoothed framing of recent action
-        var f = fitBox(recentBox(t, win, keys), o);
-        if (!f) return cur || base;
-        cur = cur ? { longitude: cur.longitude + (f.longitude - cur.longitude) * k,
-                      latitude:  cur.latitude  + (f.latitude  - cur.latitude ) * k,
-                      zoom:      cur.zoom      + (f.zoom      - cur.zoom     ) * k } : f;
-        return cur;
-      };
-      var faceTravel = function (target) {                 // smoothed heading of the camera's motion
-        var h = travelHeading(prevTarget, target);
-        prevTarget = target;
-        if (h != null) cb += shortestAngle(cb, h) * Math.max(k, 0.12);
-        return cb;
-      };
-
-      for (var i = 0; i < n; i++) {
-        var t = times[i], prog = n > 1 ? i / (n - 1) : 1, vs;
-        if (preset === 'follow') {
-          var f = follow(t);
-          vs = { longitude: f.longitude, latitude: f.latitude, zoom: f.zoom, pitch: pitch,
-                 bearing: o.heading_lock ? faceTravel(f) : bearing };
-        } else if (preset === 'orbit') {
-          vs = Object.assign({}, base, { bearing: (bearing + 360 * (o.rounds == null ? 1 : o.rounds) * prog) % 360 });
-        } else if (preset === 'fit') {
-          var fb = fitBox(seenBox(t, keys), o) || base;
-          vs = { longitude: fb.longitude, latitude: fb.latitude, zoom: fb.zoom, pitch: pitch, bearing: bearing };
-        } else if (preset === 'keyframes') {
-          vs = (KF.length >= 2) ? keyframeView(KF, prog, o.keyframe_easing || 'smooth') : Object.assign({}, base);
-        } else if (preset === 'cinematic') {
-          var lead = (o.lead_frac || 0) * END;
-          var ft = follow(Math.min(END, t + lead));
-          var mode = o.bearing_mode || 'rotate', brg;
-          if (mode === 'heading') brg = faceTravel(ft);
-          else if (mode === 'fixed') brg = bearing;
-          else brg = bearing + (o.rotate_deg == null ? 45 : o.rotate_deg) * prog;
-          vs = { longitude: ft.longitude, latitude: ft.latitude, zoom: ft.zoom, pitch: pitch, bearing: brg };
-          var intro = (o.intro_frac == null ? 0.12 : o.intro_frac);
-          if (intro > 0 && prog < intro) {                 // fly in from the whole-scene view
-            var s = prog / intro, e = s * s * (3 - 2 * s);
-            vs = { longitude: base.longitude + (vs.longitude - base.longitude) * e,
-                   latitude:  base.latitude  + (vs.latitude  - base.latitude ) * e,
-                   zoom:      base.zoom      + (vs.zoom      - base.zoom     ) * e,
-                   pitch: pitch, bearing: vs.bearing };
-          }
-        } else if (preset === 'fly_around') {
-          vs = flyAroundView(FA, prog);
-        } else {
-          vs = Object.assign({}, base);                    // static / unknown
+    else if (preset === 'follow') {
+      var cur = null, prevTarget = null, cb = bearing;
+      times.forEach(function (t) {
+        var f = fitBox(recentBox(t, win, keys), o);     // smoothed framing of the recent action
+        if (f) {
+          cur = cur ? { longitude: cur.longitude + (f.longitude - cur.longitude) * k,
+                        latitude:  cur.latitude  + (f.latitude  - cur.latitude ) * k,
+                        zoom:      cur.zoom      + (f.zoom      - cur.zoom     ) * k } : f;
         }
-        out.push(vs);
-      }
+        var v = cur || base;
+        if (o.face_travel) {                             // smoothed heading of the camera's motion
+          var h = travelHeading(prevTarget, v);
+          prevTarget = v;
+          if (h != null) cb += shortestAngle(cb, h) * Math.max(k, 0.12);
+        }
+        out.push({ longitude: v.longitude, latitude: v.latitude, zoom: v.zoom, pitch: pitch, bearing: cb });
+      });
+    } else if (preset === 'fly_around' || preset === 'fixed') {
+      var fo = preset === 'fixed' ? Object.assign({}, o, { fly_frac: 0, rounds: 0 }) : o;
+      var FA = flyAroundSetup(fo, base);
+      for (var i = 0; i < n; i++) out.push(flyAroundView(FA, n > 1 ? i / (n - 1) : 1));
+    } else {
+      out = copies(base, n);
     }
-
-    if (o.speed_zoom) speedZoom(out, times, o.speed_zoom, rate(0.08, 0.08, o.fps));
-    keepAbove(out, o);
-    return out;
+    return applyLens(out, o);
   }
 
   return { span: span, initialView: initialView, path: path };
@@ -1582,43 +751,102 @@ def _launch_args(gl: str):
     return base
 
 
-async def _prepare_page(browser, html_uri, *, width, height, device_scale_factor, head_ready_timeout_ms):
-    """Open a page, load the scene, take control of the autoplay loop, inject helper.
-    Returns (page, pending_counter_dict)."""
+class VideoOverlays(BaseModel):
+    """What the video shows over the map. The playback bar and camera panel are never shown."""
+
+    clock: bool = Field(
+        default=True, description="The data date and time in a corner, formatted as on the map's playback bar."
+    )
+    clock_position: Literal["top-left", "top-right", "bottom-left", "bottom-right"] = Field(
+        default="top-right", description="Corner for the date and time."
+    )
+    legend: bool = Field(default=True, description="The legend.")
+    north_arrow: bool = Field(default=True, description="The north arrow.")
+    scale_bar: bool = Field(default=True, description="The scale bar.")
+    title: bool = Field(default=True, description="The map title, if it has one.")
+    labels: bool = Field(default=True, description="Labels above the markers (e.g. subject names).")
+
+
+# The map's widgets by their rendered classes (the deck.gl widgets carry no usable ids).
+_OVERLAY_SELECTORS = {
+    "legend": ".ecoscope-legend-widget",
+    "north_arrow": ".ecoscope-north-arrow-widget",
+    "scale_bar": ".ecoscope-scale-widget",
+    "title": ".ecoscope-title-widget",
+}
+
+
+def _overlay_css(overlays: VideoOverlays, height: int) -> str:
+    """Stylesheet for the video: interactive-only controls and switched-off widgets hidden, the clock placed."""
+    hidden = [".deck-widget-save-image", "#timeline-controls", "#camera-panel", ".camera-panel-widget"]
+    hidden += [sel for name, sel in _OVERLAY_SELECTORS.items() if not getattr(overlays, name)]
+    vert, horiz = overlays.clock_position.split("-")
+    size = max(12, round(height * 0.026))  # ~19 px at 720p, ~28 px at 1080p, scaled for vertical video too
+    margin = max(10, round(height * 0.02))
+    return (
+        ", ".join(hidden) + " { display: none !important; }\n"
+        f"#video-clock {{ position: fixed; {vert}: {margin}px; {horiz}: {margin}px; z-index: 20;"
+        f" padding: {round(size * 0.3)}px {round(size * 0.55)}px; border-radius: {round(size * 0.35)}px;"
+        f" background: rgba(20, 20, 20, 0.72); color: #fff; font: 600 {size}px/1.2 system-ui, sans-serif;"
+        " font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }"
+    )
+
+
+async def _prepare_page(
+    browser, html_uri, *, width, height, device_scale_factor, head_ready_timeout_ms, overlays, map_timeout_ms
+):
+    """Open a page, load the scene, take control of the autoplay loop, inject helper and the
+    video overlays, and wait for the base map. Returns (page, pending_counter_dict)."""
     page = await browser.new_page(
         viewport={"width": width, "height": height},
         device_scale_factor=device_scale_factor,
     )
-    # Count in-flight tile/image requests so we can wait for the basemap to paint.
+    # Count in-flight tile requests so we can wait for the basemap to paint. Tiles arrive as images
+    # or, for deck's tile/terrain layers and vector base maps, through fetch/XHR.
     pending = {"n": 0}
+    tile_types = {"image", "fetch", "xhr"}
 
     def _on_req(req):
-        if req.resource_type == "image":
+        if req.resource_type in tile_types:
             pending["n"] += 1
 
     def _on_done(req):
-        if req.resource_type == "image":
+        if req.resource_type in tile_types:
             pending["n"] = max(0, pending["n"] - 1)
 
     page.on("request", _on_req)
     page.on("requestfinished", _on_done)
     page.on("requestfailed", _on_done)
 
-    await page.goto(html_uri, wait_until="load")
-    await page.wait_for_function("() => window.__tripsAnim && window.__tripsAnim.ready", timeout=60000)
+    # Not "load": one slow third-party resource would hold it up. Readiness is checked below.
+    await page.goto(html_uri, wait_until="domcontentloaded", timeout=map_timeout_ms)
+    await page.wait_for_function("() => window.__tripsAnim && window.__tripsAnim.ready", timeout=map_timeout_ms)
     await page.evaluate("() => window.__tripsAnim.pause()")
     await page.wait_for_function("() => window.__tripsAnim.headReady", timeout=head_ready_timeout_ms)
     await page.add_script_tag(content=_CAM_HELPER)
-    # The "Save as Image" widget (a camera icon, top-right) has no `id` in the rendered
-    # DOM -- #SaveImageWidget never matched. Hide it by its actual deck.gl widget class.
-    # The playback bar from draw_animated_map is for interactive viewing only.
-    await page.add_style_tag(
-        content=".deck-widget-save-image, #timeline-controls, #camera-panel { display: none !important; }"
+    await page.add_style_tag(content=_overlay_css(overlays, height))
+    await page.evaluate(
+        """([clock, labels]) => {
+            const a = window.__tripsAnim;
+            if (!labels && typeof a.setLabels === 'function') a.setLabels(false);
+            // The clock needs the widget's formatter (my-deck-widgets >= 0.15); older pages go without.
+            if (clock && typeof a.formatTime === 'function') {
+              const el = document.createElement('div');
+              el.id = 'video-clock';
+              document.body.appendChild(el);
+            }
+        }""",
+        [overlays.clock, overlays.labels],
     )
+    # The whole base map in, before the first frame (later frames wait per frame).
+    await _await_ready(page, pending, settle_timeout_ms=map_timeout_ms, settle_ms=0)
     return page, pending
 
 
+# Every deck layer loaded (terrain/tile layers: the tiles in view) and the base map's tiles in.
 _TILES_LOADED_JS = """() => {
+    const a = window.__tripsAnim;
+    if (a && typeof a.mapLoaded === 'function') return a.mapLoaded();
     const d = window.deckInstance; if (!d) return true;
     try {
       const lm = d.layerManager || (d.deck && d.deck.layerManager);
@@ -1644,17 +872,24 @@ async def _await_ready(page, pending, *, settle_timeout_ms, settle_ms, stable_ms
         await page.wait_for_timeout(settle_ms)  # compositor cushion
 
 
+def _frame_path(frame_dir: str, idx: int, ext: str) -> str:
+    return os.path.join(frame_dir, f"m_{idx:06d}.{ext}")
+
+
 async def _render_frames(page, pending, frames, clip, quality, capture, frame_dir, ext, progress):
-    """Render an iterable of (index, t, viewState) to numbered files."""
+    """Render an iterable of (index, t, viewState) to numbered files. Each file is written under a
+    temporary name and renamed when complete, so a resumed render never trusts a half-written frame."""
     shot_kwargs = {"clip": clip, "type": quality.capture_format}
     if quality.capture_format == "jpeg":
         shot_kwargs["quality"] = quality.jpeg_quality
     for idx, t, vs in frames:
         await page.evaluate(
             """([t, vs]) => {
-                const d = window.deckInstance;
+                const d = window.deckInstance, a = window.__tripsAnim;
                 if (vs && d) d.setProps({ viewState: vs });
-                window.__tripsAnim.renderAt(t);
+                a.renderAt(t);
+                const clock = document.getElementById('video-clock');
+                if (clock) clock.textContent = a.formatTime(t);
                 try { d.redraw && d.redraw('export'); } catch (e) {}
             }""",
             [t, vs],
@@ -1662,8 +897,10 @@ async def _render_frames(page, pending, frames, clip, quality, capture, frame_di
         # let deck issue tile requests for the new viewport, then drain them
         await page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
         await _await_ready(page, pending, settle_timeout_ms=capture.settle_timeout_ms, settle_ms=capture.settle_ms)
-        shot_kwargs["path"] = os.path.join(frame_dir, f"f_{idx:06d}.{ext}")
+        final = _frame_path(frame_dir, idx, ext)
+        shot_kwargs["path"] = final + ".part"
         await page.screenshot(**shot_kwargs)
+        os.replace(final + ".part", final)
         progress(idx)
 
 
@@ -1699,57 +936,24 @@ class CaptureOptions(BaseModel):
     head_ready_timeout_ms: int = Field(
         default=30000, gt=0, description="Max ms to wait for lazily loaded pieces (3D head model, filters)."
     )
+    map_timeout_ms: int = Field(
+        default=60000,
+        gt=0,
+        description="Max ms to wait for the whole base map and terrain to load before the first frame.",
+    )
+    resume: bool = Field(
+        default=True,
+        description="Keep captured frames next to the video until it is written, so a failed or interrupted "
+        "render with the same settings picks up where it stopped instead of starting over.",
+    )
 
 
-def _raw_keyframes(camera: CameraOptions) -> list[dict]:
-    """Keyframes given inline or via file. Validated before the browser launches; an empty
-    list is allowed and means 'auto-derive a path from the data'."""
-    if isinstance(camera, SequenceCamera):
-        for segment in camera.segments:  # fail before the browser launches
-            _raw_keyframes(segment.camera)
-        return []
-    if not isinstance(camera, KeyframesCamera):
-        return []
-    raw = [k.model_dump() if isinstance(k, BaseModel) else dict(k) for k in (camera.keyframes or [])]
-    if not raw and isinstance(camera.source, KeyframesFromFile) and camera.source.keyframes_file:
-        raw = _load_keyframes_file(camera.source.keyframes_file)
-    if len(raw) == 1:
-        raise ValueError(
-            "camera='keyframes' needs at least 2 keyframes, got 1. "
-            "Add more keyframes, or leave the list empty to auto-derive a camera path from the data."
-        )
-    return raw
-
-
-def _camera_opts(
-    camera: CameraOptions, kf_raw: list[dict], base_view: dict, width: int, height: int, fps: int = 30
-) -> dict:
-    """Options for window.__cam.path: the camera's fields (the page fills its own defaults),
-    resolved keyframes, and the video size the framing is fitted to."""
-    fields = {name: getattr(camera, name) for name in type(camera).model_fields}  # model_dump drops exclude=True
-    source = fields.pop("source", None)
-    fields.pop("keyframes", None)
-    segments = fields.pop("segments", None)
+def _camera_opts(camera: CameraOptions, width: int, height: int, fps: int = 30) -> dict:
+    """Options for window.__cam.path: the camera's fields (the page fills its own defaults) and
+    the video size the framing is fitted to."""
+    fields = camera.model_dump()
     preset = fields.pop("type_")
-    if segments is not None:  # sequence: every segment's camera gets its own options
-        fields["segments"] = [
-            {
-                "until": seg.until,
-                "camera": _camera_opts(seg.camera, _raw_keyframes(seg.camera), base_view, width, height, fps),
-            }
-            for seg in segments
-        ]
-    return {
-        **fields,
-        "preset": preset,
-        "keyframes": _resolve_keyframes(kf_raw, base_view) if kf_raw else None,
-        # keyframes name their subject in `source`; chase/route carry it as their own field
-        "subject": source.subject if isinstance(source, KeyframesFromSubject) else fields.get("subject"),
-        "auto_keyframe_count": 12,
-        "width": width,
-        "height": height,
-        "fps": fps,
-    }
+    return {**fields, "preset": preset, "width": width, "height": height, "fps": fps}
 
 
 # Rough per-page costs for the automatic worker count.
@@ -1787,6 +991,43 @@ async def _launch_browser(p, gl: str):
         return await p.chromium.launch(headless=True, args=_launch_args(gl))
 
 
+def _assemble_sequence(frame_dir: str, ext: str, n_main: int, n_hold_start: int, n_hold_end: int) -> str:
+    """The encoder's numbered input: the first frame held n_hold_start times, every captured frame,
+    then the last frame held n_hold_end times. Hard links, so holds cost no disk or capture time."""
+    seq_dir = os.path.join(frame_dir, "sequence")
+    shutil.rmtree(seq_dir, ignore_errors=True)
+    os.makedirs(seq_dir)
+    order = [0] * n_hold_start + list(range(n_main)) + [n_main - 1] * n_hold_end
+    for i, src in enumerate(order):
+        src_path, dst_path = _frame_path(frame_dir, src, ext), os.path.join(seq_dir, f"f_{i:06d}.{ext}")
+        try:
+            os.link(src_path, dst_path)
+        except OSError:  # no hard links on this file system
+            shutil.copyfile(src_path, dst_path)
+    return seq_dir
+
+
+def _frames_dir(out_path: str, key: str) -> str:
+    """Where a resumable render keeps its frames: beside the video, named by the render's settings,
+    or in the temp dir if the video's folder isn't writable."""
+    stem = Path(out_path).stem
+    for parent in (Path(out_path).resolve().parent, Path(tempfile.gettempdir())):
+        d = parent / f".{stem}-frames-{key}"
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            return str(d)
+        except OSError:
+            continue
+    return tempfile.mkdtemp(prefix="anim_frames_")
+
+
+def _render_key(html_path: Path, settings: dict) -> str:
+    """Identifies a render: the page's content and every setting that changes a captured frame."""
+    h = hashlib.sha256(html_path.read_bytes())
+    h.update(json.dumps(settings, sort_keys=True, default=str).encode())
+    return h.hexdigest()[:16]
+
+
 def _encode_mp4(frame_dir: str, ext: str, fps: int, quality: VideoQuality, out_path: str) -> None:
     """Assemble the numbered frame sequence into H.264."""
     cmd = [
@@ -1812,13 +1053,16 @@ async def render_animation_async(
     html_path: str,
     output_dir: str | None = None,
     out_path: str = "animation.mp4",
-    camera: CameraOptions = StaticCamera(),
+    camera: CameraOptions = FixedCamera(),
     camera_settings: str | None = None,
     fps: int = 30,
     duration: DurationConfig = DurationConfig(),
     resolution: ResolutionOptions = PresetResolution(),
     start_frac: float = 0.0,
     end_frac: float = 1.0,
+    hold_start_s: float = 1.0,
+    hold_end_s: float = 2.0,
+    overlays: VideoOverlays = VideoOverlays(),
     quality: VideoQuality = VideoQuality(),
     capture: CaptureOptions = CaptureOptions(),
     verbose: bool = True,
@@ -1833,7 +1077,6 @@ async def render_animation_async(
     if output_dir:
         out_path = os.path.join(output_dir, os.path.basename(str(out_path)))
     ext = "jpg" if quality.capture_format == "jpeg" else "png"
-    kf_raw = _raw_keyframes(camera)
     t_wall = time.time()
 
     def log(*a):
@@ -1848,10 +1091,27 @@ async def render_animation_async(
             height=height,
             device_scale_factor=quality.device_scale_factor,
             head_ready_timeout_ms=capture.head_ready_timeout_ms,
+            overlays=overlays,
+            map_timeout_ms=capture.map_timeout_ms,
         )
 
-    _ensure_playwright_browsers()
-    with tempfile.TemporaryDirectory(prefix="anim_frames_") as frame_dir:
+    # Everything that changes a captured frame; a resumed render must match it exactly.
+    key = _render_key(
+        html_path,
+        {
+            "camera": camera.model_dump(mode="json"),
+            "fps": fps,
+            "duration": duration.model_dump(),
+            "size": [width, height],
+            "range": [start_frac, end_frac],
+            "overlays": overlays.model_dump(),
+            "frames": quality.model_dump(include={"capture_format", "jpeg_quality", "device_scale_factor"}),
+        },
+    )
+    frame_dir = _frames_dir(out_path, key) if capture.resume else tempfile.mkdtemp(prefix="anim_frames_")
+
+    _use_bundled_chromium()
+    try:
         async with async_playwright() as p:
             browser = await _launch_browser(p, capture.gl)
 
@@ -1862,15 +1122,20 @@ async def render_animation_async(
             natural = await page0.evaluate("() => window.__tripsAnim.durationSec || 0")
             seconds = float(natural) if duration.auto and natural > 0 else float(duration.seconds)
             n_frames = max(1, int(round(fps * seconds)))
-            workers = _auto_workers(n_frames, capture.gl) if capture.workers == "auto" else capture.workers
-            log(
-                f"span={span} duration={seconds:.2f}s frames={n_frames} camera={camera.type_} "
-                f"gl={capture.gl} workers={workers}{' (auto)' if capture.workers == 'auto' else ''}"
-            )
 
             t_lo, t_hi = span * start_frac, span * end_frac
-            times = [t_lo + (t_hi - t_lo) * (i / (n_frames - 1) if n_frames > 1 else 1.0) for i in range(n_frames)]
-            opts = _camera_opts(camera, kf_raw, base_view, width, height, fps)
+            # Frames are evenly spaced in playback time. With adaptive speed the widget maps playback
+            # progress to data time (timeAt), so quiet stretches go by faster, as on the map.
+            times = await page0.evaluate(
+                """([lo, hi, n]) => {
+                  const a = window.__tripsAnim, at = (i) => (n > 1 ? i / (n - 1) : 1);
+                  if (typeof a.timeAt !== 'function') return Array.from({ length: n }, (_, i) => lo + (hi - lo) * at(i));
+                  const p0 = a.progressAt(lo), p1 = a.progressAt(hi);
+                  return Array.from({ length: n }, (_, i) => a.timeAt(p0 + (p1 - p0) * at(i)));
+                }""",
+                [t_lo, t_hi, n_frames],
+            )
+            opts = _camera_opts(camera, width, height, fps)
             views = await page0.evaluate("([times, opts]) => window.__cam.path(times, opts)", [times, opts])
 
             canvas = await page0.query_selector("#deck-container canvas")
@@ -1878,28 +1143,50 @@ async def render_animation_async(
                 raise RuntimeError("deck-container canvas not found")
             clip = await canvas.bounding_box()
 
+            # Frames a previous, interrupted render with the same settings already captured.
+            frames = [
+                f for f in zip(range(n_frames), times, views) if not os.path.exists(_frame_path(frame_dir, f[0], ext))
+            ]
+            todo = len(frames)
+            workers = _auto_workers(todo, capture.gl) if capture.workers == "auto" else capture.workers
+            log(
+                f"span={span} duration={seconds:.2f}s frames={n_frames} camera={camera.type_} "
+                f"gl={capture.gl} workers={workers}{' (auto)' if capture.workers == 'auto' else ''}"
+                + (f" resuming: {n_frames - todo} frames already captured" if todo < n_frames else "")
+            )
+
             done = {"n": 0}
 
             def progress(_idx):
                 done["n"] += 1
-                if done["n"] % 100 == 0 or done["n"] == n_frames:
+                if done["n"] % 100 == 0 or done["n"] == todo:
                     el = time.time() - t_wall
-                    log(f"{done['n']}/{n_frames} frames ({el:.1f}s, {done['n'] / max(el, 1e-6):.1f} fps)")
+                    log(f"{done['n']}/{todo} frames ({el:.1f}s, {done['n'] / max(el, 1e-6):.1f} fps)")
 
-            # Contiguous chunks per worker page -> good tile-cache locality.
-            frames = list(zip(range(n_frames), times, views))
-            per = -(-n_frames // workers)
-            chunks = [frames[i : i + per] for i in range(0, n_frames, per)]
-            pages = [(page0, pending0)] + [await open_page() for _ in chunks[1:]]
-            await asyncio.gather(
-                *(
-                    _render_frames(page, pending, chunk, clip, quality, capture, frame_dir, ext, progress)
-                    for (page, pending), chunk in zip(pages, chunks)
+            if frames:
+                # Contiguous chunks per worker page -> good tile-cache locality.
+                per = -(-todo // max(1, workers))
+                chunks = [frames[i : i + per] for i in range(0, todo, per)]
+                pages = [(page0, pending0)] + [await open_page() for _ in chunks[1:]]
+                await asyncio.gather(
+                    *(
+                        _render_frames(page, pending, chunk, clip, quality, capture, frame_dir, ext, progress)
+                        for (page, pending), chunk in zip(pages, chunks)
+                    )
                 )
-            )
             await browser.close()
 
-        _encode_mp4(frame_dir, ext, fps, quality, out_path)
+        seq_dir = _assemble_sequence(
+            frame_dir, ext, n_frames, int(round(hold_start_s * fps)), int(round(hold_end_s * fps))
+        )
+        _encode_mp4(seq_dir, ext, fps, quality, out_path)
+    except BaseException:
+        if not capture.resume:
+            shutil.rmtree(frame_dir, ignore_errors=True)
+        else:
+            log(f"render stopped; captured frames kept in {frame_dir} for the next run")
+        raise
+    shutil.rmtree(frame_dir, ignore_errors=True)
 
     log(f"wrote {out_path} ({time.time() - t_wall:.1f}s total)")
     return out_path
@@ -1915,16 +1202,15 @@ def render_animation(
     camera: Annotated[
         CameraOptions,
         AdvancedField(
-            default=StaticCamera(),
+            default=FixedCamera(),
             discriminator="type_",
             title="Camera",
-            description="Camera for the clip. Every option frames whatever is animating (trips, points, "
-            "polygons, ...) at the video's size, with the map's pitch and bearing: Static (whole scene), Follow the "
-            "action, Orbit, Fit everything so far, Cinematic fly-through, Keyframes (waypoints, or follow one "
-            "subject), Fly to & around, Chase a subject, Subject tour, Event spotlight, Pan across, Route "
-            "flythrough, or a Sequence of these.",
+            description="Camera for the clip, described as in Google Maps 3D: the center it looks at, its range "
+            "(distance), tilt, heading, field of view and altitude mode. Fixed view, Fly to & around, Follow a "
+            "subject, or Follow the action. Blank values frame the animated data at the video's size, with the "
+            "map's tilt and heading.",
         ),
-    ] = StaticCamera(),
+    ] = FixedCamera(),
     camera_settings: Annotated[
         str | SkipJsonSchema[None],
         Field(
@@ -1949,7 +1235,8 @@ def render_animation(
             default=PresetResolution(),
             discriminator="preset",
             title="Resolution",
-            description="Output video resolution: a preset (720p/1080p/4K) or 'custom' width/height.",
+            description="Output video resolution: a landscape preset (720p/1080p/4K), vertical 9:16 or square "
+            "1:1 for social media, or 'custom' width/height.",
         ),
     ] = PresetResolution(),
     start_frac: Annotated[
@@ -1958,6 +1245,27 @@ def render_animation(
     end_frac: Annotated[
         float, AdvancedField(default=1.0, ge=0, le=1, description="Timeline fraction to stop at (1 = end).")
     ] = 1.0,
+    hold_start_s: Annotated[
+        float,
+        AdvancedField(
+            default=1.0, ge=0, le=30, description="Seconds to hold the opening frame before playback starts."
+        ),
+    ] = 1.0,
+    hold_end_s: Annotated[
+        float,
+        AdvancedField(
+            default=2.0, ge=0, le=30, description="Seconds to hold the final frame (the completed tracks) at the end."
+        ),
+    ] = 2.0,
+    overlays: Annotated[
+        VideoOverlays,
+        AdvancedField(
+            default=VideoOverlays(),
+            title="Overlays",
+            description="What the video shows over the map: the date and time, legend, north arrow, scale bar, "
+            "title and marker labels.",
+        ),
+    ] = VideoOverlays(),
     quality: Annotated[
         VideoQuality, AdvancedField(default=VideoQuality(), description="Frame format and H.264 encoding.")
     ] = VideoQuality(),
@@ -1978,16 +1286,92 @@ def render_animation(
         resolution=resolution,
         start_frac=start_frac,
         end_frac=end_frac,
+        hold_start_s=hold_start_s,
+        hold_end_s=hold_end_s,
+        overlays=overlays,
         quality=quality,
         capture=capture,
         verbose=verbose,
     )
+    return _run_sync(coro)
+
+
+def _run_sync(coro):
+    """Run a coroutine to completion from sync code, also inside a running loop (Jupyter/IPython)."""
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
-    # A loop is already running (Jupyter/IPython): run the coroutine on a worker thread.
+    # A loop is already running: run the coroutine on a worker thread.
     import concurrent.futures
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         return ex.submit(asyncio.run, coro).result()
+
+
+class VideoSettings(BaseModel):
+    """Every option of a video in one JSON object (render_video_from_settings). Anything left out
+    takes render_animation's default."""
+
+    model_config = ConfigDict(extra="forbid")
+    camera: CameraConfig = FixedCamera()
+    fps: int = Field(default=30, gt=0)
+    duration: DurationConfig = DurationConfig()
+    resolution: ResolutionConfig = PresetResolution()
+    start_frac: float = Field(default=0.0, ge=0, le=1)
+    end_frac: float = Field(default=1.0, ge=0, le=1)
+    hold_start_s: float = Field(default=1.0, ge=0, le=30)
+    hold_end_s: float = Field(default=2.0, ge=0, le=30)
+    overlays: VideoOverlays = VideoOverlays()
+    quality: VideoQuality = VideoQuality()
+    capture: CaptureOptions = CaptureOptions()
+
+
+def parse_video_settings(settings: str | dict) -> VideoSettings:
+    """Video settings from a dict, JSON text, or the path of a .json file. A camera on its own (what
+    the map's Camera panel copies or downloads, e.g. {"type_": "fixed", ...}) is accepted too, with
+    every other option at its default."""
+    if isinstance(settings, str):
+        text = settings.strip()
+        if not text.startswith(("{", "[")):  # a file path
+            text = Path(remove_file_scheme(text)).read_text(encoding="utf-8")
+        try:
+            settings = json.loads(text)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Video settings are not valid JSON: {e}") from e
+    if not isinstance(settings, dict):
+        raise ValueError("Video settings must be a JSON object.")
+    if "type_" in settings:  # a camera alone
+        settings = {"camera": settings}
+    return VideoSettings.model_validate(settings)
+
+
+@register()
+def render_video_from_settings(
+    html_path: Annotated[str, Field(description="Animated map HTML from draw_animated_map.")],
+    settings: Annotated[
+        str,
+        Field(
+            title="Video settings",
+            description="JSON with the video's options -- camera, fps, duration, resolution, start_frac, end_frac, "
+            "hold_start_s, hold_end_s, overlays, quality, capture -- as text or the path of a .json file. A camera "
+            "on its own (the map's Camera panel settings) also works; anything left out takes its default.",
+        ),
+    ],
+    output_dir: Annotated[str | SkipJsonSchema[None], Field(description="Directory for the video.")] = None,
+    out_path: Annotated[
+        str, Field(description="Video file name (or path when output_dir is unset).")
+    ] = "animation.mp4",
+    verbose: Annotated[bool, AdvancedField(default=True, description="Print progress to stderr.")] = True,
+) -> str:
+    """Render an animated map HTML to an MP4 video, with every option from one JSON."""
+    video = parse_video_settings(settings)
+    return _run_sync(
+        render_animation_async(
+            html_path,
+            output_dir=output_dir,
+            out_path=out_path,
+            verbose=verbose,
+            **{name: getattr(video, name) for name in VideoSettings.model_fields},
+        )
+    )

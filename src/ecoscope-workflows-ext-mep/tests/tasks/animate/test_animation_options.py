@@ -3,6 +3,7 @@ the task form passes each option through, and draw_animated_map hands them to th
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 
@@ -12,12 +13,15 @@ from shapely.geometry import LineString
 
 from ecoscope_workflows_ext_mep.tasks.animate._animate import camera_panel_schema
 from ecoscope_workflows_ext_mep.tasks.animate._draw_map import (
-    LayerDefinition,
+    AnimalModelMarker,
+    PydeckLayerDefinition,
     TimelineAnimation,
     TripsAnimation,
     TripsLayerStyle,
+    _head_spec,
     animate_layer,
     create_playback_controls,
+    create_scenegraph_layer,
     create_timeline_animation,
     create_trips_animation,
     draw_animated_map,
@@ -45,7 +49,7 @@ def trips_layer():
         crs="EPSG:4326",
     )
     style = TripsLayerStyle(get_timestamps="timestamps", get_color="rgba_color")
-    return LayerDefinition(layer_type="TripsLayer", layer_style=style, legend=None, geodataframe=gdf)
+    return PydeckLayerDefinition(layer_type="TripsLayer", layer_style=style, legend=None, geodataframe=gdf)
 
 
 def _widget_props(html: str) -> dict:
@@ -62,19 +66,27 @@ def _page_settings(html: str) -> tuple[dict, dict]:
 
 
 def _draw(layer, animation, **timeline):
+    # The model, not create_timeline_animation: most timeline options aren't task parameters.
     return draw_animated_map(
         geo_layers=animate_layer(layer=layer, animation=animation),
-        timeline=create_timeline_animation(**timeline),
+        timeline=TimelineAnimation(**timeline),
     )
 
 
 class TestDefaults:
-    def test_fixes_are_on_and_curves_are_opt_in(self):
+    def test_smooth_turning_is_on_and_curves_are_opt_in(self):
         anim = TripsAnimation()
-        assert anim.smooth_turning and anim.show_gaps and not anim.curve_paths
-        assert (anim.turn_smoothing, anim.gap_hours) == (3.0, 12.0)
-        assert anim.glow and anim.pulse and anim.hover_info and anim.click_to_follow
-        assert anim.label_column == ""
+        assert anim.smooth_turning and not anim.curve_paths and anim.turn_smoothing == 3.0
+        assert anim.hover_info and anim.label_column == ""
+
+    @pytest.mark.parametrize(
+        "field",
+        ["show_gaps", "gap_hours", "speed_response", "comet_color", "history_lag", "shadow",
+         "glow", "glow_width", "glow_opacity", "pulse", "pulse_period_s", "click_to_follow"],
+    )
+    def test_removed_options_are_gone(self, field):
+        assert field not in TripsAnimation.model_fields
+        assert field not in inspect.signature(create_trips_animation).parameters
 
     def test_timeline_has_sun_lighting_and_a_60_fps_cap(self):
         timeline = TimelineAnimation()
@@ -94,40 +106,60 @@ class TestTasksPassOptionsThrough:
             smooth_turning=False,
             turn_smoothing=5,
             curve_paths=True,
-            show_gaps=False,
-            gap_hours=3,
-            glow=False,
-            glow_width=4,
-            glow_opacity=0.5,
-            pulse=False,
-            pulse_period_s=2,
             label_column="subject_name",
             hover_info=False,
-            click_to_follow=False,
         )
-        assert anim.model_dump(include={"smooth_turning", "turn_smoothing", "curve_paths", "show_gaps"}) == {
+        assert anim.model_dump(include={"smooth_turning", "turn_smoothing", "curve_paths"}) == {
             "smooth_turning": False,
             "turn_smoothing": 5,
             "curve_paths": True,
-            "show_gaps": False,
         }
-        assert (anim.gap_hours, anim.glow, anim.glow_width, anim.glow_opacity) == (3, False, 4, 0.5)
-        assert (anim.pulse, anim.pulse_period_s, anim.label_column) == (False, 2, "subject_name")
-        assert not anim.hover_info and not anim.click_to_follow
+        assert anim.label_column == "subject_name" and not anim.hover_info
 
-    def test_timeline_options(self):
-        timeline = create_timeline_animation(sun_lighting=False, night_brightness=0.2, day_night_smoothing_s=1)
-        assert not timeline.sun_lighting and timeline.night_brightness == 0.2
-        assert timeline.day_night_smoothing_s == 1
+    def test_timeline_task_options(self):
+        timeline = create_timeline_animation(duration=12, fps_limit=30)
+        assert (timeline.duration_s, timeline.fps_limit) == (12, 30)
+
+    def test_timeline_task_leaves_feel_options_at_the_model_defaults(self):
+        hidden = {
+            "duration_s", "auto_rotate_speed", "sun_lighting", "night_brightness", "day_night_smoothing_s",
+            "adaptive_speed", "max_speedup", "rest_speed_kmh", "fast_forward_night", "ease_s", "follow_smoothing_s",
+        }
+        assert hidden.isdisjoint(inspect.signature(create_timeline_animation).parameters)
+        timeline = create_timeline_animation()
+        hidden.discard("duration_s")   # renamed to `duration` on the task, same default
+        assert {k: getattr(timeline, k) for k in hidden} == {
+            k: TimelineAnimation.model_fields[k].default for k in hidden
+        }
+
+    def test_model_animations(self):
+        model = create_scenegraph_layer(walk_animation="walk", idle_animation="Idle1", animation_speed=1.5)
+        anims = _head_spec(model)["model"]["anims"]
+        assert anims == {"walk": "walk", "run": "walk", "idle": "Idle1", "speed": 1.5}   # run falls back to walk
+
+    @pytest.mark.parametrize(
+        "animal,expected", [("elephant", ("12", "11", "7")), ("lion", ("0", "0", None)), ("giraffe", (None, None, None))]
+    )
+    def test_preset_animals_name_their_clips(self, animal, expected):
+        anims = _head_spec(AnimalModelMarker(animal=animal))["model"]["anims"]
+        assert (anims["walk"], anims["run"], anims["idle"]) == expected
 
     def test_clock_utc_offset(self):
         assert create_playback_controls(utc_offset_hours=5.5).utc_offset_hours == 5.5
         with pytest.raises(ValueError):
             create_playback_controls(utc_offset_hours=15)
 
-    @pytest.mark.parametrize("field,value", [("glow_width", 1), ("turn_smoothing", 0), ("night_brightness", 1.5)])
+    @pytest.mark.parametrize(
+        "field,value",
+        [("turn_smoothing", 0), ("comet_ratio", 1.5), ("night_brightness", 1.5), ("max_speedup", 1)],
+    )
     def test_out_of_range_values_are_rejected(self, field, value):
-        build = create_timeline_animation if field == "night_brightness" else create_trips_animation
+        # The task if the field is one of its parameters; else the model, which still validates it.
+        if field in TimelineAnimation.model_fields:
+            task, model = create_timeline_animation, TimelineAnimation
+        else:
+            task, model = create_trips_animation, TripsAnimation
+        build = task if field in inspect.signature(task).parameters else model
         with pytest.raises(ValueError):
             build(**{field: value})
 
@@ -137,27 +169,37 @@ class TestPageSettings:
         spec, sun = _page_settings(_draw(trips_layer, TripsAnimation()))
         assert spec["smoothTurning"] is True and spec["turnSmoothing"] == 3.0
         assert spec["curvePaths"] is False
-        assert spec["gapS"] == 12 * 3600
-        assert spec["glow"] == {"width": 3.0, "opacity": 0.25}
-        assert spec["pulsePeriod"] == 1.5
         assert spec["labelCol"] == ""
-        assert spec["hoverInfo"] is True and spec["clickToFollow"] is True
+        assert spec["hoverInfo"] is True and spec["speedResponse"] is True
         assert sun == {"on": True, "night": 0.45, "smoothS": 0.3}
 
-    def test_switched_off_options_are_null(self, trips_layer):
-        anim = TripsAnimation(show_gaps=False, glow=False, pulse=False)
-        spec, sun = _page_settings(_draw(trips_layer, anim, sun_lighting=False))
-        assert spec["gapS"] is None and spec["glow"] is None and spec["pulsePeriod"] is None
+    def test_removed_effects_are_off_on_the_page(self, trips_layer):
+        # The widget treats a missing key as off: no glow, pulse, shadow, gap hours, history lag,
+        # speed / day-night comet colours or click-to-follow.
+        spec, _ = _page_settings(_draw(trips_layer, TripsAnimation()))
+        removed = {"gapS", "glow", "pulsePeriod", "clickToFollow", "cometColor", "historyLag", "shadow"}
+        assert removed.isdisjoint(spec)
+
+    def test_feel_defaults_reach_the_page(self, trips_layer):
+        html = _draw(trips_layer, TripsAnimation())
+        props = _widget_props(html)
+        assert props["pacing"] == {"adaptive": False, "maxSpeedup": 6.0, "restKmh": 0.5, "night": False}
+        assert (props["easeS"], props["followSmoothingS"]) == (0.6, 0.4)
+        # Exaggeration comes from create_elevation_decoder (terrain and sampled heights), not the widget.
+        assert "terrainExaggeration" not in props
+
+    def test_adaptive_speed_reaches_the_page(self, trips_layer):
+        props = _widget_props(_draw(trips_layer, TripsAnimation(), adaptive_speed=True, max_speedup=10))
+        assert props["pacing"]["adaptive"] is True and props["pacing"]["maxSpeedup"] == 10
+
+    def test_sun_lighting_can_be_switched_off(self, trips_layer):
+        _, sun = _page_settings(_draw(trips_layer, TripsAnimation(), sun_lighting=False))
         assert sun["on"] is False
 
     def test_clock_offset_reaches_the_page(self, trips_layer):
         controls = create_playback_controls(utc_offset_hours=3)
         html = _draw(trips_layer, TripsAnimation(), controls=controls)
         assert _widget_props(html)["controls"]["utc_offset_hours"] == 3
-
-    def test_gap_hours_become_seconds(self, trips_layer):
-        spec, _ = _page_settings(_draw(trips_layer, TripsAnimation(gap_hours=2.5)))
-        assert spec["gapS"] == 9000
 
     def test_label_column_is_used_for_labels_and_hover(self, trips_layer):
         spec, _ = _page_settings(_draw(trips_layer, TripsAnimation(label_column="subject_name")))
@@ -173,6 +215,16 @@ class TestPageSettings:
         props = _widget_props(_draw(trips_layer, TripsAnimation(), duration_s=12, fps_limit=30))
         assert (props["durationS"], props["fpsLimit"], props["autoRotateSpeed"]) == (12, 30, 0)
         assert props["t0"] == 1_790_000_000.0 and props["maxTime"] == pytest.approx(60_000 * 1.02)
+
+    def test_map_opens_fitted_to_the_tracks(self, trips_layer):
+        props = _widget_props(_draw(trips_layer, TripsAnimation()))
+        assert props["fitView"] == {"padding": 80, "maxZoom": 20}
+
+    def test_fit_view_off_keeps_the_view_state(self, trips_layer):
+        html = draw_animated_map(
+            geo_layers=animate_layer(layer=trips_layer, animation=TripsAnimation()), fit_view=False
+        )
+        assert _widget_props(html).get("fitView") is None   # pydeck drops None props
 
     def test_camera_panel_widget_gets_the_camera_schema(self, trips_layer):
         html = _draw(trips_layer, TripsAnimation())

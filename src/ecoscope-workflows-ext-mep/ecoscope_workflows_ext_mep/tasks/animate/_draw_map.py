@@ -57,7 +57,7 @@ SURFACE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/Ma
 MY_DECK_WIDGETS = {
     "libraryName": "myDeckWidgets",
     "resourceUri": os.environ.get(
-        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.10.0/dist/bundle.js"
+        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.16.0/dist/bundle.js"
     ),
 }
 
@@ -274,6 +274,38 @@ class ScenegraphLayerDefinition(BaseModel):
             "glb and flat lighting (pbr_lighting=False).",
         ),
     ] = True
+    walk_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            title="Walk animation",
+            description="Name or index of the model's animation to play while the subject moves "
+            "(with the trips animation's speed response on). None -> no animation.",
+        ),
+    ] = None
+    run_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            title="Run animation",
+            description="Animation played while the subject moves fast (over 2.5x its typical speed). "
+            "None -> the walk animation.",
+        ),
+    ] = None
+    idle_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            title="Idle animation",
+            description="Animation played while the subject rests. None -> the model holds still.",
+        ),
+    ] = None
+    animation_speed: Annotated[
+        float,
+        AdvancedField(
+            default=1.0, gt=0, le=10, description="Playback speed of the model's animations (1 = as authored)."
+        ),
+    ] = 1.0
 
     @model_validator(mode="after")
     def _check_size_range(self):
@@ -304,6 +336,11 @@ _ANIMAL_MODELS = {  # size_scale, size_min_pixels, size_max_pixels, yaw_offset (
     "leopard": (75.0, 25.0, 120.0, 180.0),
     "lion": (1.0, 1.0, 10.0, 180.0),
 }
+# (walk, run, idle) animation indices in each GLB; the giraffe, cheetah and leopard have none.
+_ANIMAL_ANIMATIONS = {
+    "elephant": ("12", "11", "7"),  # walk, Run, Idle1
+    "lion": ("0", None, None),  # its one loop
+}
 AnimalModel = Literal["elephant", "giraffe", "cheetah", "leopard", "lion"]
 
 
@@ -333,6 +370,7 @@ class AnimalModelMarker(BaseModel):
 
     def to_model(self) -> "ScenegraphLayerDefinition":
         scale, min_px, max_px, yaw = _ANIMAL_MODELS[self.animal]
+        walk, run, idle = _ANIMAL_ANIMATIONS.get(self.animal, (None, None, None))
         return ScenegraphLayerDefinition(
             glb=_ANIMAL_MODEL_URL.format(self.animal),
             size_scale=scale * self.size,
@@ -341,6 +379,9 @@ class AnimalModelMarker(BaseModel):
             yaw_offset=yaw,
             use_track_color=self.use_track_color,
             pbr_lighting=self.pbr_lighting,
+            walk_animation=walk,
+            run_animation=run,
+            idle_animation=idle,
             **_ANIMAL_MODEL_COMMON,
         )
 
@@ -436,6 +477,40 @@ class TimelineAnimation(BaseModel):
         "so day and night fade gently when many days play quickly. 0 = follow the sun exactly. When a whole "
         "day plays in under ~2.5 s, day and night fade out and the map stays in daylight.",
     )
+    adaptive_speed: bool = Field(
+        default=False,
+        description="Pace the animation by activity: stretches where every subject rests (or has no data) "
+        "play faster, so the time goes to movement. The clock still shows the real data time.",
+    )
+    max_speedup: float = Field(
+        default=6.0,
+        gt=1,
+        le=50,
+        description="With adaptive speed, how many times faster quiet stretches play than active ones.",
+    )
+    rest_speed_kmh: float = Field(
+        default=0.5,
+        ge=0,
+        description="Below this speed (km/h) a subject counts as resting: for adaptive speed, and for the "
+        "trips animation's speed response (markers shrink and stop pulsing, 3D models idle).",
+    )
+    fast_forward_night: bool = Field(
+        default=False,
+        description="With adaptive speed, also play nights faster, even if subjects move. Needs date-time data.",
+    )
+    ease_s: float = Field(
+        default=0.6,
+        ge=0,
+        le=5,
+        description="Seconds to ease the playback speed in and out on play, pause, speed changes and at the "
+        "end of the clip, instead of jumping. Interactive map only; the video plays at a steady rate. 0 = off.",
+    )
+    follow_smoothing_s: float = Field(
+        default=0.4,
+        ge=0,
+        le=5,
+        description="How softly the camera follows a clicked marker: about this many seconds to catch up. 0 = locked on.",
+    )
     auto_rotate_speed: Annotated[
         float,
         AdvancedField(
@@ -499,18 +574,6 @@ class TripsAnimation(BaseModel):
         description="Draw curved paths through the fixes instead of straight lines. Positions between fixes "
         "are estimated, not recorded.",
     )
-    show_gaps: bool = Field(
-        default=True,
-        description="Show long stretches with no fixes as gaps: the trail breaks, a faint line joins the ends, "
-        "and the marker is replaced by a 'no data' tag, instead of gliding across in a straight line.",
-    )
-    gap_hours: float = Field(default=12.0, gt=0, description="Hours without a fix that count as a gap.")
-    # --- Look ---
-    glow: bool = Field(default=True, description="A soft glow under the bright comet tail.")
-    glow_width: float = Field(default=3.0, gt=1, le=10, description="Glow width as a multiple of the trail width.")
-    glow_opacity: float = Field(default=0.25, gt=0, le=1, description="Opacity of the glow.")
-    pulse: bool = Field(default=True, description="A ring that pulses out from each marker.")
-    pulse_period_s: float = Field(default=1.5, gt=0, description="Seconds of playback per pulse.")
     label_column: str = Field(
         default="",
         description="Column whose value is written above each marker, e.g. subject_name. Empty for no labels.",
@@ -519,10 +582,6 @@ class TripsAnimation(BaseModel):
     hover_info: bool = Field(
         default=True,
         description="Hovering a marker shows its label, the data time and its current speed.",
-    )
-    click_to_follow: bool = Field(
-        default=True,
-        description="Clicking a marker makes the camera follow it; drag the map, click elsewhere or press Esc to stop.",
     )
 
 
@@ -606,7 +665,17 @@ class TerrainSampling(BaseModel):
     Consumed by drape_trips_on_terrain; skip that step for flat 2D paths.
     """
 
-    offset: float = Field(default=30.0, description="Metres added above the sampled ground at every vertex.")
+    altitude_mode: Literal["clamp_to_ground", "relative_to_ground", "absolute"] = Field(
+        default="relative_to_ground",
+        description="Height of the tracks, as Google Maps 3D altitude modes: on the ground (clamp_to_ground), "
+        "`offset` metres above it (relative_to_ground), or each fix's own recorded altitude above sea level "
+        "(absolute; `offset` metres above sea level where a fix has none).",
+    )
+    offset: float = Field(
+        default=30.0,
+        description="Metres above the ground (relative_to_ground), or above sea level for fixes without an "
+        "altitude (absolute). Ignored by clamp_to_ground.",
+    )
     elevation_data: str = Field(
         default=DEFAULT_TERRAIN_URL,
         description="Elevation tile URL template. Must match the TerrainLayer's elevation_data.",
@@ -634,8 +703,22 @@ def create_terrain_sampling(
             "None -> Terrarium default.",
         ),
     ] = None,
+    altitude_mode: Annotated[
+        Literal["clamp_to_ground", "relative_to_ground", "absolute"],
+        AdvancedField(
+            default="relative_to_ground",
+            description="Height of the tracks: on the ground (clamp_to_ground; lines can dip into the terrain "
+            "between fixes), `offset` metres above it (relative_to_ground), or each fix's recorded altitude above "
+            "sea level (absolute).",
+        ),
+    ] = "relative_to_ground",
     offset: Annotated[
-        float, AdvancedField(default=30, description="Metres added above the sampled ground at every vertex.")
+        float,
+        AdvancedField(
+            default=30,
+            description="Metres above the ground (relative_to_ground), or above sea level for fixes without an "
+            "altitude (absolute). Ignored by clamp_to_ground.",
+        ),
     ] = 30.0,
     ground_elevation: Annotated[
         float, AdvancedField(default=1000.0, description="Constant ground used only if DEM sampling fails.")
@@ -645,6 +728,7 @@ def create_terrain_sampling(
     return TerrainSampling(
         elevation_data=elevation_data,
         elevation_decoder=elevation_decoder or dict(TERRARIUM_ELEVATION_DECODER),
+        altitude_mode=altitude_mode,
         offset=offset,
         ground_elevation=ground_elevation,
     )
@@ -757,6 +841,24 @@ def create_scenegraph_layer(
     pbr_lighting: Annotated[bool, AdvancedField(default=True)] = True,
     tint: Annotated[list[int] | SkipJsonSchema[None], AdvancedField(default=None)] = None,
     use_track_color: Annotated[bool, AdvancedField(default=True)] = True,
+    walk_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(default=None, description=ScenegraphLayerDefinition.model_fields["walk_animation"].description),
+    ] = None,
+    run_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(default=None, description=ScenegraphLayerDefinition.model_fields["run_animation"].description),
+    ] = None,
+    idle_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(default=None, description=ScenegraphLayerDefinition.model_fields["idle_animation"].description),
+    ] = None,
+    animation_speed: Annotated[
+        float,
+        AdvancedField(
+            default=1.0, gt=0, le=10, description=ScenegraphLayerDefinition.model_fields["animation_speed"].description
+        ),
+    ] = 1.0,
 ) -> Annotated[ScenegraphLayerDefinition, Field()]:
     """Create an animated 3D head layer from a glTF/GLB model.
 
@@ -782,6 +884,10 @@ def create_scenegraph_layer(
         pbr_lighting=pbr_lighting,
         tint=tint,
         use_track_color=use_track_color,
+        walk_animation=walk_animation,
+        run_animation=run_animation,
+        idle_animation=idle_animation,
+        animation_speed=animation_speed,
     )
 
 
@@ -1027,13 +1133,20 @@ def sample_elevations(
     return out.tolist()
 
 
-def _stitch_segments(segments: gpd.GeoDataFrame) -> tuple[np.ndarray, np.ndarray]:
+def _stitch_segments(
+    segments: gpd.GeoDataFrame, min_break_s: float = 0.0
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Concatenate time-ordered segments into one (lon, lat) vertex array + epoch-second timestamps.
 
     Each segment's vertices are spaced evenly in time between its segment_start and segment_end.
-    A segment whose first vertex repeats the previous segment's last vertex contributes it once.
+    A segment that continues the previous one (starts at its last vertex and time) contributes that
+    vertex once. One that doesn't follows a stretch the segment filter removed; if that stretch
+    lasted more than `min_break_s` it starts a new piece (shorter ones, e.g. resting fixes the
+    filter dropped, are joined up). Returns coords, times, and each vertex's piece number.
     """
-    coords, seg_idx = shapely.get_coordinates(segments.geometry.values, return_index=True)
+    # Keep a recorded altitude (3D fixes) for drape_trips_on_terrain's absolute mode.
+    has_z = bool(np.any(shapely.has_z(segments.geometry.values)))
+    coords, seg_idx = shapely.get_coordinates(segments.geometry.values, include_z=has_z, return_index=True)
     counts = np.bincount(seg_idx, minlength=len(segments))
     seg_first = np.concatenate([[0], np.cumsum(counts)[:-1]])
     pos = np.arange(len(coords)) - seg_first[seg_idx]  # vertex position within its segment
@@ -1043,9 +1156,13 @@ def _stitch_segments(segments: gpd.GeoDataFrame) -> tuple[np.ndarray, np.ndarray
     end = segments["segment_end"].map(pd.Timestamp.timestamp).to_numpy(dtype=np.float64)
     times = start[seg_idx] + (end - start)[seg_idx] * frac
 
-    dup = np.zeros(len(coords), dtype=bool)
-    dup[1:] = (pos[1:] == 0) & (coords[1:] == coords[:-1]).all(axis=1)
-    return coords[~dup], times[~dup]
+    first = pos == 0
+    joins = np.zeros(len(coords), dtype=bool)  # a segment's first vertex == the previous segment's last
+    joins[1:] = first[1:] & (coords[1:] == coords[:-1]).all(axis=1) & (np.abs(times[1:] - times[:-1]) < 1)
+    breaks = np.zeros(len(coords), dtype=bool)  # first vertex after a long removed stretch
+    breaks[1:] = first[1:] & ~joins[1:] & (times[1:] - times[:-1] > min_break_s)
+    piece = np.cumsum(breaks)
+    return coords[~joins], times[~joins], piece[~joins]
 
 
 @register()
@@ -1058,26 +1175,55 @@ def trajectory_to_trips(
         list[str] | SkipJsonSchema[None],
         Field(description="Extra columns to carry onto each trip (first value per group)."),
     ] = None,
+    min_break_hours: Annotated[
+        float,
+        AdvancedField(
+            default=12.0,
+            ge=0,
+            description="A stretch the trajectory segment filter removed breaks the track (no line drawn "
+            "across it, marker hidden) if it lasted more than this many hours. Shorter ones, such as resting "
+            "fixes the filter dropped, are joined up.",
+        ),
+    ] = 12.0,
+    min_piece_fixes: Annotated[
+        int,
+        AdvancedField(
+            default=3,
+            ge=1,
+            description="Drop pieces of track with fewer fixes than this between breaks (e.g. a collar's "
+            "test fixes before deployment). If every piece is that short, only the one with the most fixes "
+            "(the latest, on a tie) is kept.",
+        ),
+    ] = 3,
 ) -> AnyGeoDataFrame:
-    """Stitch each group's segments into one 2D lon/lat LineString with per-vertex timestamps.
+    """Stitch each group's segments into one lon/lat LineString (with the fixes' recorded altitude,
+    if they have one) with per-vertex timestamps.
 
-    Pipe the result through `drape_trips_on_terrain` for 3D paths over a TerrainLayer.
+    Where the segment filter removed a long stretch, the track is not joined up across it: `breaks`
+    lists the vertex indices j whose step to j + 1 crosses one, and the animation shows it as a data
+    gap. Pipe the result through `drape_trips_on_terrain` for 3D paths over a TerrainLayer.
     """
     keep_cols = [c for c in (keep_cols or []) if c != groupby_col]
 
     rows = []
     for key, g in trajectory_gdf.groupby(groupby_col):
         g = g.sort_values("segment_start")
-        coords, times = _stitch_segments(g)
+        coords, times, piece = _stitch_segments(g, min_break_s=min_break_hours * 3600)
+        sizes = np.bincount(piece)
+        keep = sizes[piece] >= min_piece_fixes
+        if not keep.any():  # all short: keep the biggest piece, the latest on a tie
+            keep = piece == len(sizes) - 1 - np.argmax(sizes[::-1])
+        coords, times, piece = coords[keep], times[keep], piece[keep]
         if len(coords) < 2:  # LineString needs >= 2 vertices
             continue
         row = {groupby_col: key, **g[keep_cols].iloc[0].to_dict()}
         # Absolute epoch seconds; draw_animated_map rebases every animated layer onto one clock.
         row["timestamps"] = times.tolist()
+        row["breaks"] = np.flatnonzero(piece[1:] != piece[:-1]).tolist()
         row["geometry"] = LineString(coords)
         rows.append(row)
 
-    columns = [groupby_col, *keep_cols, "timestamps", "geometry"]
+    columns = [groupby_col, *keep_cols, "timestamps", "breaks", "geometry"]
     trips = gpd.GeoDataFrame(rows, columns=columns, geometry="geometry", crs="EPSG:4326")
     return cast(AnyGeoDataFrame, trips)
 
@@ -1087,12 +1233,22 @@ def drape_trips_on_terrain(
     trips_gdf: AnyGeoDataFrame,
     terrain: Annotated[TerrainSampling, Field(description="Elevation sampling config.")] = TerrainSampling(),
 ) -> AnyGeoDataFrame:
-    """Set every LineString vertex's z to the sampled ground elevation + terrain.offset.
+    """Set every LineString vertex's z by terrain.altitude_mode: the sampled ground elevation
+    (clamp_to_ground), plus terrain.offset (relative_to_ground), or the vertex's own recorded
+    altitude (absolute; terrain.offset where it has none).
 
     All vertices across all rows are sampled in one batched call, so each DEM tile is fetched
     once. Falls back to a constant terrain.ground_elevation if sampling fails.
     """
-    lonlats, row_idx = shapely.get_coordinates(trips_gdf.geometry.values, return_index=True)
+    coords, row_idx = shapely.get_coordinates(trips_gdf.geometry.values, include_z=True, return_index=True)
+    lonlats = coords[:, :2]
+    if terrain.altitude_mode == "absolute":
+        recorded = coords[:, 2]
+        z = np.where(np.isfinite(recorded), recorded, terrain.offset)
+        draped = shapely.linestrings(np.column_stack([lonlats, z]), indices=row_idx)
+        return cast(
+            AnyGeoDataFrame, trips_gdf.set_geometry(gpd.GeoSeries(draped, index=trips_gdf.index, crs=trips_gdf.crs))
+        )
     try:
         ground = np.asarray(
             sample_elevations(
@@ -1110,7 +1266,8 @@ def drape_trips_on_terrain(
         )
         ground = np.full(len(lonlats), terrain.ground_elevation)
 
-    xyz = np.column_stack([lonlats, ground + terrain.offset])
+    lift = terrain.offset if terrain.altitude_mode == "relative_to_ground" else 0.0
+    xyz = np.column_stack([lonlats, ground + lift])
     draped = shapely.linestrings(xyz, indices=row_idx)
     return cast(
         AnyGeoDataFrame, trips_gdf.set_geometry(gpd.GeoSeries(draped, index=trips_gdf.index, crs=trips_gdf.crs))
@@ -1170,6 +1327,12 @@ def _head_spec(head: HeadMarker) -> dict:
                 "lighting": "pbr" if head.pbr_lighting else "flat",
                 "tint": list(head.tint) if head.tint is not None else None,
                 "useTrackColor": head.use_track_color,
+                "anims": {
+                    "walk": head.walk_animation,
+                    "run": head.run_animation or head.walk_animation,
+                    "idle": head.idle_animation,
+                    "speed": head.animation_speed,
+                },
             },
         )
     return spec
@@ -1217,6 +1380,14 @@ def draw_animated_map(
     legend_style: Annotated[LegendStyle | SkipJsonSchema[None], AdvancedField(default=LegendStyle())] = None,
     max_zoom: Annotated[int, AdvancedField(default=20)] = 20,
     view_state: Annotated[ViewState | SkipJsonSchema[None], AdvancedField(default=ViewState())] = None,
+    fit_view: Annotated[
+        bool,
+        AdvancedField(
+            default=True,
+            description="Open the map framed on the animated tracks at the viewer's window size, like the "
+            "video's Fit camera. The view state's pitch and bearing are kept. Off: open at the view state.",
+        ),
+    ] = True,
     widget_id: Annotated[str | SkipJsonSchema[None], Field(default=None, exclude=True)] = None,
 ) -> Annotated[str, Field()]:
     """Like draw_map, but animates layers over time from one shared clock.
@@ -1280,13 +1451,11 @@ def draw_animated_map(
                     "smoothTurning": anim.smooth_turning,
                     "turnSmoothing": anim.turn_smoothing,
                     "curvePaths": anim.curve_paths,
-                    "gapS": anim.gap_hours * 3600 if anim.show_gaps else None,
-                    "glow": {"width": anim.glow_width, "opacity": anim.glow_opacity} if anim.glow else None,
-                    "pulsePeriod": anim.pulse_period_s if anim.pulse else None,
                     "labelCol": label_col,
                     "tipCol": tip_col if tip_col in gdf.columns else "",
                     "hoverInfo": anim.hover_info,
-                    "clickToFollow": anim.click_to_follow,
+                    # 3D models play their walk / run / idle clips by speed (dots resize slightly).
+                    "speedResponse": True,
                 }
             )
         else:
@@ -1316,6 +1485,16 @@ def draw_animated_map(
             "night": timeline.night_brightness,
             "smoothS": timeline.day_night_smoothing_s,
         },
+        pacing={
+            "adaptive": timeline.adaptive_speed,
+            "maxSpeedup": timeline.max_speedup,
+            "restKmh": timeline.rest_speed_kmh,
+            "night": timeline.fast_forward_night,
+        },
+        ease_s=timeline.ease_s,
+        follow_smoothing_s=timeline.follow_smoothing_s,
+        # 80 px padding, as the video's Fit camera (FitCamera.fit_padding).
+        fit_view={"padding": 80, "maxZoom": max_zoom} if fit_view else None,
         controls=timeline.controls.model_dump(mode="json"),
     )
     extra_widgets = [timeline_widget]
@@ -1350,10 +1529,12 @@ def draw_animated_map(
 
 @register()
 def create_timeline_animation(
-    duration_s: Annotated[
+    duration: Annotated[
         float,
         AdvancedField(
-            gt=0, default=30.0, description="Playback length in seconds, from the start of the timeline to its end."
+            gt=0,
+            default=30.0,
+            description="Playback length in seconds (e.g. 30 = the whole timeline plays in 30 seconds).",
         ),
     ] = 30.0,
     fps_limit: Annotated[float, AdvancedField(default=60.0, gt=0)] = 60.0,
@@ -1361,50 +1542,13 @@ def create_timeline_animation(
         PlaybackControls,
         AdvancedField(default=PlaybackControls(), description="The playback bar (create_playback_controls)."),
     ] = PlaybackControls(),
-    auto_rotate_speed: Annotated[
-        float,
-        AdvancedField(
-            default=0.0,
-            description="Camera rotation speed in degrees per second. "
-            "0 = off; positive = clockwise; negative = counter-clockwise.",
-        ),
-    ] = 0.0,
-    sun_lighting: Annotated[
-        bool,
-        AdvancedField(
-            default=True,
-            description="Light the 3D terrain by the sun's real position at the current data time and place, "
-            "so hills are shaded through the day and the map darkens at night. Needs date-time data.",
-        ),
-    ] = True,
-    night_brightness: Annotated[
-        float,
-        AdvancedField(
-            default=0.45,
-            ge=0,
-            le=1,
-            description="How bright the terrain stays at night with sun lighting on (0 = black, 1 = no darkening).",
-        ),
-    ] = 0.45,
-    day_night_smoothing_s: Annotated[
-        float,
-        AdvancedField(
-            default=0.3,
-            ge=0,
-            le=10,
-            description=TimelineAnimation.model_fields["day_night_smoothing_s"].description,
-        ),
-    ] = 0.3,
 ) -> Annotated[TimelineAnimation, Field()]:
-    """Construct the shared clock for draw_animated_map."""
+    """Construct the shared clock for draw_animated_map. Auto-rotate, sun lighting, adaptive speed,
+    easing and follow smoothing use TimelineAnimation's defaults."""
     return TimelineAnimation(
-        duration_s=duration_s,
+        duration_s=duration,
         fps_limit=fps_limit,
         controls=controls,
-        auto_rotate_speed=auto_rotate_speed,
-        sun_lighting=sun_lighting,
-        night_brightness=night_brightness,
-        day_night_smoothing_s=day_night_smoothing_s,
     )
 
 
@@ -1496,37 +1640,11 @@ def create_trips_animation(
     curve_paths: Annotated[
         bool, AdvancedField(default=False, description=TripsAnimation.model_fields["curve_paths"].description)
     ] = False,
-    show_gaps: Annotated[
-        bool, AdvancedField(default=True, description=TripsAnimation.model_fields["show_gaps"].description)
-    ] = True,
-    gap_hours: Annotated[
-        float, AdvancedField(default=12.0, gt=0, description=TripsAnimation.model_fields["gap_hours"].description)
-    ] = 12.0,
-    glow: Annotated[
-        bool, AdvancedField(default=True, description=TripsAnimation.model_fields["glow"].description)
-    ] = True,
-    glow_width: Annotated[
-        float,
-        AdvancedField(default=3.0, gt=1, le=10, description=TripsAnimation.model_fields["glow_width"].description),
-    ] = 3.0,
-    glow_opacity: Annotated[
-        float,
-        AdvancedField(default=0.25, gt=0, le=1, description=TripsAnimation.model_fields["glow_opacity"].description),
-    ] = 0.25,
-    pulse: Annotated[
-        bool, AdvancedField(default=True, description=TripsAnimation.model_fields["pulse"].description)
-    ] = True,
-    pulse_period_s: Annotated[
-        float, AdvancedField(default=1.5, gt=0, description=TripsAnimation.model_fields["pulse_period_s"].description)
-    ] = 1.5,
     label_column: Annotated[
         str, AdvancedField(default="", description=TripsAnimation.model_fields["label_column"].description)
     ] = "",
     hover_info: Annotated[
         bool, AdvancedField(default=True, description=TripsAnimation.model_fields["hover_info"].description)
-    ] = True,
-    click_to_follow: Annotated[
-        bool, AdvancedField(default=True, description=TripsAnimation.model_fields["click_to_follow"].description)
     ] = True,
 ) -> Annotated[TripsAnimation, Field()]:
     """Construct a TripsAnimation for animate_layer (TripsLayer only)."""
@@ -1540,16 +1658,8 @@ def create_trips_animation(
         smooth_turning=smooth_turning,
         turn_smoothing=turn_smoothing,
         curve_paths=curve_paths,
-        show_gaps=show_gaps,
-        gap_hours=gap_hours,
-        glow=glow,
-        glow_width=glow_width,
-        glow_opacity=glow_opacity,
-        pulse=pulse,
-        pulse_period_s=pulse_period_s,
         label_column=label_column,
         hover_info=hover_info,
-        click_to_follow=click_to_follow,
     )
 
 
