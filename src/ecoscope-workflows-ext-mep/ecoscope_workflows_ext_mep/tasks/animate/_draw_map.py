@@ -1,6 +1,5 @@
 import os
 import io
-import json
 import base64
 import pathlib
 import logging
@@ -20,7 +19,8 @@ from pydantic.json_schema import SkipJsonSchema
 from wt_registry import register
 from ecoscope.platform.schemas import TrajectoryGDF
 from ecoscope.platform.annotations import AdvancedField, AnyGeoDataFrame
-from ecoscope_workflows_ext_custom.tasks.results._map import (
+from ._animate import _CAM_HELPER, camera_panel_schema
+from ecoscope.platform.tasks.results._pydeck import (
     PydeckAnnotation,
     PydeckString,
     LayerStyleBase,
@@ -28,12 +28,12 @@ from ecoscope_workflows_ext_custom.tasks.results._map import (
     FloatAccessor,
     UnitType,
     LegendDefinition,
-    LayerDefinition,
+    PydeckLayerDefinition,
     LegendStyle,
     ViewState,
     LegendFromDataframe,
     PYDECK_CUSTOM_LIBRARIES,
-    _model_dump_with_pydeck_literals,
+    _model_dump_for_pydeck,
     LegendSegment,
     BitmapLayerDefinition,
     view_state_from_layers,
@@ -50,6 +50,16 @@ DEFAULT_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{
 TERRARIUM_ELEVATION_DECODER = {"rScaler": 256, "gScaler": 1, "bScaler": 1 / 256, "offset": -32768}
 DEFAULT_TERRAIN_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
 SURFACE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+
+# TimelineAnimationWidget's bundle, built+attached to the git tag by .github/workflows/release.yml
+# in https://github.com/ttemu34/my-deck-widgets (bump the tag after each release). Set
+# MY_DECK_WIDGETS_URI to try a local build, e.g. http://localhost:8080/dist/bundle.js (npm run dev).
+MY_DECK_WIDGETS = {
+    "libraryName": "myDeckWidgets",
+    "resourceUri": os.environ.get(
+        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.16.0/dist/bundle.js"
+    ),
+}
 
 TerrainStrategy = Annotated[Literal["best-available", "no-overlap", "never"], PydeckAnnotation]
 
@@ -264,6 +274,38 @@ class ScenegraphLayerDefinition(BaseModel):
             "glb and flat lighting (pbr_lighting=False).",
         ),
     ] = True
+    walk_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            title="Walk animation",
+            description="Name or index of the model's animation to play while the subject moves "
+            "(with the trips animation's speed response on). None -> no animation.",
+        ),
+    ] = None
+    run_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            title="Run animation",
+            description="Animation played while the subject moves fast (over 2.5x its typical speed). "
+            "None -> the walk animation.",
+        ),
+    ] = None
+    idle_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            title="Idle animation",
+            description="Animation played while the subject rests. None -> the model holds still.",
+        ),
+    ] = None
+    animation_speed: Annotated[
+        float,
+        AdvancedField(
+            default=1.0, gt=0, le=10, description="Playback speed of the model's animations (1 = as authored)."
+        ),
+    ] = 1.0
 
     @model_validator(mode="after")
     def _check_size_range(self):
@@ -294,6 +336,11 @@ _ANIMAL_MODELS = {  # size_scale, size_min_pixels, size_max_pixels, yaw_offset (
     "leopard": (75.0, 25.0, 120.0, 180.0),
     "lion": (1.0, 1.0, 10.0, 180.0),
 }
+# (walk, run, idle) animation indices in each GLB; the giraffe, cheetah and leopard have none.
+_ANIMAL_ANIMATIONS = {
+    "elephant": ("12", "11", "7"),  # walk, Run, Idle1
+    "lion": ("0", None, None),  # its one loop
+}
 AnimalModel = Literal["elephant", "giraffe", "cheetah", "leopard", "lion"]
 
 
@@ -323,6 +370,7 @@ class AnimalModelMarker(BaseModel):
 
     def to_model(self) -> "ScenegraphLayerDefinition":
         scale, min_px, max_px, yaw = _ANIMAL_MODELS[self.animal]
+        walk, run, idle = _ANIMAL_ANIMATIONS.get(self.animal, (None, None, None))
         return ScenegraphLayerDefinition(
             glb=_ANIMAL_MODEL_URL.format(self.animal),
             size_scale=scale * self.size,
@@ -331,6 +379,9 @@ class AnimalModelMarker(BaseModel):
             yaw_offset=yaw,
             use_track_color=self.use_track_color,
             pbr_lighting=self.pbr_lighting,
+            walk_animation=walk,
+            run_animation=run,
+            idle_animation=idle,
             **_ANIMAL_MODEL_COMMON,
         )
 
@@ -368,6 +419,13 @@ class PlaybackControls(BaseModel):
         description="How the data time is shown: 'datetime' (2024-01-01 06:00 UTC), 'date' (2024-01-01), "
         "or 'elapsed' since the start (6.0 h). Non-date data always shows elapsed.",
     )
+    utc_offset_hours: float = Field(
+        default=0.0,
+        ge=-14,
+        le=14,
+        description="Hours ahead of UTC to show the data time in, e.g. 3 for East Africa, so the clock matches "
+        "the local day and the sun lighting. 0 = UTC.",
+    )
     show_speed: bool = Field(default=True, description="Button cycling through `speeds`.")
     speeds: list[Annotated[float, Field(gt=0)]] = Field(
         default=[0.5, 1, 2, 4],
@@ -375,6 +433,11 @@ class PlaybackControls(BaseModel):
         description="Speed multipliers the speed button cycles through. Playback starts at 1x.",
     )
     position: Literal["bottom", "top"] = Field(default="bottom", description="Where the bar sits on the map.")
+    show_camera: bool = Field(
+        default=True,
+        description="Camera button: opens a panel to design and preview the video camera (including keyframes) "
+        "and copy its settings into render_animation.",
+    )
 
 
 class TimelineAnimation(BaseModel):
@@ -387,13 +450,67 @@ class TimelineAnimation(BaseModel):
         description="Playback length in seconds, from the start of the timeline to its end.",
     )
     fps_limit: float = Field(
-        default=30.0,
+        default=60.0,
         gt=0,
         description="Maximum animation frames per second.",
     )
     controls: PlaybackControls = Field(
         default_factory=PlaybackControls,
         description="The playback bar.",
+    )
+    sun_lighting: bool = Field(
+        default=True,
+        description="Light the 3D terrain by the sun's real position at the current data time and place, "
+        "so hills are shaded through the day and the map darkens at night. Needs date-time data.",
+    )
+    night_brightness: float = Field(
+        default=0.45,
+        ge=0,
+        le=1,
+        description="How bright the terrain stays at night with sun lighting on (0 = black, 1 = no darkening).",
+    )
+    day_night_smoothing_s: float = Field(
+        default=0.3,
+        ge=0,
+        le=10,
+        description="Seconds of playback the sun lighting is averaged over, either side of the current moment, "
+        "so day and night fade gently when many days play quickly. 0 = follow the sun exactly. When a whole "
+        "day plays in under ~2.5 s, day and night fade out and the map stays in daylight.",
+    )
+    adaptive_speed: bool = Field(
+        default=False,
+        description="Pace the animation by activity: stretches where every subject rests (or has no data) "
+        "play faster, so the time goes to movement. The clock still shows the real data time.",
+    )
+    max_speedup: float = Field(
+        default=6.0,
+        gt=1,
+        le=50,
+        description="With adaptive speed, how many times faster quiet stretches play than active ones.",
+    )
+    rest_speed_kmh: float = Field(
+        default=0.5,
+        ge=0,
+        description="Below this speed (km/h) a subject counts as resting: for adaptive speed, and for the "
+        "trips animation's speed response (markers shrink and stop pulsing, 3D models idle).",
+    )
+    fast_forward_night: bool = Field(
+        default=False,
+        description="With adaptive speed, also play nights faster, even if subjects move. Needs date-time data.",
+    )
+    ease_s: float = Field(
+        default=0.6,
+        ge=0,
+        le=5,
+        description="Seconds to ease the playback speed in and out on play, pause, speed changes and at the "
+        "end of the clip, instead of jumping. Interactive map only; the video plays at a steady rate. 0 = off.",
+    )
+    follow_smoothing_s: float = Field(
+        default=0.4,
+        ge=0,
+        le=5,
+        description="How softly the camera follows a clicked marker: about this many seconds to catch up. "
+        "0 = locked on.",
     )
     auto_rotate_speed: Annotated[
         float,
@@ -440,6 +557,33 @@ class TripsAnimation(BaseModel):
             "your own 3D glTF/GLB model, or none.",
         ),
     ] = DotMarker()
+    # --- Movement ---
+    smooth_turning: bool = Field(
+        default=True,
+        description="Turn the marker smoothly, from its direction of travel averaged over a short time, "
+        "instead of snapping to a new direction at every GPS fix.",
+    )
+    turn_smoothing: float = Field(
+        default=3.0,
+        gt=0,
+        le=10,
+        description="How long the direction is averaged over: this many typical intervals between fixes, "
+        "and at least this many tenths of a second of playback. Higher is smoother but turns later.",
+    )
+    curve_paths: bool = Field(
+        default=False,
+        description="Draw curved paths through the fixes instead of straight lines. Positions between fixes "
+        "are estimated, not recorded.",
+    )
+    label_column: str = Field(
+        default="",
+        description="Column whose value is written above each marker, e.g. subject_name. Empty for no labels.",
+    )
+    # --- Interaction (interactive map only) ---
+    hover_info: bool = Field(
+        default=True,
+        description="Hovering a marker shows its label, the data time and its current speed.",
+    )
 
 
 class TimeWindowAnimation(BaseModel):
@@ -465,8 +609,8 @@ LayerAnimation = TripsAnimation | TimeWindowAnimation
 
 
 @dataclass
-class AnimatedLayerDefinition(LayerDefinition):
-    """A LayerDefinition plus the animation draw_animated_map drives it with."""
+class AnimatedLayerDefinition(PydeckLayerDefinition):
+    """A PydeckLayerDefinition plus the animation draw_animated_map drives it with."""
 
     animation: LayerAnimation | None = None
 
@@ -522,7 +666,17 @@ class TerrainSampling(BaseModel):
     Consumed by drape_trips_on_terrain; skip that step for flat 2D paths.
     """
 
-    offset: float = Field(default=30.0, description="Metres added above the sampled ground at every vertex.")
+    altitude_mode: Literal["clamp_to_ground", "relative_to_ground", "absolute"] = Field(
+        default="relative_to_ground",
+        description="Height of the tracks, as Google Maps 3D altitude modes: on the ground (clamp_to_ground), "
+        "`offset` metres above it (relative_to_ground), or each fix's own recorded altitude above sea level "
+        "(absolute; `offset` metres above sea level where a fix has none).",
+    )
+    offset: float = Field(
+        default=30.0,
+        description="Metres above the ground (relative_to_ground), or above sea level for fixes without an "
+        "altitude (absolute). Ignored by clamp_to_ground.",
+    )
     elevation_data: str = Field(
         default=DEFAULT_TERRAIN_URL,
         description="Elevation tile URL template. Must match the TerrainLayer's elevation_data.",
@@ -550,8 +704,22 @@ def create_terrain_sampling(
             "None -> Terrarium default.",
         ),
     ] = None,
+    altitude_mode: Annotated[
+        Literal["clamp_to_ground", "relative_to_ground", "absolute"],
+        AdvancedField(
+            default="relative_to_ground",
+            description="Height of the tracks: on the ground (clamp_to_ground; lines can dip into the terrain "
+            "between fixes), `offset` metres above it (relative_to_ground), or each fix's recorded altitude above "
+            "sea level (absolute).",
+        ),
+    ] = "relative_to_ground",
     offset: Annotated[
-        float, AdvancedField(default=30, description="Metres added above the sampled ground at every vertex.")
+        float,
+        AdvancedField(
+            default=30,
+            description="Metres above the ground (relative_to_ground), or above sea level for fixes without an "
+            "altitude (absolute). Ignored by clamp_to_ground.",
+        ),
     ] = 30.0,
     ground_elevation: Annotated[
         float, AdvancedField(default=1000.0, description="Constant ground used only if DEM sampling fails.")
@@ -561,6 +729,7 @@ def create_terrain_sampling(
     return TerrainSampling(
         elevation_data=elevation_data,
         elevation_decoder=elevation_decoder or dict(TERRARIUM_ELEVATION_DECODER),
+        altitude_mode=altitude_mode,
         offset=offset,
         ground_elevation=ground_elevation,
     )
@@ -615,7 +784,7 @@ def create_trips_layer(
             description="If present, includes this layer in the map legend",
         ),
     ] = None,
-) -> Annotated[LayerDefinition, Field()]:
+) -> Annotated[PydeckLayerDefinition, Field()]:
     """
     Creates an animated trips layer definition based on the provided configuration.
 
@@ -624,7 +793,7 @@ def create_trips_layer(
     timestamps column referenced by layer_style.get_timestamps.
     """
     layer_style = layer_style or TripsLayerStyle()
-    return LayerDefinition(
+    return PydeckLayerDefinition(
         layer_type="TripsLayer",
         layer_style=layer_style,
         legend=legend,
@@ -673,6 +842,24 @@ def create_scenegraph_layer(
     pbr_lighting: Annotated[bool, AdvancedField(default=True)] = True,
     tint: Annotated[list[int] | SkipJsonSchema[None], AdvancedField(default=None)] = None,
     use_track_color: Annotated[bool, AdvancedField(default=True)] = True,
+    walk_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(default=None, description=ScenegraphLayerDefinition.model_fields["walk_animation"].description),
+    ] = None,
+    run_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(default=None, description=ScenegraphLayerDefinition.model_fields["run_animation"].description),
+    ] = None,
+    idle_animation: Annotated[
+        str | SkipJsonSchema[None],
+        AdvancedField(default=None, description=ScenegraphLayerDefinition.model_fields["idle_animation"].description),
+    ] = None,
+    animation_speed: Annotated[
+        float,
+        AdvancedField(
+            default=1.0, gt=0, le=10, description=ScenegraphLayerDefinition.model_fields["animation_speed"].description
+        ),
+    ] = 1.0,
 ) -> Annotated[ScenegraphLayerDefinition, Field()]:
     """Create an animated 3D head layer from a glTF/GLB model.
 
@@ -698,6 +885,10 @@ def create_scenegraph_layer(
         pbr_lighting=pbr_lighting,
         tint=tint,
         use_track_color=use_track_color,
+        walk_animation=walk_animation,
+        run_animation=run_animation,
+        idle_animation=idle_animation,
+        animation_speed=animation_speed,
     )
 
 
@@ -721,7 +912,10 @@ def _build_map_deck(
     and draw_animated_map. `extra_widgets` are appended after the defaults."""
     import pydeck as pdk  # type: ignore[import-untyped]
 
-    pdk.settings.custom_libraries = PYDECK_CUSTOM_LIBRARIES
+    # results/_draw_map.py registers its own (older) myDeckWidgets build on the shared list; swap in ours.
+    pdk.settings.custom_libraries = [
+        lib for lib in PYDECK_CUSTOM_LIBRARIES if lib["libraryName"] != MY_DECK_WIDGETS["libraryName"]
+    ] + [MY_DECK_WIDGETS]
 
     DEFAULT_WIDGETS = [  # same defaults as upstream draw_map
         pdk.Widget("NorthArrowWidget", placement="top-left", id="NorthArrowWidget", style={"transform": "scale(0.8)"}),
@@ -739,11 +933,11 @@ def _build_map_deck(
 
     for tile_layer in tile_layers:
         if hasattr(tile_layer, "elevation_data"):  # TerrainLayerDefinition
-            map_layers.append(pdk.Layer("TerrainLayer", **_model_dump_with_pydeck_literals(tile_layer)))
+            map_layers.append(pdk.Layer("TerrainLayer", **_model_dump_for_pydeck(tile_layer)))
             if tile_layer.max_zoom < max_zoom:
                 max_zoom = tile_layer.max_zoom
         elif isinstance(tile_layer, BitmapLayerDefinition):
-            dump = _model_dump_with_pydeck_literals(tile_layer)
+            dump = _model_dump_for_pydeck(tile_layer)
             dump.pop("legend", None)
             map_layers.append(pdk.Layer("BitmapLayer", **dump))
             if tile_layer.legend is not None:
@@ -765,7 +959,7 @@ def _build_map_deck(
 
     if geo_layers is None:
         geo_layers = []
-    elif isinstance(geo_layers, LayerDefinition):
+    elif isinstance(geo_layers, PydeckLayerDefinition):
         geo_layers = [geo_layers]
 
     for idx, layer_def in enumerate(geo_layers):
@@ -786,7 +980,7 @@ def _build_map_deck(
                 type=layer_def.layer_type,
                 data=data,
                 id=_layer_id(layer_def, idx),  # stable, so the animation script can find this layer
-                **_model_dump_with_pydeck_literals(layer_def.layer_style),
+                **_model_dump_for_pydeck(layer_def.layer_style),
             )
         )
 
@@ -940,13 +1134,18 @@ def sample_elevations(
     return out.tolist()
 
 
-def _stitch_segments(segments: gpd.GeoDataFrame) -> tuple[np.ndarray, np.ndarray]:
+def _stitch_segments(segments: gpd.GeoDataFrame, min_break_s: float = 0.0) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Concatenate time-ordered segments into one (lon, lat) vertex array + epoch-second timestamps.
 
     Each segment's vertices are spaced evenly in time between its segment_start and segment_end.
-    A segment whose first vertex repeats the previous segment's last vertex contributes it once.
+    A segment that continues the previous one (starts at its last vertex and time) contributes that
+    vertex once. One that doesn't follows a stretch the segment filter removed; if that stretch
+    lasted more than `min_break_s` it starts a new piece (shorter ones, e.g. resting fixes the
+    filter dropped, are joined up). Returns coords, times, and each vertex's piece number.
     """
-    coords, seg_idx = shapely.get_coordinates(segments.geometry.values, return_index=True)
+    # Keep a recorded altitude (3D fixes) for drape_trips_on_terrain's absolute mode.
+    has_z = bool(np.any(shapely.has_z(segments.geometry.values)))
+    coords, seg_idx = shapely.get_coordinates(segments.geometry.values, include_z=has_z, return_index=True)
     counts = np.bincount(seg_idx, minlength=len(segments))
     seg_first = np.concatenate([[0], np.cumsum(counts)[:-1]])
     pos = np.arange(len(coords)) - seg_first[seg_idx]  # vertex position within its segment
@@ -956,9 +1155,13 @@ def _stitch_segments(segments: gpd.GeoDataFrame) -> tuple[np.ndarray, np.ndarray
     end = segments["segment_end"].map(pd.Timestamp.timestamp).to_numpy(dtype=np.float64)
     times = start[seg_idx] + (end - start)[seg_idx] * frac
 
-    dup = np.zeros(len(coords), dtype=bool)
-    dup[1:] = (pos[1:] == 0) & (coords[1:] == coords[:-1]).all(axis=1)
-    return coords[~dup], times[~dup]
+    first = pos == 0
+    joins = np.zeros(len(coords), dtype=bool)  # a segment's first vertex == the previous segment's last
+    joins[1:] = first[1:] & (coords[1:] == coords[:-1]).all(axis=1) & (np.abs(times[1:] - times[:-1]) < 1)
+    breaks = np.zeros(len(coords), dtype=bool)  # first vertex after a long removed stretch
+    breaks[1:] = first[1:] & ~joins[1:] & (times[1:] - times[:-1] > min_break_s)
+    piece = np.cumsum(breaks)
+    return coords[~joins], times[~joins], piece[~joins]
 
 
 @register()
@@ -971,26 +1174,55 @@ def trajectory_to_trips(
         list[str] | SkipJsonSchema[None],
         Field(description="Extra columns to carry onto each trip (first value per group)."),
     ] = None,
+    min_break_hours: Annotated[
+        float,
+        AdvancedField(
+            default=12.0,
+            ge=0,
+            description="A stretch the trajectory segment filter removed breaks the track (no line drawn "
+            "across it, marker hidden) if it lasted more than this many hours. Shorter ones, such as resting "
+            "fixes the filter dropped, are joined up.",
+        ),
+    ] = 12.0,
+    min_piece_fixes: Annotated[
+        int,
+        AdvancedField(
+            default=3,
+            ge=1,
+            description="Drop pieces of track with fewer fixes than this between breaks (e.g. a collar's "
+            "test fixes before deployment). If every piece is that short, only the one with the most fixes "
+            "(the latest, on a tie) is kept.",
+        ),
+    ] = 3,
 ) -> AnyGeoDataFrame:
-    """Stitch each group's segments into one 2D lon/lat LineString with per-vertex timestamps.
+    """Stitch each group's segments into one lon/lat LineString (with the fixes' recorded altitude,
+    if they have one) with per-vertex timestamps.
 
-    Pipe the result through `drape_trips_on_terrain` for 3D paths over a TerrainLayer.
+    Where the segment filter removed a long stretch, the track is not joined up across it: `breaks`
+    lists the vertex indices j whose step to j + 1 crosses one, and the animation shows it as a data
+    gap. Pipe the result through `drape_trips_on_terrain` for 3D paths over a TerrainLayer.
     """
     keep_cols = [c for c in (keep_cols or []) if c != groupby_col]
 
     rows = []
     for key, g in trajectory_gdf.groupby(groupby_col):
         g = g.sort_values("segment_start")
-        coords, times = _stitch_segments(g)
+        coords, times, piece = _stitch_segments(g, min_break_s=min_break_hours * 3600)
+        sizes = np.bincount(piece)
+        keep = sizes[piece] >= min_piece_fixes
+        if not keep.any():  # all short: keep the biggest piece, the latest on a tie
+            keep = piece == len(sizes) - 1 - np.argmax(sizes[::-1])
+        coords, times, piece = coords[keep], times[keep], piece[keep]
         if len(coords) < 2:  # LineString needs >= 2 vertices
             continue
         row = {groupby_col: key, **g[keep_cols].iloc[0].to_dict()}
         # Absolute epoch seconds; draw_animated_map rebases every animated layer onto one clock.
         row["timestamps"] = times.tolist()
+        row["breaks"] = np.flatnonzero(piece[1:] != piece[:-1]).tolist()
         row["geometry"] = LineString(coords)
         rows.append(row)
 
-    columns = [groupby_col, *keep_cols, "timestamps", "geometry"]
+    columns = [groupby_col, *keep_cols, "timestamps", "breaks", "geometry"]
     trips = gpd.GeoDataFrame(rows, columns=columns, geometry="geometry", crs="EPSG:4326")
     return cast(AnyGeoDataFrame, trips)
 
@@ -1000,12 +1232,22 @@ def drape_trips_on_terrain(
     trips_gdf: AnyGeoDataFrame,
     terrain: Annotated[TerrainSampling, Field(description="Elevation sampling config.")] = TerrainSampling(),
 ) -> AnyGeoDataFrame:
-    """Set every LineString vertex's z to the sampled ground elevation + terrain.offset.
+    """Set every LineString vertex's z by terrain.altitude_mode: the sampled ground elevation
+    (clamp_to_ground), plus terrain.offset (relative_to_ground), or the vertex's own recorded
+    altitude (absolute; terrain.offset where it has none).
 
     All vertices across all rows are sampled in one batched call, so each DEM tile is fetched
     once. Falls back to a constant terrain.ground_elevation if sampling fails.
     """
-    lonlats, row_idx = shapely.get_coordinates(trips_gdf.geometry.values, return_index=True)
+    coords, row_idx = shapely.get_coordinates(trips_gdf.geometry.values, include_z=True, return_index=True)
+    lonlats = coords[:, :2]
+    if terrain.altitude_mode == "absolute":
+        recorded = coords[:, 2]
+        z = np.where(np.isfinite(recorded), recorded, terrain.offset)
+        draped = shapely.linestrings(np.column_stack([lonlats, z]), indices=row_idx)
+        return cast(
+            AnyGeoDataFrame, trips_gdf.set_geometry(gpd.GeoSeries(draped, index=trips_gdf.index, crs=trips_gdf.crs))
+        )
     try:
         ground = np.asarray(
             sample_elevations(
@@ -1023,7 +1265,8 @@ def drape_trips_on_terrain(
         )
         ground = np.full(len(lonlats), terrain.ground_elevation)
 
-    xyz = np.column_stack([lonlats, ground + terrain.offset])
+    lift = terrain.offset if terrain.altitude_mode == "relative_to_ground" else 0.0
+    xyz = np.column_stack([lonlats, ground + lift])
     draped = shapely.linestrings(xyz, indices=row_idx)
     return cast(
         AnyGeoDataFrame, trips_gdf.set_geometry(gpd.GeoSeries(draped, index=trips_gdf.index, crs=trips_gdf.crs))
@@ -1083,6 +1326,12 @@ def _head_spec(head: HeadMarker) -> dict:
                 "lighting": "pbr" if head.pbr_lighting else "flat",
                 "tint": list(head.tint) if head.tint is not None else None,
                 "useTrackColor": head.use_track_color,
+                "anims": {
+                    "walk": head.walk_animation,
+                    "run": head.run_animation or head.walk_animation,
+                    "idle": head.idle_animation,
+                    "speed": head.animation_speed,
+                },
             },
         )
     return spec
@@ -1090,7 +1339,7 @@ def _head_spec(head: HeadMarker) -> dict:
 
 @register()
 def animate_layer(
-    layer: Annotated[LayerDefinition, Field(description="The layer to animate.", exclude=True)],
+    layer: Annotated[PydeckLayerDefinition, Field(description="The layer to animate.", exclude=True)],
     animation: Annotated[
         LayerAnimation,
         Field(
@@ -1099,18 +1348,18 @@ def animate_layer(
             "window (any layer with a time column).",
         ),
     ],
-) -> Annotated[LayerDefinition, Field()]:
+) -> Annotated[PydeckLayerDefinition, Field()]:
     """Attach an animation to a layer so draw_animated_map drives it from the shared clock."""
     if isinstance(animation, TripsAnimation) and layer.layer_type != "TripsLayer":
         raise ValueError(f"TripsAnimation needs a TripsLayer, got {layer.layer_type}.")
-    base = {f.name: getattr(layer, f.name) for f in fields(LayerDefinition)}
+    base = {f.name: getattr(layer, f.name) for f in fields(PydeckLayerDefinition)}
     return AnimatedLayerDefinition(**base, animation=animation)
 
 
 @register()
 def draw_animated_map(
     geo_layers: Annotated[
-        LayerDefinition | list[LayerDefinition] | SkipJsonSchema[None],
+        PydeckLayerDefinition | list[PydeckLayerDefinition] | SkipJsonSchema[None],
         Field(
             description="Map layers. Layers from animate_layer are animated; a plain TripsLayer is "
             "animated with the default TripsAnimation; everything else is static.",
@@ -1130,6 +1379,14 @@ def draw_animated_map(
     legend_style: Annotated[LegendStyle | SkipJsonSchema[None], AdvancedField(default=LegendStyle())] = None,
     max_zoom: Annotated[int, AdvancedField(default=20)] = 20,
     view_state: Annotated[ViewState | SkipJsonSchema[None], AdvancedField(default=ViewState())] = None,
+    fit_view: Annotated[
+        bool,
+        AdvancedField(
+            default=True,
+            description="Open the map framed on the animated tracks at the viewer's window size, like the "
+            "video's Fit camera. The view state's pitch and bearing are kept. Off: open at the view state.",
+        ),
+    ] = True,
     widget_id: Annotated[str | SkipJsonSchema[None], Field(default=None, exclude=True)] = None,
 ) -> Annotated[str, Field()]:
     """Like draw_map, but animates layers over time from one shared clock.
@@ -1138,7 +1395,7 @@ def draw_animated_map(
     rebased onto a common timeline starting at its earliest time, so layers stay in step.
     """
     timeline = timeline or TimelineAnimation()
-    geo_list = [geo_layers] if isinstance(geo_layers, LayerDefinition) else list(geo_layers or [])
+    geo_list = [geo_layers] if isinstance(geo_layers, PydeckLayerDefinition) else list(geo_layers or [])
 
     # --- Which layers animate, and the times each one covers ------------------------
     animated = []  # (index in geo_list, layer, animation, epoch-second times per row)
@@ -1173,6 +1430,12 @@ def draw_animated_map(
         if isinstance(anim, TripsAnimation):
             ts_col = getattr(ld.layer_style, "get_timestamps", "timestamps")
             gdf[ts_col] = [(t - t0).tolist() for t in times]
+            label_col = anim.label_column.strip()
+            if label_col and label_col not in gdf.columns:
+                logger.warning("draw_animated_map: label_column %r not in the layer's data; no labels.", label_col)
+                label_col = ""
+            # Hover text names the track by the label column, else the legend's label column.
+            tip_col = label_col or getattr(ld.legend, "label_column", None) or ""
             specs.append(
                 {
                     "id": _layer_id(ld, i),
@@ -1184,6 +1447,14 @@ def draw_animated_map(
                     "historyOpacity": anim.history_opacity,
                     "fadeHistory": anim.fade_history,
                     "head": _head_spec(anim.head),
+                    "smoothTurning": anim.smooth_turning,
+                    "turnSmoothing": anim.turn_smoothing,
+                    "curvePaths": anim.curve_paths,
+                    "labelCol": label_col,
+                    "tipCol": tip_col if tip_col in gdf.columns else "",
+                    "hoverInfo": anim.hover_info,
+                    # 3D models play their walk / run / idle clips by speed (dots resize slightly).
+                    "speedResponse": True,
                 }
             )
         else:
@@ -1194,6 +1465,46 @@ def draw_animated_map(
     if view_state is None:
         view_state = view_state_from_layers(layers=geo_list, max_zoom=max_zoom)
 
+    import pydeck as pdk  # type: ignore[import-untyped]
+
+    # Playback runs in TimelineAnimationWidget (my-deck-widgets); it also publishes
+    # window.deckInstance and window.__tripsAnim for the exporter and the Camera panel.
+    timeline_widget = pdk.Widget(
+        "TimelineAnimationWidget",
+        id="TimelineAnimationWidget",
+        placement="bottom-left",
+        layer_specs=specs,
+        max_time=span,
+        t0=t0,
+        duration_s=timeline.duration_s,
+        fps_limit=timeline.fps_limit,
+        auto_rotate_speed=timeline.auto_rotate_speed,
+        sun={
+            "on": timeline.sun_lighting,
+            "night": timeline.night_brightness,
+            "smoothS": timeline.day_night_smoothing_s,
+        },
+        pacing={
+            "adaptive": timeline.adaptive_speed,
+            "maxSpeedup": timeline.max_speedup,
+            "restKmh": timeline.rest_speed_kmh,
+            "night": timeline.fast_forward_night,
+        },
+        ease_s=timeline.ease_s,
+        follow_smoothing_s=timeline.follow_smoothing_s,
+        # 80 px padding, as the video's Fit camera (FitCamera.fit_padding).
+        fit_view={"padding": 80, "maxZoom": max_zoom} if fit_view else None,
+        controls=timeline.controls.model_dump(mode="json"),
+    )
+    extra_widgets = [timeline_widget]
+    camera_on = timeline.controls.visible and timeline.controls.show_camera
+    if camera_on:
+        # The Camera panel (CameraPanelWidget, my-deck-widgets), built from render_animation's camera models.
+        extra_widgets.append(
+            pdk.Widget(
+                "CameraPanelWidget", id="CameraPanelWidget", placement="top-right", cameras=camera_panel_schema()
+            )
+        )
     deck = _build_map_deck(
         geo_list,
         tile_layers,
@@ -1203,578 +1514,42 @@ def draw_animated_map(
         max_zoom,
         view_state,
         widget_id,
+        extra_widgets=extra_widgets,
     )
 
     html_str = deck.to_html(as_string=True)
+    # The camera helper (Camera panel and video exporter) reads the pydeck spec from window.jsonInput.
     html_str = html_str.replace("const jsonInput =", "window.jsonInput =")
-    html_str = html_str.replace(
-        "const deckInstance = createDeck(",
-        "window.deckInstance = createDeck(",
-    )
 
-    animation_js = (
-        _ANIMATION_JS.replace("__LAYER_SPECS__", json.dumps(specs))
-        .replace("__SPAN__", str(span))
-        .replace("__T0__", str(t0))
-        .replace("__CONTROLS__", timeline.controls.model_dump_json())
-        .replace("__DURATION_S__", str(timeline.duration_s))
-        .replace("__FPS_LIMIT__", str(timeline.fps_limit))
-        .replace("__AUTO_ROTATE_SPEED__", str(timeline.auto_rotate_speed))
-    )
-    html_str = html_str.replace("</body>", animation_js + "</body>")
+    if camera_on:
+        # The panel previews with window.__cam, the video exporter's own camera code, so it stays
+        # here (the exporter injects the same script) rather than in the widget bundle.
+        html_str = html_str.replace("</body>", f"<script>{_CAM_HELPER}</script></body>")
     return html_str
-
-
-_ANIMATION_JS = """
-<script>
-// === Timeline animation: one shared clock drives every animated layer ===
-// Each spec names a layer (by id) and an animator kind; ANIMATORS turns the base
-// layer + current time into the layers actually drawn this frame.
-const LAYER_SPECS     = __LAYER_SPECS__;
-const maxTime         = __SPAN__;
-const T0              = __T0__;            // epoch seconds at timeline 0 (for the time label)
-const CONTROLS        = __CONTROLS__;   // PlaybackControls
-const durationSec     = __DURATION_S__;
-const timePerMs       = maxTime / (durationSec * 1000);  // timeline units per wall-clock ms
-const fpsInterval     = 1000 / __FPS_LIMIT__;
-const autoRotateSpeed = __AUTO_ROTATE_SPEED__;  // deg/s; 0 = off
-const CPU_FILTER_LAYERS = ['HexagonLayer'];      // aggregation layers: filter rows, not on the GPU
-
-let currentTime   = 0;
-let isPlaying     = true;
-let lastFrameTime = 0;
-let lastTickTs    = null;  // wall clock of the last advance; null -> next frame advances 0
-let baseLayers    = null;
-let animatedById  = null;  // layer id -> { base, spec, animator, state }
-let ScatterCtor    = null; // resolved lazily
-let ScenegraphCtor = null; // loaded lazily, only when a 3D head model is configured
-let DataFilterCtor = null; // loaded lazily, only when a time-window layer exists
-let rotateBearing  = 0;    // accumulated bearing for smooth rotation
-let lastRotateTs   = 0;    // last frame timestamp used for rotation delta
-let _deckViewState = null; // mirrors interactive view state so rotation + user pan compose
-let userInteracting = false; // user is mid-drag/zoom -> hold auto-rotation
-
-const needsModel  = LAYER_SPECS.some(function (s) { return s.kind === 'trips' && s.head.kind === 'model'; });
-const needsDot    = LAYER_SPECS.some(function (s) { return s.kind === 'trips' && s.head.kind !== 'none'; });
-const needsFilter = LAYER_SPECS.some(function (s) { return s.kind === 'window'; });
-let __headReady   = !needsModel;
-let __filterReady = !needsFilter;
-
-// Resolve a deck.gl class without hard-coding the global namespace.
-function resolveLayer(name) {
-  const cands = [window.deck, window.deckgl, window.DeckGL, window];
-  for (const ns of cands) {
-    if (ns && typeof ns[name] === 'function') return ns[name];
-  }
-  for (const k in window) {                       // last resort: scan
-    try {
-      const v = window[k];
-      if (v && typeof v[name] === 'function') return v[name];
-    } catch (e) { /* ignore cross-origin / getter throws */ }
-  }
-  return null;
-}
-
-function loadScript(src) {
-  return new Promise(function (resolve, reject) {
-    const s = document.createElement('script');
-    s.src = src; s.onload = resolve; s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
-
-// deck.gl's standalone module bundles replace window.deck with only their own exports,
-// so load them one at a time, hand back the module, and restore the full namespace.
-let _moduleChain = Promise.resolve();
-function loadDeckModule(pkg) {
-  const run = async function () {
-    const prev = window.deck;
-    const ver = (prev && prev.VERSION) || 'latest';
-    try {
-      await loadScript('https://unpkg.com/' + pkg + '@' + ver + '/dist.min.js');
-      return window.deck;
-    } finally {
-      window.deck = prev;
-    }
-  };
-  const p = _moduleChain.then(run, run);
-  _moduleChain = p.catch(function () {});
-  return p;
-}
-
-async function ensureScenegraph() {
-  const found = resolveLayer('ScenegraphLayer');
-  if (found) return found;
-  try {
-    const mod = await loadDeckModule('@deck.gl/mesh-layers');
-    await loadScript('https://unpkg.com/@loaders.gl/gltf@^4.0.0/dist/dist.min.js');
-    const reg = (window.deck && window.deck.registerLoaders) ||
-                (window.loaders && window.loaders.registerLoaders);
-    const GLTFLoader = window.loaders && window.loaders.GLTFLoader;
-    if (reg && GLTFLoader) { try { reg([GLTFLoader]); } catch (e) {} }
-    return (mod && mod.ScenegraphLayer) || null;
-  } catch (e) {
-    console.warn('[draw_animated_map] could not load ScenegraphLayer/glTF loader; ' +
-                 'falling back to the 2D head dot.', e);
-    return null;
-  }
-}
-
-async function ensureDataFilter() {
-  const found = resolveLayer('DataFilterExtension');
-  if (found) return found;
-  try {
-    const mod = await loadDeckModule('@deck.gl/extensions');
-    return (mod && mod.DataFilterExtension) || null;
-  } catch (e) {
-    console.warn('[draw_animated_map] could not load DataFilterExtension; ' +
-                 'time-window layers filter rows on the CPU (no fade).', e);
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Trips animator: comet over a historic trail, plus a current-position head.
-// ---------------------------------------------------------------------------
-
-// Windowed tangent around the cursor: returns a SMOOTHED heading (deg, 0 = north)
-// and the terrain slope as a pitch (deg, + = uphill in the direction of travel),
-// taken from the elevation (z) already baked into each [lon,lat,z] coordinate.
-// k = +/- fixes to span; larger k => smoother, laggier. k = 0 => single segment.
-function headTangent(C, j, last, k) {
-  const ia = Math.max(0, j - k);
-  const ib = Math.min(last, j + 1 + k);
-  const a = C[ia], b = C[ib];
-  if (!a || !b) return { heading: 0, pitch: 0, horiz: 0 };
-  const midLat = (a[1] + b[1]) * 0.5 * Math.PI / 180;
-  const dEastDeg  = (b[0] - a[0]) * Math.cos(midLat);
-  const dNorthDeg = (b[1] - a[1]);
-  const heading = (dEastDeg === 0 && dNorthDeg === 0)
-    ? 0 : Math.atan2(dEastDeg, dNorthDeg) * 180 / Math.PI;
-  const M_PER_DEG = 111320;
-  const horiz = Math.hypot(dEastDeg, dNorthDeg) * M_PER_DEG;   // metres on the ground
-  const dz = (b[2] || 0) - (a[2] || 0);                        // metres of climb/descent
-  let pitch = (horiz > 0) ? Math.atan2(dz, horiz) * 180 / Math.PI : 0;
-  const CAP = 20;                                              // never tip past +/-20deg
-  if (pitch >  CAP) pitch =  CAP;
-  if (pitch < -CAP) pitch = -CAP;
-  return { heading: heading, pitch: pitch, horiz: horiz };
-}
-
-// Interpolate one feature's [lon,lat,z] at time t, using a monotonic cursor.
-// When the subject is essentially stationary (tiny movement over the window) we
-// HOLD the last good heading and zero the pitch, so the model doesn't spin or
-// tip over while milling in place (e.g. crop-raiding).
-function headAt(feature, i, t, st, head) {
-  const C = feature.geometry && feature.geometry.coordinates;
-  const T = feature.timestamps;
-  if (!C || !T || C.length === 0) return null;
-  const last = T.length - 1;
-  const k = head.smoothSamples;
-  function orient(g) {
-    if (g.horiz >= head.minMoveM) { st.lastHeading[i] = g.heading; return { heading: g.heading, pitch: g.pitch }; }
-    return { heading: st.lastHeading[i] || 0, pitch: 0 };   // stationary: hold + level
-  }
-  if (t <= T[0]) {
-    const o = orient(headTangent(C, 0, last, k));
-    return { pos: C[0], heading: o.heading, pitch: o.pitch };
-  }
-  if (t >= T[last]) {
-    const o = orient(headTangent(C, last - 1, last, k));
-    return { pos: C[last], heading: o.heading, pitch: o.pitch };
-  }
-  let j = st.cursors[i] || 0;
-  if (t < T[j]) j = 0;                 // scrubbed backwards
-  while (j < last && T[j + 1] < t) j++;
-  st.cursors[i] = j;
-  const t0 = T[j], t1 = T[j + 1];
-  const f = (t1 > t0) ? (t - t0) / (t1 - t0) : 0;
-  const a = C[j], b = C[j + 1];
-  const az = a[2] || 0, bz = b[2] || 0;
-  const pos = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, az + (bz - az) * f];
-  const o = orient(headTangent(C, j, last, k));
-  return { pos: pos, heading: o.heading, pitch: o.pitch };
-}
-
-// A feature's track colour, read through the TripsLayer's own getColor (column accessor,
-// function or constant) so the head matches whatever column the layer is coloured by.
-function trackColor(base, f, i) {
-  const gc = base.props.getColor;
-  let c = (typeof gc === 'function') ? gc(f, { index: i, data: base.props.data, target: [] }) : gc;
-  if (Array.isArray(c) && Array.isArray(c[0])) c = c[0];   // per-vertex colours -> first vertex
-  return Array.isArray(c) ? Array.from(c).slice(0, 3) : [255, 0, 0];
-}
-
-function headData(base, st, head, t) {
-  const feats = base.props.data || [];
-  const out = [];
-  for (let i = 0; i < feats.length; i++) {
-    const r = headAt(feats[i], i, t, st, head);
-    if (!r) continue;
-    const col = head.color || trackColor(base, feats[i], i);
-    out.push({ position: r.pos, color: col, heading: r.heading, pitch: r.pitch });
-  }
-  return out;
-}
-
-function headLayer(base, st, head, t) {
-  if (head.kind === 'model' && ScenegraphCtor) {
-    const m = head.model;
-    return new ScenegraphCtor({
-      id: base.id + '-head',
-      data: headData(base, st, head, t),
-      scenegraph: m.uri,
-      getPosition: function (d) { return d.position; },
-      getOrientation: function (d) {
-        const yaw = (m.faceHeading ? -d.heading : 0) + m.yawOffset;
-        const pitch = m.pitch + (m.terrainPitch ? m.terrainScale * d.pitch : 0);
-        return [pitch, yaw, m.roll];   // [pitch, yaw, roll] degrees
-      },
-      getColor: function (d) {
-        return (m.useTrackColor && d.color) ? d.color : (m.tint || [255, 255, 255]);
-      },
-      sizeScale: m.size,
-      sizeMinPixels: m.minPx,
-      sizeMaxPixels: (m.maxPx == null) ? Number.MAX_SAFE_INTEGER : m.maxPx,
-      _lighting: m.lighting,
-      pickable: false,
-      parameters: { depthTest: true },
-      updateTriggers: { getPosition: t, getOrientation: t, getColor: 'head' },
-    });
-  }
-  if (head.kind !== 'none' && ScatterCtor) {   // dot, or fallback while/if the model can't load
-    return new ScatterCtor(Object.assign({}, head.dot, {
-      id: base.id + '-head',
-      data: headData(base, st, head, t),
-      getPosition: function (d) { return d.position; },
-      getFillColor: function (d) { return d.color; },
-      billboard: true,
-      pickable: false,
-      parameters: { depthTest: false },  // always visible over the terrain
-      updateTriggers: { getPosition: t, getFillColor: 'head' },
-    }));
-  }
-  return null;
-}
-
-// Time of one row of a time-window layer; GeoJsonLayer rows may nest it under properties.
-function rowTime(d) {
-  if (d.__t !== undefined) return d.__t;
-  return (d.properties && d.properties.__t !== undefined) ? d.properties.__t : NaN;
-}
-
-// Each animator: init(base, spec) -> state; build(base, spec, state, t) -> { layers, overlay }.
-// `layers` replace the base layer in place; `overlay` is drawn on top of everything.
-const ANIMATORS = {
-  trips: {
-    init: function (base) {
-      const n = (base.props.data || []).length;
-      return { cursors: new Array(n).fill(0), lastHeading: new Array(n).fill(0) };
-    },
-    build: function (base, spec, st, t) {
-      const layers = [];
-      if (spec.showHistory) {
-        // Inherit the comet's width from the TripsLayer (do NOT override getWidth).
-        layers.push(base.clone({
-          id: base.id + '-history',
-          currentTime: t,
-          trailLength: spec.historyTrail,
-          fadeTrail: spec.fadeHistory,
-          opacity: spec.historyOpacity,
-          getColor: spec.historyColor,     // constant -> the whole track is this colour
-          updateTriggers: { getColor: 'history' },
-        }));
-      }
-      layers.push(base.clone({
-        id: base.id + '-comet',
-        currentTime: t,
-        trailLength: spec.cometTrail,
-        fadeTrail: true,
-        opacity: 0.98,
-      }));
-      const head = headLayer(base, st, spec.head, t);
-      return { layers: layers, overlay: head ? [head] : [] };
-    },
-  },
-
-  window: {
-    init: function (base) { return { data: base.props.data || [], extensions: null }; },
-    build: function (base, spec, st, t) {
-      const lo = (spec.window == null) ? -1 : t - spec.window;   // the timeline starts at 0
-      const gpu = DataFilterCtor && CPU_FILTER_LAYERS.indexOf(base.constructor.layerName) < 0;
-      if (gpu) {
-        // One extension instance for the layer's lifetime, or deck re-initialises it. The new
-        // id makes deck create a fresh layer: an extension added to an existing layer never
-        // gets its filter attribute, so every row would read as time 0.
-        if (!st.extensions) {
-          st.extensions = (base.props.extensions || []).concat([new DataFilterCtor({ filterSize: 1 })]);
-        }
-        return { layers: [base.clone({
-          id: base.id + '-window',
-          extensions: st.extensions,
-          getFilterValue: rowTime,
-          filterRange: [lo, t],
-          filterSoftRange: [Math.min(lo + spec.fade, t), t],
-        })], overlay: [] };
-      }
-      const rows = st.data.filter(function (d) { const v = rowTime(d); return v >= lo && v <= t; });
-      return { layers: [base.clone({ data: rows })], overlay: [] };
-    },
-  },
-};
-
-function buildLayers() {
-  const out = [], overlay = [];
-  baseLayers.forEach(function (l) {
-    const a = animatedById[l.id];
-    if (!a) { out.push(l); return; }
-    const built = a.animator.build(a.base, a.spec, a.state, currentTime);
-    out.push.apply(out, built.layers);
-    overlay.push.apply(overlay, built.overlay);
-  });
-  return out.concat(overlay);
-}
-
-function redraw() {
-  if (window.deckInstance && animatedById) window.deckInstance.setProps({ layers: buildLayers() });
-  updateControls();
-}
-
-// ---------------------------------------------------------------------------
-// Playback bar, configured by PlaybackControls (CONTROLS). Absent parts stay null.
-// ---------------------------------------------------------------------------
-let controls = null;   // { root, play, slider, label, clock, speed }
-const SPEEDS = CONTROLS.speeds;
-let playbackRate = 1;  // viewer's speed multiplier on top of durationSec (not used by the exporter)
-
-function formatClock(sec) {
-  const s = Math.max(0, Math.round(sec));
-  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-}
-
-function formatTime(t) {
-  if (CONTROLS.time_format !== 'elapsed' && T0 > 1e8) {   // epoch seconds -> real date (UTC)
-    const iso = new Date((T0 + t) * 1000).toISOString();
-    return CONTROLS.time_format === 'date' ? iso.slice(0, 10) : iso.slice(0, 16).replace('T', ' ') + ' UTC';
-  }
-  const h = t / 3600;  // elapsed since the start
-  return h >= 48 ? (h / 24).toFixed(1) + ' d' : h.toFixed(1) + ' h';
-}
-
-function setPlaying(on) {
-  if (on && currentTime >= maxTime) currentTime = 0;   // play at the end -> start over
-  if (on && !isPlaying) { isPlaying = true; lastTickTs = null; requestAnimationFrame(frame); }
-  if (!on) isPlaying = false;
-  updateControls();
-}
-
-function updateControls() {
-  if (!controls) return;
-  if (controls.play) {
-    controls.play.textContent = isPlaying ? '❚❚' : '▶';
-    controls.play.title = isPlaying ? 'Pause' : 'Play';
-  }
-  if (controls.slider && document.activeElement !== controls.slider) controls.slider.value = currentTime;
-  if (controls.label) controls.label.textContent = formatTime(currentTime);
-  if (controls.clock) {   // playback position / total length, at the current speed
-    const total = durationSec / playbackRate;
-    controls.clock.textContent = formatClock(total * currentTime / maxTime) + ' / ' + formatClock(total);
-  }
-  if (controls.speed) controls.speed.textContent = playbackRate + '×';
-}
-
-function buildControls() {
-  const root = document.createElement('div');
-  root.id = 'timeline-controls';
-  // Bottom: above the corner widgets (scale bar left, legend right). Top: below the title.
-  const edge = CONTROLS.position === 'top' ? 'top:56px;' : 'bottom:72px;';
-  root.style.cssText = 'position:absolute;left:50%;' + edge + 'transform:translateX(-50%);z-index:10;' +
-    'display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;' +
-    'background:rgba(20,20,20,0.72);color:#fff;font:12px/1.2 system-ui,sans-serif;' +
-    'max-width:min(640px,calc(100% - 32px));box-sizing:border-box;';
-  if (CONTROLS.show_scrubber) root.style.width = 'min(640px,calc(100% - 32px))';
-  function button(text, title, onClick) {
-    const b = document.createElement('button');
-    b.textContent = text; b.title = title;
-    b.style.cssText = 'background:none;border:0;color:inherit;cursor:pointer;font-size:14px;padding:2px 4px;';
-    b.addEventListener('click', onClick);
-    root.appendChild(b);
-    return b;
-  }
-  function text(title) {
-    const s = document.createElement('span');
-    s.title = title;
-    s.style.cssText = 'white-space:nowrap;font-variant-numeric:tabular-nums;';
-    root.appendChild(s);
-    return s;
-  }
-  const c = { root: root, play: null, slider: null, label: null, clock: null, speed: null };
-  if (CONTROLS.show_play) c.play = button('', 'Pause', function () { setPlaying(!isPlaying); });
-  if (CONTROLS.show_restart) {
-    button('↺', 'Restart', function () { currentTime = 0; lastTickTs = null; redraw(); setPlaying(true); });
-  }
-  if (CONTROLS.show_scrubber) {
-    const slider = document.createElement('input');
-    slider.type = 'range'; slider.min = 0; slider.max = maxTime; slider.step = maxTime / 1000;
-    slider.style.cssText = 'flex:1;min-width:60px;accent-color:#fff;';
-    slider.addEventListener('input', function () {
-      currentTime = Number(slider.value); lastTickTs = null; redraw();
-    });
-    root.appendChild(slider);
-    c.slider = slider;
-  }
-  if (CONTROLS.show_clock) {
-    c.clock = text('Playback position / total length at this speed');
-    c.clock.style.opacity = '0.75';
-  }
-  if (CONTROLS.show_time) c.label = text('Current time in the data');
-  if (CONTROLS.show_speed) {
-    c.speed = button('', 'Playback speed', function () {
-      playbackRate = SPEEDS[(SPEEDS.indexOf(playbackRate) + 1) % SPEEDS.length];
-      updateControls();
-    });
-    c.speed.style.minWidth = '34px';
-  }
-  if (!root.children.length) return;   // every part switched off
-  document.body.appendChild(root);
-  controls = c;
-  updateControls();
-}
-
-function frame(timestamp) {
-  if (!isPlaying || !window.deckInstance) return;
-
-  if (!timestamp) timestamp = 0;
-  if (timestamp - lastFrameTime < fpsInterval) {
-    requestAnimationFrame(frame);
-    return;
-  }
-  lastFrameTime = timestamp;
-
-  // Advance by elapsed wall time so playback lasts durationSec whatever the frame rate.
-  const dt = lastTickTs === null ? 0 : timestamp - lastTickTs;
-  lastTickTs = timestamp;
-  if (currentTime < maxTime) {
-    currentTime = Math.min(maxTime, currentTime + dt * timePerMs * playbackRate);
-  } else {
-    setPlaying(false);        // Stop animation at the end
-  }
-
-  redraw();
-
-  if (autoRotateSpeed !== 0 && _deckViewState) {
-    const rdt = lastRotateTs ? (timestamp - lastRotateTs) : 0;
-    lastRotateTs = timestamp;
-    if (!userInteracting) rotateBearing = (rotateBearing + autoRotateSpeed * rdt / 1000) % 360;
-    window.deckInstance.setProps({ viewState: Object.assign({}, _deckViewState, { bearing: rotateBearing }) });
-  }
-
-  requestAnimationFrame(frame);
-}
-
-// Start
-const __startWhenReady = setInterval(function () {
-  if (!(window.deckInstance && window.deckInstance.props && window.deckInstance.props.layers)) return;
-  clearInterval(__startWhenReady);
-
-  baseLayers = window.deckInstance.props.layers;
-  animatedById = {};
-  LAYER_SPECS.forEach(function (spec) {
-    const base = baseLayers.find(function (l) { return l.id === spec.id; });
-    if (!base) { console.warn('[draw_animated_map] animated layer not found: ' + spec.id); return; }
-    const animator = ANIMATORS[spec.kind];
-    animatedById[spec.id] = { base: base, spec: spec, animator: animator, state: animator.init(base, spec) };
-  });
-
-  // Rotation makes the camera controlled (frame() sets viewState), so deck stops applying
-  // user input by itself: apply every pan/zoom/rotate here immediately, resume auto-rotation
-  // from the user's bearing, and hold it while they are dragging.
-  if (autoRotateSpeed !== 0) {
-    const ivs = window.deckInstance.props && window.deckInstance.props.initialViewState;
-    if (ivs) {
-      _deckViewState = Object.assign({}, ivs);
-      rotateBearing  = _deckViewState.bearing || 0;
-    }
-    const _origOnVS = window.deckInstance.props.onViewStateChange;
-    window.deckInstance.setProps({
-      onViewStateChange: function (params) {
-        const s = params.interactionState || {};
-        userInteracting = !!(s.isDragging || s.isPanning || s.isRotating || s.isZooming);
-        _deckViewState = params.viewState;
-        rotateBearing  = params.viewState.bearing || 0;
-        window.deckInstance.setProps({ viewState: _deckViewState });
-        if (_origOnVS) _origOnVS(params);
-      }
-    });
-  }
-
-  if (needsDot) {
-    ScatterCtor = resolveLayer('ScatterplotLayer');
-    if (!ScatterCtor) {
-      console.warn('[draw_animated_map] ScatterplotLayer constructor not found; ' +
-                   '2D head marker disabled. Trail animation is unaffected.');
-    }
-  }
-  if (needsModel) {
-    ensureScenegraph().then(function (C) { ScenegraphCtor = C; __headReady = true; redraw(); });
-  }
-  if (needsFilter) {
-    ensureDataFilter().then(function (C) { DataFilterCtor = C; __filterReady = true; redraw(); });
-  }
-
-  if (CONTROLS.visible) buildControls();
-  requestAnimationFrame(frame);
-}, 200);
-
-// --- Deterministic render bridge (used by the server-side MP4 exporter) ---------
-// Lets a headless driver pause autoplay and paint an exact frame at time t.
-window.__tripsAnim = {
-  get ready()    { return !!(window.deckInstance && animatedById); },
-  // Every lazily loaded piece (3D head model, DataFilterExtension) is in place.
-  get headReady() { return __headReady && __filterReady; },
-  get span()     { return maxTime; },
-  get durationSec() { return durationSec; },
-  get specs()    { return LAYER_SPECS; },  // animated layers (id, kind, window), for the exporter's camera
-  pause() { setPlaying(false); },
-  play()  { setPlaying(true); },
-  renderAt(t) {
-    isPlaying = false;
-    currentTime = Math.max(0, Math.min(maxTime, t));
-    redraw();
-  }
-};
-</script>
-"""
 
 
 @register()
 def create_timeline_animation(
-    duration_s: Annotated[
+    duration: Annotated[
         float,
         AdvancedField(
-            gt=0, default=30.0, description="Playback length in seconds, from the start of the timeline to its end."
+            gt=0,
+            default=30.0,
+            description="Playback length in seconds (e.g. 30 = the whole timeline plays in 30 seconds).",
         ),
     ] = 30.0,
-    fps_limit: Annotated[float, AdvancedField(default=30.0, gt=0)] = 30.0,
+    fps_limit: Annotated[float, AdvancedField(default=60.0, gt=0)] = 60.0,
     controls: Annotated[
         PlaybackControls,
         AdvancedField(default=PlaybackControls(), description="The playback bar (create_playback_controls)."),
     ] = PlaybackControls(),
-    auto_rotate_speed: Annotated[
-        float,
-        AdvancedField(
-            default=0.0,
-            description="Camera rotation speed in degrees per second. "
-            "0 = off; positive = clockwise; negative = counter-clockwise.",
-        ),
-    ] = 0.0,
 ) -> Annotated[TimelineAnimation, Field()]:
-    """Construct the shared clock for draw_animated_map."""
+    """Construct the shared clock for draw_animated_map. Auto-rotate, sun lighting, adaptive speed,
+    easing and follow smoothing use TimelineAnimation's defaults."""
     return TimelineAnimation(
-        duration_s=duration_s,
+        duration_s=duration,
         fps_limit=fps_limit,
         controls=controls,
-        auto_rotate_speed=auto_rotate_speed,
     )
 
 
@@ -1795,6 +1570,12 @@ def create_playback_controls(
             description="Data time as 'datetime' (2024-01-01 06:00 UTC), 'date', or 'elapsed' since the start.",
         ),
     ] = "date",
+    utc_offset_hours: Annotated[
+        float,
+        AdvancedField(
+            default=0.0, ge=-14, le=14, description=PlaybackControls.model_fields["utc_offset_hours"].description
+        ),
+    ] = 0.0,
     show_speed: Annotated[bool, AdvancedField(default=True, description="Button cycling through `speeds`.")] = True,
     speeds: Annotated[
         list[Annotated[float, Field(gt=0)]],
@@ -1803,6 +1584,14 @@ def create_playback_controls(
     position: Annotated[
         Literal["bottom", "top"], AdvancedField(default="bottom", description="Where the bar sits on the map.")
     ] = "bottom",
+    show_camera: Annotated[
+        bool,
+        AdvancedField(
+            default=True,
+            description="Camera button: design and preview the video camera, then copy its settings into "
+            "render_animation.",
+        ),
+    ] = True,
 ) -> Annotated[PlaybackControls, Field()]:
     """Construct the playback bar config for create_timeline_animation."""
     return PlaybackControls(
@@ -1813,9 +1602,11 @@ def create_playback_controls(
         show_clock=show_clock,
         show_time=show_time,
         time_format=time_format,
+        utc_offset_hours=utc_offset_hours,
         show_speed=show_speed,
         speeds=speeds,
         position=position,
+        show_camera=show_camera,
     )
 
 
@@ -1840,6 +1631,22 @@ def create_trips_animation(
     ] = (255, 255, 255),
     history_opacity: Annotated[float, AdvancedField(default=0.85, ge=0, le=1)] = 0.85,
     fade_history: Annotated[bool, AdvancedField(default=False)] = False,
+    smooth_turning: Annotated[
+        bool, AdvancedField(default=True, description=TripsAnimation.model_fields["smooth_turning"].description)
+    ] = True,
+    turn_smoothing: Annotated[
+        float,
+        AdvancedField(default=3.0, gt=0, le=10, description=TripsAnimation.model_fields["turn_smoothing"].description),
+    ] = 3.0,
+    curve_paths: Annotated[
+        bool, AdvancedField(default=False, description=TripsAnimation.model_fields["curve_paths"].description)
+    ] = False,
+    label_column: Annotated[
+        str, AdvancedField(default="", description=TripsAnimation.model_fields["label_column"].description)
+    ] = "",
+    hover_info: Annotated[
+        bool, AdvancedField(default=True, description=TripsAnimation.model_fields["hover_info"].description)
+    ] = True,
 ) -> Annotated[TripsAnimation, Field()]:
     """Construct a TripsAnimation for animate_layer (TripsLayer only)."""
     return TripsAnimation(
@@ -1849,6 +1656,11 @@ def create_trips_animation(
         history_opacity=history_opacity,
         fade_history=fade_history,
         head=head,
+        smooth_turning=smooth_turning,
+        turn_smoothing=turn_smoothing,
+        curve_paths=curve_paths,
+        label_column=label_column,
+        hover_info=hover_info,
     )
 
 

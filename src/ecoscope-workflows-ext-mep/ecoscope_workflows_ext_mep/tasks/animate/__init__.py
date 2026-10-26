@@ -18,8 +18,8 @@ from ._draw_map import (
 )
 
 from ._animate import (
-    derive_camera_keyframes,
     render_animation,
+    render_video_from_settings,
 )
 
 __all__ = [
@@ -39,6 +39,6 @@ __all__ = [
     "create_elevation_decoder",
     "set_basemap_urls",
     "set_basemap_option",
-    "derive_camera_keyframes",
     "render_animation",
+    "render_video_from_settings",
 ]

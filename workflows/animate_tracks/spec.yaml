@@ -313,10 +313,10 @@ workflow:
 
   - name: Create Timeline Animation 
     id: timeline_animation 
-    task: create_timeline_animation 
-    partial: 
-      #duration_s: 30
-      fps_limit: 30 
+    task: create_timeline_animation
+    partial:
+      #duration: 30
+      fps_limit: 30
       #auto_rotate_speed: 0.0 
       controls: ${{ workflow.create_controls.return }}
 
