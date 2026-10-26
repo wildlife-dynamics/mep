@@ -1328,10 +1328,12 @@ class VideoSettings(BaseModel):
     capture: CaptureOptions = CaptureOptions()
 
 
-def parse_video_settings(settings: str | dict) -> VideoSettings:
+def parse_video_settings(settings: str | dict | None) -> VideoSettings:
     """Video settings from a dict, JSON text, or the path of a .json file. A camera on its own (what
     the map's Camera panel copies or downloads, e.g. {"type_": "fixed", ...}) is accepted too, with
-    every other option at its default."""
+    every other option at its default. None or blank means every default."""
+    if settings is None or (isinstance(settings, str) and not settings.strip()):
+        return VideoSettings()
     if isinstance(settings, str):
         text = settings.strip()
         if not text.startswith(("{", "[")):  # a file path
@@ -1351,14 +1353,16 @@ def parse_video_settings(settings: str | dict) -> VideoSettings:
 def render_video_from_settings(
     html_path: Annotated[str, Field(description="Animated map HTML from draw_animated_map.")],
     settings: Annotated[
-        str,
-        Field(
+        str | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
             title="Video settings",
             description="JSON with the video's options -- camera, fps, duration, resolution, start_frac, end_frac, "
             "hold_start_s, hold_end_s, overlays, quality, capture -- as text or the path of a .json file. A camera "
-            "on its own (the map's Camera panel settings) also works; anything left out takes its default.",
+            "on its own (the map's Camera panel settings) also works; anything left out takes its default. "
+            "Leave blank for every default (a fixed view of the whole scene).",
         ),
-    ],
+    ] = None,
     output_dir: Annotated[str | SkipJsonSchema[None], Field(description="Directory for the video.")] = None,
     out_path: Annotated[
         str, Field(description="Video file name (or path when output_dir is unset).")

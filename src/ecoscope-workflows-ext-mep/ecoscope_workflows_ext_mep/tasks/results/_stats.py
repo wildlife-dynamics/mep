@@ -1,4 +1,4 @@
-from ecoscope.platform.tasks.analysis._summary import SummaryParam
+from ecoscope.platform.tasks.analysis._summary import NightDayRatioSummaryParam
 from ecoscope.platform.tasks import analysis
 from wt_registry import register
 import pandas as pd
@@ -66,7 +66,7 @@ def compute_subject_stats(
 
     # Calculate night/day ratio
     traj_ll = traj_gdf.to_crs(4326)
-    summary_params = [SummaryParam(display_name="night_day_ratio", aggregator="night_day_ratio")]
+    summary_params = [NightDayRatioSummaryParam(display_name="night_day_ratio", aggregator="night_day_ratio")]
     summarized = analysis.summarize_df(traj_ll, summary_params, groupby_cols=None)
     night_day_ratio = round(float(summarized["night_day_ratio"].iloc[0]), 2)
 

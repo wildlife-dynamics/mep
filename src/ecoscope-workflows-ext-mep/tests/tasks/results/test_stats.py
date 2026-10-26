@@ -6,14 +6,10 @@ against the real, year-long single-subject trajectory fixture (see
 `conftest.py`).
 
 The `night_day_ratio` computation delegates to
-`ecoscope.platform.tasks.analysis.summarize_df` via a `SummaryParam`
-instance; in this test environment, constructing a `SummaryParam` raises
-an unrelated `AttributeError` from a pandera/typing version mismatch
-(reproducible by constructing `SummaryParam` directly, with no test code
-of ours involved). That machinery is `ecoscope.platform` library code
-with its own test suite, not part of what this module needs to cover, so
-`SummaryParam`/`analysis.summarize_df` are monkeypatched out here to keep
-the rest of `compute_subject_stats` (MCP, ETD, distance, displacement,
+`ecoscope.platform.tasks.analysis.summarize_df` with a
+`NightDayRatioSummaryParam`. That is `ecoscope.platform` library code with
+its own test suite, so `analysis.summarize_df` is monkeypatched out here to
+keep the rest of `compute_subject_stats` (MCP, ETD, distance, displacement,
 time tracked, maturity lookup) exercised for real.
 """
 
@@ -29,7 +25,6 @@ from ecoscope_workflows_ext_mep.tasks.results._stats import compute_subject_stat
 
 @pytest.fixture(autouse=True)
 def _stub_night_day_ratio(monkeypatch):
-    monkeypatch.setattr(stats_mod, "SummaryParam", lambda **kwargs: kwargs)
     monkeypatch.setattr(
         stats_mod.analysis,
         "summarize_df",
@@ -119,3 +114,10 @@ class TestComputeSubjectStats:
         result = compute_subject_stats(traj_gdf=traj_gdf, subject_df=pd.DataFrame(), etd_df=etd_gdf)
 
         assert bool(result.iloc[0]["mature"]) is False
+
+
+def test_night_day_ratio_param_is_built_without_stubs():
+    # SummaryParam became an Annotated union in ecoscope.platform; calling it raised
+    # AttributeError('__bases__'). The concrete class must construct and validate.
+    param = stats_mod.NightDayRatioSummaryParam(display_name="night_day_ratio", aggregator="night_day_ratio")
+    assert param.aggregator == "night_day_ratio"

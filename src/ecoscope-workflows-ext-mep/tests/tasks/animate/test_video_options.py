@@ -165,3 +165,21 @@ class TestVideoSettings:
             "camera_settings",
             "verbose",
         }
+
+
+@pytest.mark.parametrize("blank", [None, "", "   "])
+def test_blank_settings_mean_every_default(blank):
+    from ecoscope_workflows_ext_mep.tasks.animate._animate import VideoSettings, parse_video_settings
+
+    assert parse_video_settings(blank) == VideoSettings()
+
+
+def test_settings_is_an_advanced_field_with_a_blank_default():
+    import inspect
+
+    from ecoscope_workflows_ext_mep.tasks.animate._animate import render_video_from_settings
+
+    param = inspect.signature(render_video_from_settings).parameters["settings"]
+    assert param.default is None
+    field = param.annotation.__metadata__[0]
+    assert field.json_schema_extra["ecoscope:advanced"] is True
