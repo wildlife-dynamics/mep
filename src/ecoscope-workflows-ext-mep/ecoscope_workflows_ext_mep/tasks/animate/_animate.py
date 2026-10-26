@@ -322,9 +322,9 @@ class FollowActionCamera(BaseModel):
             "it. Independent of fps.",
         ),
     ] = 0.25
-    fit_padding: Annotated[
-        int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")
-    ] = 80
+    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")] = (
+        80
+    )
 
 
 CameraOptions = FixedCamera | FlyAroundCamera | FollowSubjectCamera | FollowActionCamera
@@ -722,8 +722,8 @@ window.__cam = (function () {
         out.push({ longitude: v.longitude, latitude: v.latitude, zoom: v.zoom, pitch: pitch, bearing: cb });
       });
     } else if (preset === 'fly_around' || preset === 'fixed') {
-      var fo = preset === 'fixed' ? Object.assign({}, o, { fly_frac: 0, rounds: 0 }) : o;
-      var FA = flyAroundSetup(fo, base);
+      var flyOpts = preset === 'fixed' ? Object.assign({}, o, { fly_frac: 0, rounds: 0 }) : o;
+      var FA = flyAroundSetup(flyOpts, base);
       for (var i = 0; i < n; i++) out.push(flyAroundView(FA, n > 1 ? i / (n - 1) : 1));
     } else {
       out = copies(base, n);
@@ -1118,7 +1118,6 @@ async def render_animation_async(
             # One page reads the timeline and base view and computes the whole camera path.
             page0, pending0 = await open_page()
             span = await page0.evaluate("() => window.__cam.span() || window.__tripsAnim.span")
-            base_view = await page0.evaluate("() => window.__cam.initialView()") or {}
             natural = await page0.evaluate("() => window.__tripsAnim.durationSec || 0")
             seconds = float(natural) if duration.auto and natural > 0 else float(duration.seconds)
             n_frames = max(1, int(round(fps * seconds)))
@@ -1129,7 +1128,9 @@ async def render_animation_async(
             times = await page0.evaluate(
                 """([lo, hi, n]) => {
                   const a = window.__tripsAnim, at = (i) => (n > 1 ? i / (n - 1) : 1);
-                  if (typeof a.timeAt !== 'function') return Array.from({ length: n }, (_, i) => lo + (hi - lo) * at(i));
+                  if (typeof a.timeAt !== 'function') {
+                    return Array.from({ length: n }, (_, i) => lo + (hi - lo) * at(i));
+                  }
                   const p0 = a.progressAt(lo), p1 = a.progressAt(hi);
                   return Array.from({ length: n }, (_, i) => a.timeAt(p0 + (p1 - p0) * at(i)));
                 }""",

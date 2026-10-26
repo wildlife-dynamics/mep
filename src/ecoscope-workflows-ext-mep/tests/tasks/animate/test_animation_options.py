@@ -81,8 +81,20 @@ class TestDefaults:
 
     @pytest.mark.parametrize(
         "field",
-        ["show_gaps", "gap_hours", "speed_response", "comet_color", "history_lag", "shadow",
-         "glow", "glow_width", "glow_opacity", "pulse", "pulse_period_s", "click_to_follow"],
+        [
+            "show_gaps",
+            "gap_hours",
+            "speed_response",
+            "comet_color",
+            "history_lag",
+            "shadow",
+            "glow",
+            "glow_width",
+            "glow_opacity",
+            "pulse",
+            "pulse_period_s",
+            "click_to_follow",
+        ],
     )
     def test_removed_options_are_gone(self, field):
         assert field not in TripsAnimation.model_fields
@@ -122,12 +134,21 @@ class TestTasksPassOptionsThrough:
 
     def test_timeline_task_leaves_feel_options_at_the_model_defaults(self):
         hidden = {
-            "duration_s", "auto_rotate_speed", "sun_lighting", "night_brightness", "day_night_smoothing_s",
-            "adaptive_speed", "max_speedup", "rest_speed_kmh", "fast_forward_night", "ease_s", "follow_smoothing_s",
+            "duration_s",
+            "auto_rotate_speed",
+            "sun_lighting",
+            "night_brightness",
+            "day_night_smoothing_s",
+            "adaptive_speed",
+            "max_speedup",
+            "rest_speed_kmh",
+            "fast_forward_night",
+            "ease_s",
+            "follow_smoothing_s",
         }
         assert hidden.isdisjoint(inspect.signature(create_timeline_animation).parameters)
         timeline = create_timeline_animation()
-        hidden.discard("duration_s")   # renamed to `duration` on the task, same default
+        hidden.discard("duration_s")  # renamed to `duration` on the task, same default
         assert {k: getattr(timeline, k) for k in hidden} == {
             k: TimelineAnimation.model_fields[k].default for k in hidden
         }
@@ -135,10 +156,11 @@ class TestTasksPassOptionsThrough:
     def test_model_animations(self):
         model = create_scenegraph_layer(walk_animation="walk", idle_animation="Idle1", animation_speed=1.5)
         anims = _head_spec(model)["model"]["anims"]
-        assert anims == {"walk": "walk", "run": "walk", "idle": "Idle1", "speed": 1.5}   # run falls back to walk
+        assert anims == {"walk": "walk", "run": "walk", "idle": "Idle1", "speed": 1.5}  # run falls back to walk
 
     @pytest.mark.parametrize(
-        "animal,expected", [("elephant", ("12", "11", "7")), ("lion", ("0", "0", None)), ("giraffe", (None, None, None))]
+        "animal,expected",
+        [("elephant", ("12", "11", "7")), ("lion", ("0", "0", None)), ("giraffe", (None, None, None))],
     )
     def test_preset_animals_name_their_clips(self, animal, expected):
         anims = _head_spec(AnimalModelMarker(animal=animal))["model"]["anims"]
@@ -224,7 +246,7 @@ class TestPageSettings:
         html = draw_animated_map(
             geo_layers=animate_layer(layer=trips_layer, animation=TripsAnimation()), fit_view=False
         )
-        assert _widget_props(html).get("fitView") is None   # pydeck drops None props
+        assert _widget_props(html).get("fitView") is None  # pydeck drops None props
 
     def test_camera_panel_widget_gets_the_camera_schema(self, trips_layer):
         html = _draw(trips_layer, TripsAnimation())

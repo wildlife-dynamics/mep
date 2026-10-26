@@ -25,8 +25,12 @@ from ecoscope_workflows_ext_mep.tasks.animate._animate import (
 
 @pytest.mark.parametrize(
     "preset,size",
-    [("720p", (1280, 720)), ("1080p-vertical", (1080, 1920)), ("720p-vertical", (720, 1280)),
-     ("1080p-square", (1080, 1080))],
+    [
+        ("720p", (1280, 720)),
+        ("1080p-vertical", (1080, 1920)),
+        ("720p-vertical", (720, 1280)),
+        ("1080p-square", (1080, 1080)),
+    ],
 )
 def test_resolution_presets(preset, size):
     assert _resolve_resolution(PresetResolution(preset=preset)) == size
@@ -48,7 +52,7 @@ class TestOverlays:
         css = _overlay_css(VideoOverlays(clock_position="bottom-left"), 1920)
         clock = css[css.index("#video-clock") :]
         assert "bottom: 38px" in clock and "left: 38px" in clock
-        assert "font: 600 50px" in clock   # 2.6% of the height
+        assert "font: 600 50px" in clock  # 2.6% of the height
 
 
 class TestHolds:
@@ -155,5 +159,9 @@ class TestVideoSettings:
 
         params = set(inspect.signature(render_animation_async).parameters)
         assert set(VideoSettings.model_fields) == params - {
-            "html_path", "output_dir", "out_path", "camera_settings", "verbose"
+            "html_path",
+            "output_dir",
+            "out_path",
+            "camera_settings",
+            "verbose",
         }

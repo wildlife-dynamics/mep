@@ -76,7 +76,7 @@ def test_short_removed_stretch_is_joined_up():
 
 def test_break_hours_threshold():
     trip = _trips(_segments("A", STEADY, keep=[0, 1, 2, 4, 5, 6]), min_break_hours=100).loc["A"]
-    assert trip.breaks == []   # the 97 h stretch is under the threshold
+    assert trip.breaks == []  # the 97 h stretch is under the threshold
 
 
 def test_subject_with_only_short_pieces_keeps_its_latest():
@@ -118,10 +118,20 @@ class TestTrackAltitudeModes:
 
     def test_stitching_keeps_a_recorded_altitude(self):
         rows = [
-            {"groupby_col": "A", "subject_name": "A", "segment_start": T0, "segment_end": T0 + pd.Timedelta(hours=1),
-             "geometry": LineString([(37.0, -2.6, 1500), (37.01, -2.6, 1510)])},
-            {"groupby_col": "A", "subject_name": "A", "segment_start": T0 + pd.Timedelta(hours=1),
-             "segment_end": T0 + pd.Timedelta(hours=2), "geometry": LineString([(37.01, -2.6, 1510), (37.02, -2.6, 1520)])},
+            {
+                "groupby_col": "A",
+                "subject_name": "A",
+                "segment_start": T0,
+                "segment_end": T0 + pd.Timedelta(hours=1),
+                "geometry": LineString([(37.0, -2.6, 1500), (37.01, -2.6, 1510)]),
+            },
+            {
+                "groupby_col": "A",
+                "subject_name": "A",
+                "segment_start": T0 + pd.Timedelta(hours=1),
+                "segment_end": T0 + pd.Timedelta(hours=2),
+                "geometry": LineString([(37.01, -2.6, 1510), (37.02, -2.6, 1520)]),
+            },
         ]
         trip = _trips(rows, min_piece_fixes=1).loc["A"]
         assert [c[2] for c in trip.geometry.coords] == [1500, 1510, 1520]

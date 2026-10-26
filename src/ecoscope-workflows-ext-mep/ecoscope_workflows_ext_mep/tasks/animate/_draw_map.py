@@ -509,7 +509,8 @@ class TimelineAnimation(BaseModel):
         default=0.4,
         ge=0,
         le=5,
-        description="How softly the camera follows a clicked marker: about this many seconds to catch up. 0 = locked on.",
+        description="How softly the camera follows a clicked marker: about this many seconds to catch up. "
+        "0 = locked on.",
     )
     auto_rotate_speed: Annotated[
         float,
@@ -1133,9 +1134,7 @@ def sample_elevations(
     return out.tolist()
 
 
-def _stitch_segments(
-    segments: gpd.GeoDataFrame, min_break_s: float = 0.0
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _stitch_segments(segments: gpd.GeoDataFrame, min_break_s: float = 0.0) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Concatenate time-ordered segments into one (lon, lat) vertex array + epoch-second timestamps.
 
     Each segment's vertices are spaced evenly in time between its segment_start and segment_end.
@@ -1502,7 +1501,9 @@ def draw_animated_map(
     if camera_on:
         # The Camera panel (CameraPanelWidget, my-deck-widgets), built from render_animation's camera models.
         extra_widgets.append(
-            pdk.Widget("CameraPanelWidget", id="CameraPanelWidget", placement="top-right", cameras=camera_panel_schema())
+            pdk.Widget(
+                "CameraPanelWidget", id="CameraPanelWidget", placement="top-right", cameras=camera_panel_schema()
+            )
         )
     deck = _build_map_deck(
         geo_list,
