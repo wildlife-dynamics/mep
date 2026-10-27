@@ -116,13 +116,18 @@ class TestComputeSubjectStats:
         assert bool(result.iloc[0]["mature"]) is False
 
     def test_dusk_dawn_inside_a_leap_second_still_yields_a_ratio(self, traj_gdf, etd_gdf, monkeypatch):
-        # ecoscope converts astroplan's dusk/dawn with Time.to_datetime(timezone=UTC), which raises
-        # by default for an event inside the 2015-06-30 23:59:60 UTC leap second.
+        # astropy raises by default for a time inside the 2015-06-30 23:59:60 UTC leap second: when
+        # ecoscope converts dusk/dawn with Time.to_datetime, and when astroplan's sunrise search turns
+        # a datetime-format Time into a string.
+        from datetime import datetime
+
+        import astropy.units as u
         import pytz
         from astropy.time import Time
 
         def summarize_through_a_leap_second(df, params, groupby_cols=None):
             Time("2015-06-30 23:59:60.354893", scale="utc").to_datetime(timezone=pytz.UTC)
+            str(Time(datetime(2015, 6, 30, 23, 59, 59), scale="utc") + 1.354893 * u.s)
             return pd.DataFrame([{"night_day_ratio": 0.876}])
 
         monkeypatch.setattr(stats_mod.analysis, "summarize_df", summarize_through_a_leap_second)
