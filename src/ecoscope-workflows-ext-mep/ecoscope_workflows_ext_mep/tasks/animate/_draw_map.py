@@ -117,8 +117,7 @@ class DotMarker(BaseModel):
     radius_units: Annotated[UnitType, AdvancedField(default="pixels")] = "pixels"
     stroked: Annotated[bool, AdvancedField(default=True)] = True
     get_line_color: Annotated[
-        tuple[int, int, int], 
-        AdvancedField(default=(255, 255, 255), json_schema_extra={"items": {"type": "integer"}})
+        tuple[int, int, int], AdvancedField(default=(255, 255, 255), json_schema_extra={"items": {"type": "integer"}})
     ] = (255, 255, 255)
     get_line_width: Annotated[float, AdvancedField(default=1.5, ge=0)] = 1.5
     line_width_units: Annotated[UnitType, AdvancedField(default="pixels")] = "pixels"
