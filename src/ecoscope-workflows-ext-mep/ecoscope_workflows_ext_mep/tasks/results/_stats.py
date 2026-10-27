@@ -3,6 +3,7 @@ from ecoscope.platform.tasks import analysis
 from wt_registry import register
 import pandas as pd
 from typing import cast
+from unittest.mock import patch
 from ecoscope.platform.annotations import AnyDataFrame, AnyGeoDataFrame
 
 
@@ -67,7 +68,17 @@ def compute_subject_stats(
     # Calculate night/day ratio
     traj_ll = traj_gdf.to_crs(4326)
     summary_params = [NightDayRatioSummaryParam(display_name="night_day_ratio", aggregator="night_day_ratio")]
-    summarized = analysis.summarize_df(traj_ll, summary_params, groupby_cols=None)
+    # ecoscope converts dusk/dawn with astropy's Time.to_datetime, which raises if an event lands
+    # inside a leap second (e.g. 2015-06-30 23:59:60 UTC). Let it roll over to the next second instead.
+    from astropy.time import Time
+
+    to_datetime = Time.to_datetime
+
+    def to_datetime_leap_safe(self, timezone=None, leap_second_strict="silent"):
+        return to_datetime(self, timezone=timezone, leap_second_strict=leap_second_strict)
+
+    with patch.object(Time, "to_datetime", to_datetime_leap_safe):
+        summarized = analysis.summarize_df(traj_ll, summary_params, groupby_cols=None)
     night_day_ratio = round(float(summarized["night_day_ratio"].iloc[0]), 2)
 
     # Compile statistics

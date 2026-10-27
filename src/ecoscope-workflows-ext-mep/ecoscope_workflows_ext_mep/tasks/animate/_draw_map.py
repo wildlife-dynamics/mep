@@ -19,7 +19,7 @@ from pydantic.json_schema import SkipJsonSchema
 from wt_registry import register
 from ecoscope.platform.schemas import TrajectoryGDF
 from ecoscope.platform.annotations import AdvancedField, AnyGeoDataFrame
-from ._animate import _CAM_HELPER, camera_panel_schema
+from ._animate import camera_panel_schema
 from ecoscope.platform.tasks.results._pydeck import (
     PydeckAnnotation,
     PydeckString,
@@ -57,7 +57,7 @@ SURFACE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/Ma
 MY_DECK_WIDGETS = {
     "libraryName": "myDeckWidgets",
     "resourceUri": os.environ.get(
-        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.16.0/dist/bundle.js"
+        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.17.0/dist/bundle.js"
     ),
 }
 
@@ -104,7 +104,8 @@ BasemapOption = Annotated[DefaultBasemap | CustomBasemap, Field(discriminator="p
 
 
 class DotMarker(BaseModel):
-    """Flat circle at each subject's current position (deck.gl ScatterplotLayer).
+    """Flat circle at each subject's current position (deck.gl ScatterplotLayer), filled
+    with that subject's track colour.
 
     Field names mirror PointLayerStyle. Colours are constants rather than column accessors
     because the marker's data is rebuilt in the browser every frame.
@@ -112,19 +113,12 @@ class DotMarker(BaseModel):
 
     model_config = ConfigDict(json_schema_extra={"title": "Dot"})
     marker: Annotated[Literal["dot"], Field(default="dot", title="Marker icon")] = "dot"
-    get_radius: Annotated[float, AdvancedField(default=6.0, gt=0)] = 6.0
+    get_radius: Annotated[float, AdvancedField(default=2.0, gt=0)] = 2.0
     radius_units: Annotated[UnitType, AdvancedField(default="pixels")] = "pixels"
-    get_fill_color: Annotated[
-        tuple[int, int, int] | SkipJsonSchema[None],
-        AdvancedField(
-            default=None,
-            description="RGB fill. None -> each subject's own track colour.",
-            json_schema_extra={"items": {"type": "integer"}},
-        ),
-    ] = None
     stroked: Annotated[bool, AdvancedField(default=True)] = True
     get_line_color: Annotated[
-        tuple[int, int, int], AdvancedField(default=(255, 255, 255), json_schema_extra={"items": {"type": "integer"}})
+        tuple[int, int, int], 
+        AdvancedField(default=(255, 255, 255), json_schema_extra={"items": {"type": "integer"}})
     ] = (255, 255, 255)
     get_line_width: Annotated[float, AdvancedField(default=1.5, ge=0)] = 1.5
     line_width_units: Annotated[UnitType, AdvancedField(default="pixels")] = "pixels"
@@ -418,13 +412,6 @@ class PlaybackControls(BaseModel):
         default="datetime",
         description="How the data time is shown: 'datetime' (2024-01-01 06:00 UTC), 'date' (2024-01-01), "
         "or 'elapsed' since the start (6.0 h). Non-date data always shows elapsed.",
-    )
-    utc_offset_hours: float = Field(
-        default=0.0,
-        ge=-14,
-        le=14,
-        description="Hours ahead of UTC to show the data time in, e.g. 3 for East Africa, so the clock matches "
-        "the local day and the sun lighting. 0 = UTC.",
     )
     show_speed: bool = Field(default=True, description="Button cycling through `speeds`.")
     speeds: list[Annotated[float, Field(gt=0)]] = Field(
@@ -1293,7 +1280,7 @@ def _head_spec(head: HeadMarker) -> dict:
     dot = head if isinstance(head, DotMarker) else DotMarker()
     spec: dict = {
         "kind": "dot",
-        "color": list(dot.get_fill_color) if dot.get_fill_color is not None else None,
+        "color": None,  # None -> each subject's own track colour
         "smoothSamples": 2,
         "minMoveM": 3.0,
         "dot": {
@@ -1518,13 +1505,8 @@ def draw_animated_map(
     )
 
     html_str = deck.to_html(as_string=True)
-    # The camera helper (Camera panel and video exporter) reads the pydeck spec from window.jsonInput.
+    # The video camera (window.__cam, in the widget bundle) reads the pydeck spec from window.jsonInput.
     html_str = html_str.replace("const jsonInput =", "window.jsonInput =")
-
-    if camera_on:
-        # The panel previews with window.__cam, the video exporter's own camera code, so it stays
-        # here (the exporter injects the same script) rather than in the widget bundle.
-        html_str = html_str.replace("</body>", f"<script>{_CAM_HELPER}</script></body>")
     return html_str
 
 
@@ -1570,12 +1552,6 @@ def create_playback_controls(
             description="Data time as 'datetime' (2024-01-01 06:00 UTC), 'date', or 'elapsed' since the start.",
         ),
     ] = "date",
-    utc_offset_hours: Annotated[
-        float,
-        AdvancedField(
-            default=0.0, ge=-14, le=14, description=PlaybackControls.model_fields["utc_offset_hours"].description
-        ),
-    ] = 0.0,
     show_speed: Annotated[bool, AdvancedField(default=True, description="Button cycling through `speeds`.")] = True,
     speeds: Annotated[
         list[Annotated[float, Field(gt=0)]],
@@ -1602,7 +1578,6 @@ def create_playback_controls(
         show_clock=show_clock,
         show_time=show_time,
         time_format=time_format,
-        utc_offset_hours=utc_offset_hours,
         show_speed=show_speed,
         speeds=speeds,
         position=position,

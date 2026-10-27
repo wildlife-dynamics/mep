@@ -1,21 +1,21 @@
 id: mep_collared_report
 requirements:
   - name: ecoscope-platform
-    version: ">=2.15.0, <2.16.0"
+    version: ==2.25.3
     channel: https://repo.prefix.dev/ecoscope-workflows/
 
   - name: ecoscope-workflows-ext-custom
-    version: "0.1.0rc14.*"
+    version: "0.1.4.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-ste
-    version: "0.0.0rc1.*"
+    version: "0.0.24.*"
     channel: https://repo.prefix.dev/ecoscope-workflows-custom/
 
   - name: ecoscope-workflows-ext-mep
     version: "*"
     channel: "file:///tmp/ecoscope-workflows-custom/release/artifacts/"
-    
+
   - name: pydeck
     version: 0.9.2
     channel: conda-forge
@@ -32,8 +32,17 @@ task-instance-defaults:
 
 rjsf-overrides:
   properties: 
-    Subject Group.properties.subject_group_var.properties.var.title: Subject Group Name
-    Subject Group.properties.subject_group_var.properties.var.default: Elephants
+    # Subject Group: a drop-down of the chosen EarthRanger site's subject group names
+    Subject Group.properties.subject_group_var.properties.var:
+      title: Subject Group Name
+      type: string
+      default: Elephants
+      description: The EarthRanger subject group to report on, picked from the chosen data source's subject groups.
+      ecoscope:transform:
+      - transformer: EarthRangerEnumResolver
+        transformer_kws:
+          type: subject_group_name
+          depends_on: properties.er_client_name.properties.data_source.properties.name
 
   $defs:
     # Restrict category options to Subject Name ,Subject Sex and Subject Subtype
@@ -43,12 +52,12 @@ rjsf-overrides:
 
 workflow:
   # set workflow details 
-  - name: Set workflow details
+  - name: Workflow Details
     id: workflow_details
     task: set_workflow_details
 
   # define time range 
-  - name: Define analysis time range 
+  - name: Time Range
     id: time_range 
     task: set_time_range 
     
@@ -61,9 +70,9 @@ workflow:
         - index_name: subject_name
   
   # set basemaps
-  - name: Configure base map layers 
+  - name: Configure Base Map Layers
     id: configure_base_maps 
-    task: set_base_maps_pydeck
+    task: set_base_maps
 
   # connect to earthranger
   - name: Connect to EarthRanger
@@ -71,7 +80,7 @@ workflow:
     task: set_er_connection 
   
   # connect to earthengine 
-  - name: Connect to EarthEngine
+  - name: Connect to Google Earth Engine
     id: gee_project_name
     task: set_gee_connection 
   
@@ -135,10 +144,11 @@ workflow:
 
   - name: Create community conservancy layer
     id: create_community_layer
-    task: ecoscope_workflows_ext_custom.tasks.results.create_geojson_layer
+    task: create_geojson_layer
     partial:
       geodataframe: ${{ workflow.filter_community_cons.return }}
       data_url: null
+      tooltip_columns: ["type"]
       layer_style:
         filled: true
         stroked: true
@@ -162,10 +172,11 @@ workflow:
 
   - name: Create national reserve layer
     id: create_reserve_layer
-    task: ecoscope_workflows_ext_custom.tasks.results.create_geojson_layer
+    task: create_geojson_layer
     partial:
       geodataframe: ${{ workflow.filter_national_res.return }}
       data_url: null
+      tooltip_columns: ["type"]
       layer_style:
         filled: true
         stroked: true
@@ -189,10 +200,11 @@ workflow:
 
   - name: Create national park layer
     id: create_park_layer
-    task: ecoscope_workflows_ext_custom.tasks.results.create_geojson_layer
+    task: create_geojson_layer
     partial:
       geodataframe: ${{ workflow.filter_national_park.return }}
       data_url: null
+      tooltip_columns: ["type"]
       layer_style:
         filled: true
         stroked: true
@@ -226,6 +238,7 @@ workflow:
       raise_on_empty: false 
       include_details: false 
       include_subjectsource_details: false 
+      include_subject_additional: false
   
   - name: Get timezone from time range
     id: get_timezone
@@ -280,6 +293,7 @@ workflow:
     partial:
       df: ${{ workflow.subject_reloc.return }}
       drop_columns: []
+      duplicate_strategy: suffix
       retain_columns: []
       rename_columns: {
         "name": "subject_name",
@@ -314,7 +328,7 @@ workflow:
       name: null 
       updated_since: null
       updated_until: null 
-      tracks: null 
+      tracks: false
       ids: ${{ workflow.unique_subject_ids.return }}
       max_ids_per_request: 50
       raise_on_empty: false 
@@ -332,6 +346,7 @@ workflow:
     id: rename_subject_cols 
     task: map_columns
     partial: 
+      duplicate_strategy: suffix
       drop_columns: [
         "content_type",
         "common_name",
@@ -364,7 +379,7 @@ workflow:
         "additional__DOB": "date_of_birth",
         "additional__notes": "notes",
         "additional__status": "status",
-        "additional__region": "region",
+       # "additional__region": "region",
         "additional__country": "country",
         "additional__id_photo": "photo",
         "additional__distribution": "distribution"
@@ -389,7 +404,7 @@ workflow:
       df: ${{ workflow.subject_maturity_df.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
       filename: subjects
-      filetype: parquet
+      filetype: csv
 
   # Split subject df by group
   - name: split subjects df by group
@@ -476,6 +491,7 @@ workflow:
     id: display_subject_info
     task: map_columns
     partial:
+      duplicate_strategy: suffix
       drop_columns: [
         "status"
       ]
@@ -509,6 +525,7 @@ workflow:
     id: display_subject_info_transposed
     task: map_columns
     partial:
+      duplicate_strategy: suffix
       drop_columns: []
       retain_columns: []
       rename_columns: {
@@ -588,6 +605,7 @@ workflow:
     id: get_events_data
     task: get_events
     partial:
+      event_states: resolved
       client: ${{ workflow.er_client_name.return }}
       time_range: ${{ workflow.time_range.return }}
       include_details: true
@@ -627,6 +645,7 @@ workflow:
     id: rename_event_cols
     task: map_columns
     partial:
+      duplicate_strategy: suffix
       drop_columns: []
       retain_columns: []
       rename_columns: {
@@ -712,6 +731,7 @@ workflow:
     id: rename_traj_cols
     task: map_columns
     partial:
+      duplicate_strategy: suffix
       raise_if_not_found: false
       df: ${{ workflow.classify_trajectories_speed_bins.return }}
       drop_columns: []
@@ -787,9 +807,10 @@ workflow:
 
   - name: Generate speedmap layers 
     id: generate_speedmap_layers 
-    task: ecoscope_workflows_ext_custom.tasks.results.create_path_layer
+    task: create_path_layer
     partial: 
       data_url: null
+      tooltip_columns: ["subject_name", "speed_kmhr", "speed_bins"]
       layer_style:
         get_color: speed_bins_colormap
         get_width: 2.25
@@ -854,8 +875,9 @@ workflow:
     
   - name: Draw speedmap 
     id: draw_speedmap
-    task: ecoscope_workflows_ext_custom.tasks.results.draw_map 
+    task: draw_map 
     partial: 
+      output_type: html
       tile_layers: ${{ workflow.configure_base_maps.return }}
       static: false
       title: null 
@@ -909,7 +931,7 @@ workflow:
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
         width: 1280
         height: 720
@@ -1048,9 +1070,10 @@ workflow:
 
   - name: Create home range layers 
     id: generate_home_range_layers 
-    task: ecoscope_workflows_ext_custom.tasks.results.create_geojson_layer
+    task: create_geojson_layer
     partial: 
       data_url: null
+      tooltip_columns: ["percentile"]
       layer_style: 
         filled: true 
         stroked: true 
@@ -1099,9 +1122,10 @@ workflow:
 
   - name: Draw home range map
     id: draw_home_range_map
-    task: ecoscope_workflows_ext_custom.tasks.results.draw_map 
+    task: draw_map 
     partial: 
       tile_layers: ${{ workflow.configure_base_maps.return }}
+      output_type: html
       static: false
       title: null 
       max_zoom: 10
@@ -1154,7 +1178,7 @@ workflow:
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
         width: 602
         height: 855
@@ -1223,9 +1247,10 @@ workflow:
 
   - name: Create seasonal home range layers
     id: generate_season_layers 
-    task: ecoscope_workflows_ext_custom.tasks.results.create_geojson_layer
+    task: create_geojson_layer
     partial: 
       data_url: null
+      tooltip_columns: ["season"]
       layer_style: 
         filled: true 
         stroked: true 
@@ -1254,9 +1279,10 @@ workflow:
 
   - name: Create mcp polygon layer 
     id: create_mcp_polygon_layer 
-    task: ecoscope_workflows_ext_custom.tasks.results.create_geojson_layer
+    task: create_geojson_layer
     partial: 
       data_url: null
+      tooltip_columns: null
       layer_style: 
         filled: false  
         stroked: true 
@@ -1312,9 +1338,10 @@ workflow:
 
   - name: Draw seasonal home range map
     id: draw_seasonal_home_range_map
-    task: ecoscope_workflows_ext_custom.tasks.results.draw_map
+    task: draw_map
     partial:
       tile_layers: ${{ workflow.configure_base_maps.return }}
+      output_type: html
       static: false
       title: null 
       max_zoom: 10
@@ -1367,7 +1394,7 @@ workflow:
       config:
         full_page: false
         device_scale_factor: 2.0
-        wait_for_timeout: 10
+        wait_for_timeout: 40000
         max_concurrent_pages: 1
         width: 602
         height: 855
@@ -1431,6 +1458,11 @@ workflow:
 
   - name: Zip nsd filename with text
     id: zip_nsd_filename
+    skipif:
+      conditions:
+        - any_dependency_skipped
+        - any_keyed_iterables_are_skips
+      unpack_depth: 1
     task: groupbykey
     partial:
       iterables:
@@ -1517,6 +1549,11 @@ workflow:
 
   - name: Zip speed plot filename with text
     id: zip_speed_plot_filename
+    skipif:
+      conditions:
+        - any_dependency_skipped
+        - any_keyed_iterables_are_skips
+      unpack_depth: 1
     task: groupbykey
     partial:
       iterables:
@@ -1603,6 +1640,11 @@ workflow:
 
   - name: Zip collared filename with text
     id: zip_collared_filename
+    skipif:
+      conditions:
+        - any_dependency_skipped
+        - any_keyed_iterables_are_skips
+      unpack_depth: 1
     task: groupbykey
     partial:
       iterables:
@@ -1689,6 +1731,11 @@ workflow:
 
   - name: Zip mcp plot filename with text
     id: zip_mcp_plot_filename
+    skipif:
+      conditions:
+        - any_dependency_skipped
+        - any_keyed_iterables_are_skips
+      unpack_depth: 1
     task: groupbykey
     partial:
       iterables:
@@ -1801,6 +1848,7 @@ workflow:
     id: display_subject_stats
     task: map_columns
     partial:
+      duplicate_strategy: suffix
       drop_columns: []
       retain_columns: []
       rename_columns: {
@@ -1832,6 +1880,7 @@ workflow:
     id: display_subject_stats_transposed
     task: map_columns
     partial:
+      duplicate_strategy: suffix
       drop_columns: []
       retain_columns: []
       rename_columns: {
@@ -1975,6 +2024,7 @@ workflow:
     id: display_subject_occupancy
     task: map_columns
     partial:
+      duplicate_strategy: suffix
       drop_columns: []
       retain_columns: []
       rename_columns: {
@@ -2002,6 +2052,7 @@ workflow:
     id: display_occupancy_transposed
     task: map_columns
     partial:
+      duplicate_strategy: suffix
       drop_columns: []
       retain_columns: []
       rename_columns: {

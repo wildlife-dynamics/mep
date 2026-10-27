@@ -105,7 +105,6 @@ class TestDefaults:
         assert timeline.sun_lighting and timeline.night_brightness == 0.45
         assert timeline.day_night_smoothing_s == 0.3
         assert timeline.fps_limit == 60.0
-        assert timeline.controls.utc_offset_hours == 0
 
     def test_task_defaults_match_the_models(self):
         assert create_trips_animation() == TripsAnimation()
@@ -166,11 +165,6 @@ class TestTasksPassOptionsThrough:
         anims = _head_spec(AnimalModelMarker(animal=animal))["model"]["anims"]
         assert (anims["walk"], anims["run"], anims["idle"]) == expected
 
-    def test_clock_utc_offset(self):
-        assert create_playback_controls(utc_offset_hours=5.5).utc_offset_hours == 5.5
-        with pytest.raises(ValueError):
-            create_playback_controls(utc_offset_hours=15)
-
     @pytest.mark.parametrize(
         "field,value",
         [("turn_smoothing", 0), ("comet_ratio", 1.5), ("night_brightness", 1.5), ("max_speedup", 1)],
@@ -218,11 +212,6 @@ class TestPageSettings:
         _, sun = _page_settings(_draw(trips_layer, TripsAnimation(), sun_lighting=False))
         assert sun["on"] is False
 
-    def test_clock_offset_reaches_the_page(self, trips_layer):
-        controls = create_playback_controls(utc_offset_hours=3)
-        html = _draw(trips_layer, TripsAnimation(), controls=controls)
-        assert _widget_props(html)["controls"]["utc_offset_hours"] == 3
-
     def test_label_column_is_used_for_labels_and_hover(self, trips_layer):
         spec, _ = _page_settings(_draw(trips_layer, TripsAnimation(label_column="subject_name")))
         assert spec["labelCol"] == "subject_name" and spec["tipCol"] == "subject_name"
@@ -253,11 +242,11 @@ class TestPageSettings:
         spec = json.JSONDecoder().raw_decode(html, html.index("window.jsonInput = ") + len("window.jsonInput = "))[0]
         panel = next(w for w in spec["widgets"] if w["@@type"] == "CameraPanelWidget")
         assert panel["cameras"] == camera_panel_schema()
-        assert "window.__cam = " in html
+        assert "window.jsonInput = " in html  # read by the bundle's video camera (window.__cam)
 
     def test_no_camera_panel_without_the_camera_button(self, trips_layer):
         html = _draw(trips_layer, TripsAnimation(), controls=create_playback_controls(show_camera=False))
-        assert "CameraPanelWidget" not in html and "window.__cam = " not in html
+        assert "CameraPanelWidget" not in html
 
     def test_widget_bundle_is_registered(self, trips_layer):
         html = _draw(trips_layer, TripsAnimation())
