@@ -3,6 +3,7 @@ frames and the bundled Chromium. The browser capture itself is not run here."""
 
 from __future__ import annotations
 
+import inspect
 import os
 import sys
 from pathlib import Path
@@ -117,69 +118,70 @@ def test_render_animation_exposes_the_new_options():
     assert params["hold_start_s"].default == 1.0 and params["hold_end_s"].default == 2.0
 
 
-class TestVideoSettings:
-    def test_camera_panel_file_alone(self, tmp_path):
-        from ecoscope_workflows_ext_mep.tasks.animate._animate import FixedCamera, parse_video_settings
+class TestRenderVideoFromSettings:
+    """The task's own options reach render_animation_async; the capture itself is stubbed out."""
 
-        f = tmp_path / "camera-settings.json"
-        f.write_text('{"type_": "fixed", "altitude_mode": "clamp_to_ground"}')
-        video = parse_video_settings(str(f))
-        assert video.camera == FixedCamera() and video.fps == 30 and video.hold_end_s == 2.0
+    @pytest.fixture
+    def rendered(self, monkeypatch):
+        calls = []
 
-    def test_full_settings(self):
-        from ecoscope_workflows_ext_mep.tasks.animate._animate import parse_video_settings
+        async def fake_render(html_path, **kwargs):
+            calls.append(kwargs)
+            return "animation.mp4"
 
-        video = parse_video_settings(
-            '{"camera": {"type_": "chase", "subject": "Big Guy", "range_m": 2500}, "fps": 24,'
-            ' "resolution": {"preset": "1080p-vertical"}, "duration": {"auto": false, "seconds": 20},'
-            ' "overlays": {"legend": false, "clock_position": "bottom-left"}, "hold_start_s": 0}'
+        monkeypatch.setattr(anim, "render_animation_async", fake_render)
+        return calls
+
+    def test_defaults_are_a_fixed_view_of_the_whole_scene(self, rendered):
+        anim.render_video_from_settings("map.html")
+        (call,) = rendered
+        assert call["camera"] == anim.FixedCamera() and call["fps"] == 30
+        assert call["duration"] == anim.DurationConfig() and call["overlays"] == VideoOverlays()
+        assert call["quality"] == anim.VideoQuality() and call["capture"] == anim.CaptureOptions()
+
+    def test_video_options_are_passed_through(self, rendered):
+        anim.render_video_from_settings(
+            "map.html",
+            camera_settings=anim.FollowSubjectCamera(subject="Big Guy", range_m=2500),
+            fps=24,
+            duration=anim.DurationConfig(auto=False, seconds=20),
+            overlays=VideoOverlays(legend=False),
+            quality=anim.VideoQuality(crf=20),
+            capture=anim.CaptureOptions(resume=False),
         )
-        assert (video.camera.type_, video.camera.subject, video.camera.range_m) == ("chase", "Big Guy", 2500)
-        assert video.fps == 24 and video.resolution.preset == "1080p-vertical" and video.duration.seconds == 20
-        assert not video.overlays.legend and video.hold_start_s == 0
+        (call,) = rendered
+        assert (call["camera"].type_, call["camera"].subject, call["camera"].range_m) == ("chase", "Big Guy", 2500)
+        assert call["fps"] == 24 and call["duration"].seconds == 20 and not call["overlays"].legend
+        assert call["quality"].crf == 20 and call["capture"].resume is False
 
-    def test_dict_input(self):
-        from ecoscope_workflows_ext_mep.tasks.animate._animate import parse_video_settings
+    def test_camera_panel_file(self, rendered, tmp_path):
+        f = tmp_path / "camera-settings.json"
+        f.write_text('{"type_": "fly_around", "rounds": 2}')
+        anim.render_video_from_settings("map.html", camera_settings=anim.CameraFromSettings(settings=str(f)))
+        assert rendered[0]["camera"] == anim.FlyAroundCamera(rounds=2)
 
-        assert parse_video_settings({"fps": 60}).fps == 60
+    def test_pasted_camera_panel_settings(self, rendered):
+        settings = anim.CameraFromSettings(settings='{"type_": "chase", "subject": "Amani"}')
+        anim.render_video_from_settings("map.html", camera_settings=settings)
+        assert rendered[0]["camera"] == anim.FollowSubjectCamera(subject="Amani")
 
-    @pytest.mark.parametrize(
-        "text", ['{"fps": 0}', '{"frame_rate": 30}', '{"camera": {"type_": "orbit"}}', "[1, 2]", "{bad"]
-    )
-    def test_invalid_settings_are_rejected(self, text):
-        from ecoscope_workflows_ext_mep.tasks.animate._animate import parse_video_settings
-
+    @pytest.mark.parametrize("text", ['{"type_": "orbit"}', '{"type_": "fixed", "tilt": 85}', "{bad"])
+    def test_invalid_camera_panel_settings_are_rejected(self, rendered, text):
         with pytest.raises(ValueError):
-            parse_video_settings(text)
+            anim.render_video_from_settings("map.html", camera_settings=anim.CameraFromSettings(settings=text))
+        assert not rendered
 
-    def test_every_render_option_is_a_setting(self):
-        import inspect
+    def test_camera_field_offers_the_cameras_and_panel_settings(self):
+        from pydantic import TypeAdapter
 
-        from ecoscope_workflows_ext_mep.tasks.animate._animate import VideoSettings, render_animation_async
+        param = inspect.signature(anim.render_video_from_settings).parameters["camera_settings"]
+        adapter = TypeAdapter(param.annotation)
+        assert adapter.validate_python({"type_": "keyframes"}) == anim.KeyframesCamera()
+        assert adapter.validate_python({"type_": "settings", "settings": "{}"}).settings == "{}"
+        mapping = adapter.json_schema()["discriminator"]["mapping"]
+        assert set(mapping) == {"fixed", "fly_around", "chase", "follow", "keyframes", "settings"}
 
-        params = set(inspect.signature(render_animation_async).parameters)
-        assert set(VideoSettings.model_fields) == params - {
-            "html_path",
-            "output_dir",
-            "out_path",
-            "camera_settings",
-            "verbose",
-        }
-
-
-@pytest.mark.parametrize("blank", [None, "", "   "])
-def test_blank_settings_mean_every_default(blank):
-    from ecoscope_workflows_ext_mep.tasks.animate._animate import VideoSettings, parse_video_settings
-
-    assert parse_video_settings(blank) == VideoSettings()
-
-
-def test_settings_is_an_advanced_field_with_a_blank_default():
-    import inspect
-
-    from ecoscope_workflows_ext_mep.tasks.animate._animate import render_video_from_settings
-
-    param = inspect.signature(render_video_from_settings).parameters["settings"]
-    assert param.default is None
-    field = param.annotation.__metadata__[0]
-    assert field.json_schema_extra["ecoscope:advanced"] is True
+    def test_video_options_are_advanced_fields(self):
+        params = inspect.signature(anim.render_video_from_settings).parameters
+        for name in ("camera_settings", "fps", "duration", "overlays", "quality", "capture"):
+            assert params[name].annotation.__metadata__[0].json_schema_extra["ecoscope:advanced"] is True

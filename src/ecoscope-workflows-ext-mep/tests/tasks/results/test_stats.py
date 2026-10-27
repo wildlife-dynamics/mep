@@ -115,6 +115,25 @@ class TestComputeSubjectStats:
 
         assert bool(result.iloc[0]["mature"]) is False
 
+    def test_dusk_dawn_inside_a_leap_second_still_yields_a_ratio(self, traj_gdf, etd_gdf, monkeypatch):
+        # ecoscope converts astroplan's dusk/dawn with Time.to_datetime(timezone=UTC), which raises
+        # by default for an event inside the 2015-06-30 23:59:60 UTC leap second.
+        import pytz
+        from astropy.time import Time
+
+        def summarize_through_a_leap_second(df, params, groupby_cols=None):
+            Time("2015-06-30 23:59:60.354893", scale="utc").to_datetime(timezone=pytz.UTC)
+            return pd.DataFrame([{"night_day_ratio": 0.876}])
+
+        monkeypatch.setattr(stats_mod.analysis, "summarize_df", summarize_through_a_leap_second)
+        subject_df = pd.DataFrame({"groupby_col": [traj_gdf["groupby_col"].iloc[0]], "mature": [True]})
+
+        result = compute_subject_stats(traj_gdf=traj_gdf, subject_df=subject_df, etd_df=etd_gdf)
+
+        assert result.iloc[0]["night_day_ratio"] == pytest.approx(0.88)
+        with pytest.raises(ValueError, match="leap second"):
+            Time("2015-06-30 23:59:60.354893", scale="utc").to_datetime(timezone=pytz.UTC)
+
 
 def test_night_day_ratio_param_is_built_without_stubs():
     # SummaryParam became an Annotated union in ecoscope.platform; calling it raised
