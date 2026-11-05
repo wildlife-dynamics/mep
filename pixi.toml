@@ -20,7 +20,7 @@ pip="*"
 hatch-vcs="*"
 setuptools="*"
 playwright = ">=1.58.2,<2"
-wt-compiler = "==0.8.0"
+wt-compiler = "==0.10.1"
 graphviz = "*"
 imageio-ffmpeg="*"
 
@@ -30,7 +30,7 @@ ecoscope-workflows-ext-ste ="0.0.24.*"
 ecoscope-workflows-ext-custom = "0.1.4.*"
 
 graphviz = "*"
-wt-compiler = "==0.8.0"
+wt-compiler = "==0.10.1"
 
 [environments]
 compile = { features = ["compile"], no-default-feature = true }

@@ -20,6 +20,7 @@ from ._draw_map import (
 from ._animate import (
     render_animation,
     render_video_from_settings,
+    set_video_camera,
 )
 
 __all__ = [
@@ -41,4 +42,5 @@ __all__ = [
     "set_basemap_option",
     "render_animation",
     "render_video_from_settings",
+    "set_video_camera",
 ]

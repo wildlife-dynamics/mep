@@ -19,7 +19,7 @@ from pydantic.json_schema import SkipJsonSchema
 from wt_registry import register
 from ecoscope.platform.schemas import TrajectoryGDF
 from ecoscope.platform.annotations import AdvancedField, AnyGeoDataFrame
-from ._animate import camera_panel_schema
+from ._animate import CameraConfig, camera_panel_initial, camera_panel_schema
 from ecoscope.platform.tasks.results._pydeck import (
     PydeckAnnotation,
     PydeckString,
@@ -57,11 +57,22 @@ SURFACE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/Ma
 MY_DECK_WIDGETS = {
     "libraryName": "myDeckWidgets",
     "resourceUri": os.environ.get(
-        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.17.0/dist/bundle.js"
+        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.19.0/dist/bundle.js"
     ),
 }
 
 TerrainStrategy = Annotated[Literal["best-available", "no-overlap", "never"], PydeckAnnotation]
+# Behind and under a 3D terrain map: a dark, earthy neutral close to savanna imagery, so tiles still loading
+# and the sky above a tilted horizon read as shadow rather than as white gaps.
+TERRAIN_LOADING_COLOR = (58, 56, 48)
+TERRAIN_BACKGROUND = "#262622"
+# Basemap tiles draped over the terrain (DrapedTileLayer, my-deck-widgets). Esri World Imagery reaches
+# zoom 18 (~0.6 m a pixel) across East African rangelands; zoom 19 there is mostly "not yet available".
+DRAPED_IMAGERY_MAX_ZOOM = 18
+LABELS_URL = (
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/"
+    "{z}/{y}/{x}"
+)
 
 
 class _BasemapFields(BaseModel):
@@ -424,6 +435,20 @@ class PlaybackControls(BaseModel):
         description="Camera button: opens a panel to design and preview the video camera (including keyframes) "
         "and copy its settings into render_animation.",
     )
+    preview_camera: bool = Field(
+        default=True,
+        description="Open with the Camera panel's preview on, so playing shows the video's camera. Moving the "
+        "map turns it off. Needs the camera button.",
+    )
+    show_hint: bool = Field(
+        default=True,
+        description="Show how to pan, rotate, tilt and zoom the map, until the viewer dismisses it.",
+    )
+    show_map_controls: bool = Field(
+        default=True,
+        description="deck.gl's map buttons: zoom in and out, tilt and rotation (click to reset), back to the "
+        "opening view, fullscreen, and a spinner while the map loads.",
+    )
 
 
 class TimelineAnimation(BaseModel):
@@ -619,9 +644,20 @@ class TerrainLayerDefinition(BaseModel):
     wireframe: Annotated[bool, AdvancedField(default=False)] = False
     min_zoom: Annotated[int, AdvancedField(default=0)] = 0
     max_zoom: Annotated[int, AdvancedField(default=15)] = 15
-    strategy: Annotated[TerrainStrategy, AdvancedField(default="no-overlap")] = "no-overlap"
+    # deck.gl's TileLayer prop is refinementStrategy; `strategy` was silently ignored. best-available keeps
+    # coarser tiles on screen while finer ones load, so zooming and panning don't open holes in the ground.
+    refinement_strategy: Annotated[TerrainStrategy, AdvancedField(default="best-available")] = "best-available"
+    # Ground colour where a tile's imagery hasn't arrived yet (deck.gl's default is white).
+    color: Annotated[
+        tuple[int, int, int],
+        AdvancedField(default=TERRAIN_LOADING_COLOR, json_schema_extra={"items": {"type": "integer"}}),
+    ] = TERRAIN_LOADING_COLOR
     mesh_max_error: Annotated[float, AdvancedField(default=4)] = 4
     material: Annotated[bool, AdvancedField(default=True)] = True
+    # Not TerrainLayer props (exclude=True keeps them out of the pydeck dump): _build_map_deck turns them
+    # into DrapedTileLayers (my-deck-widgets) fitted onto this terrain.
+    imagery_max_zoom: Annotated[int | SkipJsonSchema[None], Field(default=None, exclude=True)] = None
+    labels: Annotated[bool, Field(default=False, exclude=True)] = False
 
 
 class TripsLayerStyle(LayerStyleBase):
@@ -737,9 +773,32 @@ def create_terrain_layer(
         dict | SkipJsonSchema[None],
         AdvancedField(default=None, description="RGB->elevation decoder. Defaults to Terrarium."),
     ] = None,
+    labels: Annotated[
+        bool,
+        Field(
+            default=False,
+            title="Place names",
+            description="Show place names and boundaries over the basemap, draped on the terrain "
+            "(Esri World Boundaries and Places).",
+        ),
+    ] = False,
+    imagery_max_zoom: Annotated[
+        int | SkipJsonSchema[None],
+        AdvancedField(
+            default=DRAPED_IMAGERY_MAX_ZOOM,
+            ge=1,
+            le=22,
+            title="Basemap detail (max zoom)",
+            description="Deepest zoom level of basemap tiles fetched when zooming in: 18 is about 0.6 m a pixel. "
+            "Draped over the terrain, so it can be sharper than the elevation data (zoom 15). Where the basemap "
+            "has nothing that deep, the terrain's own imagery shows. Blank: the terrain's zoom only.",
+        ),
+    ] = DRAPED_IMAGERY_MAX_ZOOM,
 ) -> Annotated[TerrainLayerDefinition, Field()]:
-    """Creates a terrain layer definition from elevation tiles (+ optional texture)."""
+    """Creates a terrain layer definition from elevation tiles (+ optional texture, draped place names)."""
     return TerrainLayerDefinition(
+        labels=labels,
+        imagery_max_zoom=imagery_max_zoom,
         elevation_data=elevation_data,
         texture=texture,
         min_zoom=min_zoom,
@@ -919,7 +978,13 @@ def _build_map_deck(
 
     for tile_layer in tile_layers:
         if hasattr(tile_layer, "elevation_data"):  # TerrainLayerDefinition
-            map_layers.append(pdk.Layer("TerrainLayer", **_model_dump_for_pydeck(tile_layer)))
+            draped = _draped_layers(pdk, tile_layer)
+            props = _model_dump_for_pydeck(tile_layer)
+            if draped:  # the terrain is also the surface the draped tiles are fitted onto
+                # a literal: pydeck would otherwise read the "+" as an @@= accessor expression
+                props["operation"] = pdk.types.String("terrain+draw")
+            map_layers.append(pdk.Layer("TerrainLayer", **props))
+            map_layers.extend(draped)
             if tile_layer.max_zoom < max_zoom:
                 max_zoom = tile_layer.max_zoom
         elif isinstance(tile_layer, BitmapLayerDefinition):
@@ -1003,9 +1068,77 @@ def _build_map_deck(
         widgets=map_widgets,
         initial_view_state=view_state or view_state_from_layers(layers=geo_layers, max_zoom=max_zoom),
         views=pdk.View("MapView", controller=not static, repeat=True),
-        parameters={"depthTest": any(getattr(layer, "extruded", False) for layer in map_layers)},
-        map_style=pdk.map_styles.LIGHT_NO_LABELS,
+        # A 3D terrain needs the depth test: without it its tiles are painted in draw order, so each tile's
+        # edge skirt draws over its neighbour and the cracks between tiles show (the "white gaps" between tiles).
+        parameters={
+            "depthTest": _has_terrain(tile_layers) or any(getattr(layer, "extruded", False) for layer in map_layers)
+        },
+        # A 3D terrain covers the whole map itself; a light base style underneath would only show through
+        # (as white) while tiles load or above a tilted horizon. draw_animated_map darkens the page instead.
+        map_style=None if _has_terrain(tile_layers) else pdk.map_styles.LIGHT_NO_LABELS,
     )
+
+
+def _draped_layers(pdk, terrain: TerrainLayerDefinition) -> list:
+    """Basemap tiles fitted onto the terrain at their own zoom (DrapedTileLayer, my-deck-widgets): the
+    texture again, deeper than the elevation tiles go, and the place-names overlay. The TerrainLayer's own
+    texture stays underneath, so the map shows imagery while these load and wherever they have none."""
+    layers = []
+    texture = terrain.texture if isinstance(terrain.texture, str) else None
+    if texture and terrain.imagery_max_zoom and terrain.imagery_max_zoom > terrain.max_zoom:
+        layers.append(
+            pdk.Layer("DrapedTileLayer", id="draped-imagery", data=texture, max_zoom=terrain.imagery_max_zoom)
+        )
+    if terrain.labels:
+        layers.append(
+            pdk.Layer(
+                "DrapedTileLayer",
+                id="draped-labels",
+                data=LABELS_URL,
+                max_zoom=terrain.imagery_max_zoom or DRAPED_IMAGERY_MAX_ZOOM,
+            )
+        )
+    return layers
+
+
+def _map_control_widgets(pdk) -> list:
+    """deck.gl's own map controls (@deck.gl/widgets): zoom; a compass whose needle follows the map's
+    heading (click: north up, click again: flat); back to the opening view (TimelineAnimationWidget hands
+    it the view it frames on load); fullscreen; and a spinner while tiles load. Interactive map only; the
+    video hides them (render_animation's _overlay_css). GimbalWidget is not used: it drives OrbitView's
+    rotationOrbit/rotationX, which a map view doesn't have, so it neither moves nor resets anything."""
+    return [
+        pdk.Widget("ZoomWidget", id="ZoomWidget", placement="top-left"),
+        pdk.Widget("CompassWidget", id="CompassWidget", placement="top-left"),
+        pdk.Widget("ResetViewWidget", id="ResetViewWidget", placement="top-left"),
+        pdk.Widget("FullscreenWidget", id="FullscreenWidget", placement="top-right"),
+        pdk.Widget("LoadingWidget", id="LoadingWidget", placement="top-right"),
+    ]
+
+
+# deck.gl's widget theme (the CSS variables @deck.gl/widgets reads), dark and translucent to sit over
+# satellite imagery. my-deck-widgets' playback bar, Camera panel and hint read the same variables.
+WIDGET_THEME_CSS = (
+    ":root {"
+    " --button-background: rgba(20, 20, 20, 0.72);"
+    " --button-stroke: rgba(20, 20, 20, 0.3);"
+    " --button-inner-stroke: 1px solid rgba(255, 255, 255, 0.12);"
+    " --button-shadow: 0px 0px 8px 0px rgba(0, 0, 0, 0.35);"
+    " --button-backdrop-filter: blur(4px);"
+    " --button-icon-idle: rgba(255, 255, 255, 0.85);"
+    " --button-icon-hover: #ffffff;"
+    " --button-text: #ffffff;"
+    " --menu-background: rgba(20, 20, 20, 0.85);"
+    " --menu-backdrop-filter: blur(4px);"
+    " --menu-border: 1px solid rgba(255, 255, 255, 0.15);"
+    " --menu-text: #ffffff;"
+    " --menu-item-hover: rgba(255, 255, 255, 0.12);"
+    " color-scheme: dark; }"
+)
+
+
+def _has_terrain(tile_layers) -> bool:
+    return any(hasattr(t, "elevation_data") for t in (tile_layers or []))
 
 
 def _make_session(pool=16):
@@ -1374,6 +1507,15 @@ def draw_animated_map(
         ),
     ] = True,
     widget_id: Annotated[str | SkipJsonSchema[None], Field(default=None, exclude=True)] = None,
+    camera: Annotated[
+        CameraConfig | SkipJsonSchema[None],
+        Field(
+            default=None,
+            exclude=True,
+            description="The video camera (set_video_camera). The Camera panel opens on it and previews it. "
+            "None -> the panel's first camera.",
+        ),
+    ] = None,
 ) -> Annotated[str, Field()]:
     """Like draw_map, but animates layers over time from one shared clock.
 
@@ -1483,12 +1625,20 @@ def draw_animated_map(
         controls=timeline.controls.model_dump(mode="json"),
     )
     extra_widgets = [timeline_widget]
+    # deck.gl's buttons go before the Camera panel, so an open panel doesn't push them down its corner.
+    if timeline.controls.show_map_controls and not static:
+        extra_widgets += _map_control_widgets(pdk)
     camera_on = timeline.controls.visible and timeline.controls.show_camera
     if camera_on:
         # The Camera panel (CameraPanelWidget, my-deck-widgets), built from render_animation's camera models.
         extra_widgets.append(
             pdk.Widget(
-                "CameraPanelWidget", id="CameraPanelWidget", placement="top-right", cameras=camera_panel_schema()
+                "CameraPanelWidget",
+                id="CameraPanelWidget",
+                placement="top-right",
+                cameras=camera_panel_schema(),
+                initial=camera_panel_initial(camera),
+                preview=timeline.controls.preview_camera,
             )
         )
     deck = _build_map_deck(
@@ -1503,7 +1653,15 @@ def draw_animated_map(
         extra_widgets=extra_widgets,
     )
 
-    html_str = deck.to_html(as_string=True)
+    html_str = deck.to_html(
+        as_string=True, css_background_color=TERRAIN_BACKGROUND if _has_terrain(tile_layers) else None
+    )
+    page_css = WIDGET_THEME_CSS
+    if timeline.controls.show_map_controls and not static:
+        # deck.gl's compass shows north (and turns); ecoscope's static north arrow would only repeat it.
+        # The video hides the compass and brings the north arrow back (render_animation's _overlay_css).
+        page_css += "\n.ecoscope-north-arrow-widget { display: none; }"
+    html_str = html_str.replace("</head>", f"<style>{page_css}</style>\n</head>", 1)
     # The video camera (window.__cam, in the widget bundle) reads the pydeck spec from window.jsonInput.
     html_str = html_str.replace("const jsonInput =", "window.jsonInput =")
     return html_str
@@ -1567,6 +1725,30 @@ def create_playback_controls(
             "render_animation.",
         ),
     ] = True,
+    preview_camera: Annotated[
+        bool,
+        AdvancedField(
+            default=True,
+            title="Preview camera while playing",
+            description=PlaybackControls.model_fields["preview_camera"].description,
+        ),
+    ] = True,
+    show_hint: Annotated[
+        bool,
+        AdvancedField(
+            default=True,
+            title="Show map controls hint",
+            description=PlaybackControls.model_fields["show_hint"].description,
+        ),
+    ] = True,
+    show_map_controls: Annotated[
+        bool,
+        AdvancedField(
+            default=True,
+            title="Show map buttons",
+            description=PlaybackControls.model_fields["show_map_controls"].description,
+        ),
+    ] = True,
 ) -> Annotated[PlaybackControls, Field()]:
     """Construct the playback bar config for create_timeline_animation."""
     return PlaybackControls(
@@ -1581,6 +1763,9 @@ def create_playback_controls(
         speeds=speeds,
         position=position,
         show_camera=show_camera,
+        preview_camera=preview_camera,
+        show_hint=show_hint,
+        show_map_controls=show_map_controls,
     )
 
 
