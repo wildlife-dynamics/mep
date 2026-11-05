@@ -286,7 +286,9 @@ class TestTerrainHasNoWhiteGaps:
     def _layer_json(self, html: str) -> dict:
         start = html.index("window.jsonInput = ") + len("window.jsonInput = ")
         spec, _ = json.JSONDecoder().raw_decode(html, start)
-        return spec, next(layer for layer in spec["layers"] if layer["@@type"] == "TerrainLayer")
+        return spec, next(
+            layer for layer in spec["layers"] if layer["@@type"] in ("TerrainLayer", "GradedTerrainLayer")
+        )
 
     def test_terrain_page_is_dark_with_no_base_style(self, trips_layer):
         from ecoscope_workflows_ext_mep.tasks.animate._draw_map import TERRAIN_BACKGROUND, create_terrain_layer
@@ -349,7 +351,7 @@ class TestDrapedBasemap:
         )
         start = html.index("window.jsonInput = ") + len("window.jsonInput = ")
         spec, _ = json.JSONDecoder().raw_decode(html, start)
-        terrain = next(layer for layer in spec["layers"] if layer["@@type"] == "TerrainLayer")
+        terrain = next(layer for layer in spec["layers"] if layer["@@type"] in ("TerrainLayer", "GradedTerrainLayer"))
         draped = {layer["id"]: layer for layer in spec["layers"] if layer["@@type"] == "DrapedTileLayer"}
         return spec, terrain, draped
 
@@ -392,3 +394,75 @@ class TestCompassReplacesNorthArrow:
         assert ".ecoscope-north-arrow-widget { display: block !important; }" in _overlay_css(VideoOverlays(), 720)
         off = _overlay_css(VideoOverlays(north_arrow=False), 720)
         assert "display: block" not in off and ".ecoscope-north-arrow-widget" in off
+
+
+class TestMarkerIconChoices:
+    """The marker icon is a dot or a preset 3D animal; no custom model, no 'none'."""
+
+    def test_only_dot_and_3d_animal(self):
+        import inspect
+
+        from pydantic import TypeAdapter
+
+        from ecoscope_workflows_ext_mep.tasks.animate._draw_map import create_trips_animation
+
+        param = inspect.signature(create_trips_animation).parameters["head"]
+        mapping = TypeAdapter(param.annotation).json_schema()["discriminator"]["mapping"]
+        assert set(mapping) == {"dot", "animal"}
+
+    @pytest.mark.parametrize("marker", ["none", "model"])
+    def test_other_markers_are_rejected(self, marker):
+        from pydantic import ValidationError
+
+        from ecoscope_workflows_ext_mep.tasks.animate._draw_map import TripsAnimation
+
+        with pytest.raises(ValidationError):
+            TripsAnimation.model_validate({"head": {"marker": marker}})
+
+
+class TestImageryLookAndTerrainDetail:
+    """Colour grading of the ground only, a vignette, and a finer terrain mesh."""
+
+    def _spec(self, trips_layer, **terrain_kw):
+        from ecoscope_workflows_ext_mep.tasks.animate._draw_map import create_terrain_layer
+
+        html = draw_animated_map(
+            geo_layers=animate_layer(layer=trips_layer, animation=TripsAnimation()),
+            tile_layers=[create_terrain_layer(**terrain_kw)],
+        )
+        start = html.index("window.jsonInput = ") + len("window.jsonInput = ")
+        spec, _ = json.JSONDecoder().raw_decode(html, start)
+        layers = {layer.get("id") or layer["@@type"]: layer for layer in spec["layers"]}
+        terrain = next(v for v in spec["layers"] if v["@@type"] in ("TerrainLayer", "GradedTerrainLayer"))
+        return html, terrain, layers
+
+    def test_natural_look_by_default_on_the_terrain_and_its_draped_imagery(self, trips_layer):
+        from ecoscope_workflows_ext_mep.tasks.animate._draw_map import IMAGERY_LOOKS
+
+        _, terrain, layers = self._spec(trips_layer)
+        assert terrain["@@type"] == "GradedTerrainLayer" and terrain["grade"] == IMAGERY_LOOKS["natural"]
+        assert layers["draped-imagery"]["grade"] == IMAGERY_LOOKS["natural"]
+
+    def test_place_names_are_not_graded(self, trips_layer):
+        _, _, layers = self._spec(trips_layer, labels=True)
+        assert "grade" not in layers["draped-labels"]
+
+    def test_original_leaves_the_imagery_as_served(self, trips_layer):
+        _, terrain, layers = self._spec(trips_layer, imagery_look="original")
+        assert terrain["@@type"] == "TerrainLayer" and "grade" not in layers["draped-imagery"]
+
+    @pytest.mark.parametrize("look", ["vivid", "warm"])
+    def test_other_looks(self, trips_layer, look):
+        from ecoscope_workflows_ext_mep.tasks.animate._draw_map import IMAGERY_LOOKS
+
+        assert self._spec(trips_layer, imagery_look=look)[1]["grade"] == IMAGERY_LOOKS[look]
+
+    def test_vignette_on_by_default_and_off_at_zero(self, trips_layer):
+        html, _, _ = self._spec(trips_layer)
+        assert "#deck-container::after" in html and "radial-gradient" in html
+        html, _, _ = self._spec(trips_layer, vignette=0)
+        assert "#deck-container::after" not in html
+
+    def test_finer_terrain_mesh_by_default(self, trips_layer):
+        assert self._spec(trips_layer)[1]["meshMaxError"] == 2
+        assert self._spec(trips_layer, mesh_max_error=4)[1]["meshMaxError"] == 4

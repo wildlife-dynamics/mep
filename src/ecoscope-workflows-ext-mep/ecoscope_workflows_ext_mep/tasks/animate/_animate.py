@@ -167,6 +167,35 @@ CenterLat = Annotated[
 ]
 
 
+LeadRoom = Annotated[
+    float,
+    Field(
+        ge=0,
+        le=0.5,
+        title="Lead room",
+        description="Space left ahead of moving subjects, as a share of the view: the camera looks a little "
+        "ahead, so they sit behind the centre with room to move into. 0 = centred.",
+    ),
+]
+SpeedZoom = Annotated[
+    float,
+    Field(
+        ge=0,
+        le=1,
+        title="Zoom with the action",
+        description="Zoom in (up to a level) while subjects rest or move slowly, and pull back while they travel "
+        "fast. 0 = off, 1 = strongest.",
+    ),
+]
+KeepInView = Annotated[
+    bool,
+    Field(
+        title="Keep in view over hills",
+        description="Raise the camera when a ridge would hide what it follows, easing back down after it.",
+    ),
+]
+
+
 class FixedCamera(BaseModel):
     """One view for the whole clip: by default the whole scene, at the map's tilt and heading."""
 
@@ -240,6 +269,74 @@ class FollowSubjectCamera(BaseModel):
         ),
     ] = None
     fov: Fov = None
+    lead_room: LeadRoom = 0.15
+    speed_zoom: SpeedZoom = 0.5
+    keep_in_view: KeepInView = True
+    follow_smoothing: Annotated[
+        float,
+        AdvancedField(
+            default=0.3,
+            ge=0,
+            le=1,
+            description="Share of the gap to the subject closed every 1/30 s: low = drifts behind, 1 = locked on.",
+        ),
+    ] = 0.3
+    turn_smoothing: Annotated[
+        float,
+        AdvancedField(
+            default=0.15,
+            ge=0,
+            le=1,
+            description="Share of the turn towards the direction of travel made every 1/30 s: low = slow, "
+            "sweeping turns, 1 = snaps.",
+        ),
+    ] = 0.15
+
+
+class SubjectTourCamera(BaseModel):
+    """Follows each subject in turn for an equal share of the clip, flying from one to the next, with a
+    name card as each one comes in."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Subject tour"})
+    type_: Annotated[Literal["tour"], Field(default="tour", title="Camera")] = "tour"
+    subjects: Annotated[
+        list[str] | SkipJsonSchema[None],
+        Field(
+            default=None,
+            description="Subjects to visit, in this order (their value in any column, e.g. names). Leave blank "
+            "for every subject, in name order.",
+        ),
+    ] = None
+    range_m: Annotated[
+        float, Field(default=800.0, gt=0, title="Range (m)", description="Camera distance from the subject in metres.")
+    ] = 800.0
+    tilt: Annotated[float, Field(default=60.0, ge=0, le=80, description="Tilt in degrees (0 = straight down).")] = 60.0
+    heading: Annotated[
+        float | SkipJsonSchema[None],
+        Field(
+            default=None,
+            ge=-360,
+            le=360,
+            description="Compass heading in degrees. Leave blank to face each subject's direction of travel.",
+        ),
+    ] = None
+    fov: Fov = None
+    name_cards: Annotated[
+        bool, Field(default=True, description="Show each subject's name for a few seconds as the camera reaches it.")
+    ] = True
+    transition_frac: Annotated[
+        float,
+        Field(
+            default=0.2,
+            ge=0,
+            le=0.9,
+            title="Fly between",
+            description="Share of each subject's turn spent flying over from the previous one.",
+        ),
+    ] = 0.2
+    lead_room: LeadRoom = 0.15
+    speed_zoom: SpeedZoom = 0.5
+    keep_in_view: KeepInView = True
     follow_smoothing: Annotated[
         float,
         AdvancedField(
@@ -281,6 +378,77 @@ class FollowActionCamera(BaseModel):
         bool, AdvancedField(default=False, description="Turn the camera to face the direction of travel.")
     ] = False
     fov: Fov = None
+    lead_room: LeadRoom = 0.1
+    speed_zoom: SpeedZoom = 0.3
+    keep_in_view: KeepInView = True
+    follow_window: Annotated[
+        float,
+        AdvancedField(default=0.1, gt=0, le=1, description="Share of the timeline treated as 'recent' when framing."),
+    ] = 0.1
+    follow_smoothing: Annotated[
+        float,
+        AdvancedField(
+            default=0.25,
+            ge=0,
+            le=1,
+            description="Share of the gap to the action closed every 1/30 s: low = smooth but laggy, 1 = snaps to "
+            "it. Independent of fps.",
+        ),
+    ] = 0.25
+    fit_padding: Annotated[int, AdvancedField(default=80, ge=0, description="Padding in pixels around the action.")] = (
+        80
+    )
+
+
+class CinematicCamera(BaseModel):
+    """Opens on the whole scene, flies in to the action, then follows it with a tilted camera that turns
+    slowly."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Cinematic fly-through"})
+    type_: Annotated[Literal["cinematic"], Field(default="cinematic", title="Camera")] = "cinematic"
+    subjects: Annotated[
+        list[str] | SkipJsonSchema[None],
+        AdvancedField(
+            default=None,
+            description="Only frame these subjects (their value in any column, e.g. names). Leave blank for "
+            "everything that animates.",
+        ),
+    ] = None
+    tilt: Annotated[float, Field(default=55.0, ge=0, le=80, description="Tilt in degrees (0 = straight down).")] = 55.0
+    heading: CameraHeading = None
+    bearing_mode: Annotated[
+        Literal["rotate", "heading", "fixed"],
+        Field(
+            default="rotate",
+            title="Turning",
+            description="'rotate' turns steadily by `rotate_deg` over the clip, 'heading' faces the direction of "
+            "travel, 'fixed' keeps the heading.",
+        ),
+    ] = "rotate"
+    rotate_deg: Annotated[
+        float,
+        Field(default=45.0, ge=-720, le=720, title="Turn (°)", description="Total turn over the clip for 'rotate'."),
+    ] = 45.0
+    intro_frac: Annotated[
+        float,
+        Field(
+            default=0.12,
+            ge=0,
+            le=0.5,
+            title="Fly-in",
+            description="Share of the clip spent flying in from the whole-scene view. 0 = start on the action.",
+        ),
+    ] = 0.12
+    fov: Fov = None
+    lead_room: LeadRoom = 0.1
+    speed_zoom: SpeedZoom = 0.3
+    keep_in_view: KeepInView = True
+    lead_frac: Annotated[
+        float,
+        AdvancedField(
+            default=0.0, ge=0, le=0.5, description="Look ahead by this share of the timeline, so the camera leads."
+        ),
+    ] = 0.0
     follow_window: Annotated[
         float,
         AdvancedField(default=0.1, gt=0, le=1, description="Share of the timeline treated as 'recent' when framing."),
@@ -532,7 +700,15 @@ def _raw_keyframes(camera: "CameraOptions") -> list[dict]:
     return raw
 
 
-CameraOptions = FixedCamera | FlyAroundCamera | FollowSubjectCamera | FollowActionCamera | KeyframesCamera
+CameraOptions = (
+    FixedCamera
+    | FlyAroundCamera
+    | FollowSubjectCamera
+    | SubjectTourCamera
+    | FollowActionCamera
+    | CinematicCamera
+    | KeyframesCamera
+)
 CameraConfig = Annotated[CameraOptions, Field(discriminator="type_")]
 _CAMERA_ADAPTER: TypeAdapter = TypeAdapter(CameraConfig)
 
@@ -774,8 +950,9 @@ async def _render_frames(page, pending, frames, clip, quality, capture, frame_di
     for idx, t, vs in frames:
         await page.evaluate(
             """([t, vs]) => {
-                const d = window.deckInstance, a = window.__tripsAnim;
-                if (vs && d) d.setProps({ viewState: vs });
+                const d = window.deckInstance, a = window.__tripsAnim, cam = window.__cam;
+                if (vs && d) d.setProps({ viewState: cam.deckView ? cam.deckView(vs) : vs });
+                if (cam.caption) cam.caption(vs && vs.caption, vs && vs.captionOpacity);
                 a.renderAt(t);
                 const clock = document.getElementById('video-clock');
                 if (clock) clock.textContent = a.formatTime(t);
@@ -1231,7 +1408,8 @@ def set_video_camera(
             discriminator="type_",
             title="Camera",
             description="Camera for the video and the map's camera preview: Fixed view, Fly to & around, Follow a "
-            "subject, Follow the action or Keyframes, or the settings of a camera designed in the map's Camera panel.",
+            "subject, Subject tour, Follow the action, Cinematic fly-through or Keyframes, or the settings of a "
+            "camera designed in the map's Camera panel.",
         ),
     ] = FixedCamera(),
 ) -> Annotated[CameraConfig, Field()]:
@@ -1254,8 +1432,9 @@ def render_video_from_settings(
             default=FixedCamera(),
             discriminator="type_",
             title="Camera",
-            description="Camera for the clip: Fixed view, Fly to & around, Follow a subject, Follow the action or "
-            "Keyframes, or the settings of a camera designed in the map's Camera panel.",
+            description="Camera for the clip: Fixed view, Fly to & around, Follow a subject, Subject tour, Follow the "
+            "action, Cinematic fly-through or Keyframes, or the settings of a camera designed in the map's Camera "
+            "panel.",
         ),
     ] = FixedCamera(),
     fps: Annotated[int, AdvancedField(default=30, gt=0, description="Output video frame rate.")] = 30,

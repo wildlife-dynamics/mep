@@ -92,7 +92,7 @@ class TestTrackAltitudeModes:
     @pytest.fixture
     def trips(self):
         return gpd.GeoDataFrame(
-            {"timestamps": [[0, 1, 2]]},
+            {"timestamps": [[0, 1, 2]], "breaks": [[]]},
             geometry=[LineString([(37.0, -2.6, 1500), (37.01, -2.6, float("nan")), (37.02, -2.6, 1520)])],
             crs="EPSG:4326",
         )
@@ -104,17 +104,107 @@ class TestTrackAltitudeModes:
     def _z(self, gdf):
         return [round(c[2], 1) for c in gdf.geometry.iloc[0].coords]
 
+    def _drape(self, trips, altitude, densify_m=0.0):
+        return dm.drape_trips_on_terrain(trips, dm.TerrainSampling(altitude=altitude, densify_m=densify_m))
+
     def test_relative_to_ground_is_the_default(self, trips):
-        out = dm.drape_trips_on_terrain(trips, dm.TerrainSampling(offset=30))
-        assert self._z(out) == [1230.0] * 3
+        assert isinstance(dm.TerrainSampling().altitude, dm.RelativeToGround)
+        assert self._z(self._drape(trips, dm.RelativeToGround(height_m=30))) == [1230.0] * 3
 
-    def test_clamp_to_ground_ignores_the_offset(self, trips):
-        out = dm.drape_trips_on_terrain(trips, dm.TerrainSampling(altitude_mode="clamp_to_ground", offset=30))
-        assert self._z(out) == [1200.0] * 3
+    def test_clamp_to_ground_ignores_recorded_altitude(self, trips):
+        assert self._z(self._drape(trips, dm.ClampToGround())) == [1200.0] * 3
 
-    def test_absolute_uses_recorded_altitude_else_the_offset(self, trips):
-        out = dm.drape_trips_on_terrain(trips, dm.TerrainSampling(altitude_mode="absolute", offset=1000))
-        assert self._z(out) == [1500.0, 1000.0, 1520.0]
+    def test_absolute_uses_recorded_altitude_else_a_height_above_the_ground(self, trips):
+        out = self._drape(trips, dm.AbsoluteAltitude(fallback_height_m=40))
+        assert self._z(out) == [1500.0, 1240.0, 1520.0]  # not 40 m above sea level
+
+    def test_absolute_without_any_altitude_stays_above_the_ground(self, trips):
+        trips = trips.set_geometry([LineString([(37.0, -2.6), (37.01, -2.6)])])
+        trips["timestamps"] = [[0, 1]]
+        assert self._z(self._drape(trips, dm.AbsoluteAltitude())) == [1230.0, 1230.0]
+
+    def test_relative_to_mesh_tags_the_rows_and_keeps_true_heights(self, trips):
+        out = self._drape(trips, dm.RelativeToMesh(height_m=15))
+        assert self._z(out) == [1215.0] * 3  # what the camera frames
+        assert out[dm.MESH_HEIGHT_COL].tolist() == [15.0]
+
+    def test_other_modes_drop_a_stale_mesh_tag(self, trips):
+        trips[dm.MESH_HEIGHT_COL] = 15.0
+        assert dm.MESH_HEIGHT_COL not in self._drape(trips, dm.ClampToGround()).columns
+
+    def test_densify_follows_the_terrain_between_fixes(self, trips):
+        out = self._drape(trips, dm.ClampToGround(), densify_m=100)
+        coords = list(out.geometry.iloc[0].coords)
+        ts = out["timestamps"].iloc[0]
+        assert len(coords) == len(ts) > 20  # ~1.1 km steps -> 12 points each
+        assert ts[0] == 0 and ts[-1] == 2 and ts == sorted(ts)
+        assert coords[0][:2] == (37.0, -2.6) and coords[-1][:2] == (37.02, -2.6)
+
+    def test_densify_keeps_the_fixes_and_their_times(self, trips):
+        out = self._drape(trips, dm.ClampToGround(), densify_m=500)
+        coords, ts = list(out.geometry.iloc[0].coords), out["timestamps"].iloc[0]
+        fixes = [round(x, 6) for (x, _, _), t in zip(coords, ts) if t in (0, 1, 2)]
+        assert fixes == [37.0, 37.01, 37.02]
+
+    def test_densify_leaves_data_gaps_alone_and_renumbers_them(self, trips):
+        trips["breaks"] = [[1]]  # no line from fix 1 to fix 2
+        out = self._drape(trips, dm.ClampToGround(), densify_m=100)
+        coords, ts, (brk,) = list(out.geometry.iloc[0].coords), out["timestamps"].iloc[0], out["breaks"].iloc[0]
+        assert (ts[brk], ts[brk + 1]) == (1, 2)  # still one step across the gap
+        assert coords[brk + 1][0] == 37.02 and len(coords) == brk + 2
+
+    def test_rows_without_one_timestamp_per_vertex_are_not_densified(self, trips):
+        trips["timestamps"] = [[0, 2]]
+        out = self._drape(trips, dm.ClampToGround(), densify_m=100)
+        assert len(out.geometry.iloc[0].coords) == 3 and out["timestamps"].iloc[0] == [0, 2]
+
+    def test_densify_widens_its_spacing_on_huge_data(self, trips, monkeypatch):
+        monkeypatch.setattr(dm, "MAX_DENSIFIED_VERTICES", 10)
+        out = self._drape(trips, dm.ClampToGround(), densify_m=1)
+        assert len(out.geometry.iloc[0].coords) <= 10
+
+    @pytest.mark.parametrize(
+        "legacy, expected",
+        [
+            ({"altitude_mode": "clamp_to_ground", "offset": 30}, dm.ClampToGround()),
+            ({"altitude_mode": "relative_to_ground", "offset": 12}, dm.RelativeToGround(height_m=12)),
+            ({"altitude_mode": "absolute", "offset": 50}, dm.AbsoluteAltitude(fallback_height_m=50)),
+        ],
+    )
+    def test_settings_from_before_the_modes_had_their_own_fields(self, legacy, expected):
+        assert dm.TerrainSampling(**legacy).altitude == expected
+
+    def test_form_shows_only_each_modes_own_fields(self):
+        import inspect
+
+        from pydantic import TypeAdapter
+
+        param = inspect.signature(dm.create_terrain_sampling).parameters
+        assert "offset" not in param and "ground_elevation" not in param
+        defs = TypeAdapter(param["altitude"].annotation).json_schema()["$defs"]
+        fields = {d["title"]: set(d["properties"]) - {"mode"} for d in defs.values()}
+        assert fields == {
+            "On the ground": set(),
+            "Above the ground": {"height_m"},
+            "Recorded altitude (where available)": {"fallback_height_m"},
+            "Above the 3D terrain": {"height_m"},
+        }
+
+    def test_mesh_height_reaches_the_animation_spec(self, trips, monkeypatch):
+        out = self._drape(trips, dm.RelativeToMesh(height_m=15))
+        out["rgba_color"] = [[255, 0, 0, 255]]
+        layer = dm.PydeckLayerDefinition(
+            layer_type="TripsLayer",
+            layer_style=dm.TripsLayerStyle(get_color="rgba_color"),
+            legend=None,
+            geodataframe=out,
+        )
+        html = dm.draw_animated_map(
+            geo_layers=dm.animate_layer(layer=layer, animation=dm.TripsAnimation()),
+            view_state=dm.ViewState(longitude=37.01, latitude=-2.6, zoom=12),
+            timeline=dm.TimelineAnimation(),
+        )
+        assert '"meshHeight": 15.0' in html
 
     def test_stitching_keeps_a_recorded_altitude(self):
         rows = [
@@ -135,3 +225,54 @@ class TestTrackAltitudeModes:
         ]
         trip = _trips(rows, min_piece_fixes=1).loc["A"]
         assert [c[2] for c in trip.geometry.coords] == [1500, 1510, 1520]
+
+
+class TestTerrainGridForTheCamera:
+    """draw_animated_map's elevation grid for the video camera's line-of-sight check."""
+
+    @pytest.fixture
+    def layers(self):
+        gdf = gpd.GeoDataFrame(
+            {"timestamps": [[0, 1]]}, geometry=[LineString([(35.0, -1.5), (35.2, -1.3)])], crs="EPSG:4326"
+        )
+        return [
+            dm.PydeckLayerDefinition(
+                layer_type="TripsLayer", layer_style=dm.TripsLayerStyle(), legend=None, geodataframe=gdf
+            )
+        ]
+
+    def test_covers_the_tracks_with_a_margin(self, layers, monkeypatch, real_terrain_grid):
+        seen = {}
+
+        def fake(lonlats, **kw):
+            seen.update(kw, n=len(lonlats))
+            return [1600.0] * len(lonlats)
+
+        monkeypatch.setattr(dm, "sample_elevations", fake)
+        g = real_terrain_grid([dm.create_terrain_layer()], layers)
+        assert (g["nx"], g["ny"], len(g["z"]), seen["n"]) == (96, 96, 96 * 96, 96 * 96)
+        assert g["w"] < 35.0 and g["e"] > 35.2 and g["s"] < -1.5 and g["n"] > -1.3  # ~4 km margin
+        assert set(g["z"]) == {1600} and 5 <= seen["zoom"] <= 13
+        assert seen["decoder"] == dm.create_terrain_layer().elevation_decoder  # same heights as drawn
+
+    def test_none_without_terrain_or_when_sampling_fails(self, layers, monkeypatch, real_terrain_grid):
+        assert real_terrain_grid([], layers) is None
+
+        def offline(*a, **k):
+            raise OSError("offline")
+
+        monkeypatch.setattr(dm, "sample_elevations", offline)
+        assert real_terrain_grid([dm.create_terrain_layer()], layers) is None
+
+    def test_page_carries_it(self, layers, monkeypatch):
+        monkeypatch.setattr(
+            dm, "_terrain_grid", lambda *a: {"w": 0, "s": 0, "e": 1, "n": 1, "nx": 2, "ny": 2, "z": [1, 2, 3, 4]}
+        )
+        layers[0].geodataframe["rgba_color"] = [[255, 0, 0, 255]]
+        html = dm.draw_animated_map(
+            geo_layers=dm.animate_layer(layer=layers[0], animation=dm.TripsAnimation()),
+            tile_layers=[dm.create_terrain_layer()],
+            view_state=dm.ViewState(longitude=35.1, latitude=-1.4, zoom=10),
+            timeline=dm.TimelineAnimation(),
+        )
+        assert 'window.__terrainGrid = {"w":0,"s":0,"e":1,"n":1,"nx":2,"ny":2,"z":[1,2,3,4]};' in html

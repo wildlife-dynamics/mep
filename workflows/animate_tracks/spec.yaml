@@ -62,7 +62,8 @@ rjsf-overrides:
       - const: "https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"
         title: USGS Hillshade
     video_camera.description: >-
-      How the camera moves. The interactive map previews this camera while it plays, and the exported video uses it.
+      How the camera moves while the tracks play. The interactive map follows this camera, and so does the video
+      when Export video is on. Design one in the map's Camera panel, then paste its settings here and re-run.
     # The video camera comes only from the Camera panel's settings (pasted or the downloaded file) for now;
     # the default is a fixed view of the whole scene.
     video_camera.properties.camera_settings.anyOf:
@@ -73,7 +74,7 @@ rjsf-overrides:
     video_camera.properties.camera_settings.description: >-
       Camera designed in the interactive map's Camera panel: paste the copied settings, or give the path of the
       downloaded settings file, then re-run. The default is a fixed view of the whole scene.
-    Video Export.properties.create_animation.description: Choose how long the video runs and its resolution. The camera is set in Video Camera.
+    Video Export.properties.create_animation.description: Choose how long the video runs and its resolution. The camera is set in Camera, which the interactive map follows too.
     Video Export.properties.export_video_toggle.properties.enabled.title: Export video
     Video Export.properties.export_video_toggle.properties.enabled.description: Off by default. Turn on to also render the animation as an MP4 video. Exporting a video makes the workflow take longer to run.
     Video Export.properties.export_video_toggle.properties.enabled.default: false
@@ -358,7 +359,7 @@ workflow:
       animation: ${{ workflow.trips_animation.return }}
 
   # One camera for both the map's Camera panel preview and the exported video.
-  - name: Video Camera
+  - name: Camera
     id: video_camera
     task: set_video_camera
 
