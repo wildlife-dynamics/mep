@@ -179,7 +179,7 @@ class TestRenderVideoFromSettings:
         assert adapter.validate_python({"type_": "keyframes"}) == anim.KeyframesCamera()
         assert adapter.validate_python({"type_": "settings", "settings": "{}"}).settings == "{}"
         mapping = adapter.json_schema()["discriminator"]["mapping"]
-        assert set(mapping) == {"fixed", "fly_around", "chase", "follow", "keyframes", "settings"}
+        assert set(mapping) == {"fixed", "fly_around", "chase", "tour", "follow", "cinematic", "keyframes", "settings"}
 
     def test_video_options_are_advanced_fields(self):
         params = inspect.signature(anim.render_video_from_settings).parameters

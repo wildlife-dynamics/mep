@@ -1,4 +1,5 @@
 import os
+import json
 import io
 import base64
 import pathlib
@@ -57,7 +58,7 @@ SURFACE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/Ma
 MY_DECK_WIDGETS = {
     "libraryName": "myDeckWidgets",
     "resourceUri": os.environ.get(
-        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.19.0/dist/bundle.js"
+        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.21.0/dist/bundle.js"
     ),
 }
 
@@ -69,6 +70,17 @@ TERRAIN_BACKGROUND = "#262622"
 # Basemap tiles draped over the terrain (DrapedTileLayer, my-deck-widgets). Esri World Imagery reaches
 # zoom 18 (~0.6 m a pixel) across East African rangelands; zoom 19 there is mostly "not yet available".
 DRAPED_IMAGERY_MAX_ZOOM = 18
+# Imagery looks (GradedTerrainLayer, my-deck-widgets): colour grading of the ground only, so tracks,
+# markers and labels keep their legend colours. "original" leaves the imagery as served.
+ImageryLook = Literal["natural", "vivid", "warm", "original"]
+IMAGERY_LOOKS: dict[str, dict[str, float]] = {
+    # Esri's mosaic is a little flat and cool: lift contrast and colour slightly, warm a touch.
+    "natural": {"brightness": 1.05, "contrast": 1.08, "saturation": 1.12, "warmth": 0.25},
+    "vivid": {"brightness": 1.03, "contrast": 1.15, "saturation": 1.35, "warmth": 0.2},
+    "warm": {"brightness": 1.03, "contrast": 1.08, "saturation": 1.15, "warmth": 0.8},
+}
+DEFAULT_VIGNETTE = 0.35
+
 LABELS_URL = (
     "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/"
     "{z}/{y}/{x}"
@@ -124,7 +136,7 @@ class DotMarker(BaseModel):
 
     model_config = ConfigDict(json_schema_extra={"title": "Dot"})
     marker: Annotated[Literal["dot"], Field(default="dot", title="Marker icon")] = "dot"
-    get_radius: Annotated[float, AdvancedField(default=2.0, gt=0)] = 2.0
+    get_radius: Annotated[float, AdvancedField(default=4.0, gt=0)] = 4.0
     radius_units: Annotated[UnitType, AdvancedField(default="pixels")] = "pixels"
     stroked: Annotated[bool, AdvancedField(default=True)] = True
     get_line_color: Annotated[
@@ -133,13 +145,6 @@ class DotMarker(BaseModel):
     get_line_width: Annotated[float, AdvancedField(default=1.5, ge=0)] = 1.5
     line_width_units: Annotated[UnitType, AdvancedField(default="pixels")] = "pixels"
     opacity: Annotated[float, AdvancedField(default=1, ge=0, le=1)] = 1
-
-
-class NoMarker(BaseModel):
-    """No marker at the current position; only the trails are drawn."""
-
-    model_config = ConfigDict(json_schema_extra={"title": "None"})
-    marker: Annotated[Literal["none"], Field(default="none", title="Marker icon")] = "none"
 
 
 class ScenegraphLayerDefinition(BaseModel):
@@ -351,8 +356,7 @@ AnimalModel = Literal["elephant", "giraffe", "cheetah", "leopard", "lion"]
 class AnimalModelMarker(BaseModel):
     """A ready-tuned 3D animal model: pick the animal, everything else is preset.
 
-    For your own GLB, or to tune orientation/size by hand, use the custom 3D model
-    (ScenegraphLayerDefinition) instead.
+    Drawn as a ScenegraphLayerDefinition (to_model) with the animal's tuned orientation and size.
     """
 
     model_config = ConfigDict(json_schema_extra={"title": "3D animal"})
@@ -392,7 +396,9 @@ class AnimalModelMarker(BaseModel):
 
 # Bare union: draw_animated_map sets the discriminator on its own AdvancedField (the compiler only reads
 # the first FieldInfo in an Annotated, so an inner Field here would drop the title and advanced flag).
-HeadMarker = DotMarker | AnimalModelMarker | ScenegraphLayerDefinition | NoMarker
+# Marker icons offered: a dot or a preset 3D animal. (ScenegraphLayerDefinition is what a 3D animal is drawn
+# with; create_scenegraph_layer still builds one for code that draws its own model.)
+HeadMarker = DotMarker | AnimalModelMarker
 
 
 def _resolve_glb_data_uri(glb: str | None) -> str:
@@ -564,8 +570,7 @@ class TripsAnimation(BaseModel):
             default=DotMarker(),
             discriminator="marker",
             title="Marker icon",
-            description="Marker drawn at each subject's current position: a flat dot, a preset 3D animal, "
-            "your own 3D glTF/GLB model, or none.",
+            description="Marker drawn at each subject's current position: a flat dot or a 3D animal.",
         ),
     ] = DotMarker()
     # --- Movement ---
@@ -652,12 +657,17 @@ class TerrainLayerDefinition(BaseModel):
         tuple[int, int, int],
         AdvancedField(default=TERRAIN_LOADING_COLOR, json_schema_extra={"items": {"type": "integer"}}),
     ] = TERRAIN_LOADING_COLOR
-    mesh_max_error: Annotated[float, AdvancedField(default=4)] = 4
+    # Mesh simplification tolerance in metres: 2 keeps ridges and gullies the 4 m default smoothed away.
+    mesh_max_error: Annotated[float, AdvancedField(default=2)] = 2
     material: Annotated[bool, AdvancedField(default=True)] = True
     # Not TerrainLayer props (exclude=True keeps them out of the pydeck dump): _build_map_deck turns them
     # into DrapedTileLayers (my-deck-widgets) fitted onto this terrain.
     imagery_max_zoom: Annotated[int | SkipJsonSchema[None], Field(default=None, exclude=True)] = None
     labels: Annotated[bool, Field(default=False, exclude=True)] = False
+    # Also not TerrainLayer props: _build_map_deck grades the ground with them (ImageryGradeExtension) and
+    # draw_animated_map darkens the frame's edges (vignette, 0 = off).
+    imagery_look: Annotated[ImageryLook, Field(default="original", exclude=True)] = "original"
+    vignette: Annotated[float, Field(default=0.0, ge=0, le=1, exclude=True)] = 0.0
 
 
 class TripsLayerStyle(LayerStyleBase):
@@ -682,22 +692,81 @@ class TripsLayerStyle(LayerStyleBase):
     trail_length: Annotated[float, AdvancedField(default=0)] = 120
 
 
-class TerrainSampling(BaseModel):
-    """Per-vertex ground-elevation sampling for 3D trips draped over a TerrainLayer.
+HeightAboveGround = Annotated[
+    float,
+    Field(default=30.0, ge=0, title="Height (m)", description="Metres above the ground the tracks are drawn at."),
+]
 
-    Consumed by drape_trips_on_terrain; skip that step for flat 2D paths.
+
+class ClampToGround(BaseModel):
+    """On the ground: tracks follow the terrain; recorded altitudes are ignored (Google's CLAMP_TO_GROUND)."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "On the ground"})
+    mode: Annotated[Literal["clamp_to_ground"], Field(default="clamp_to_ground", title="Track height")] = (
+        "clamp_to_ground"
+    )
+
+
+class RelativeToGround(BaseModel):
+    """A set height above the ground, measured from elevation data (Google's RELATIVE_TO_GROUND)."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Above the ground"})
+    mode: Annotated[Literal["relative_to_ground"], Field(default="relative_to_ground", title="Track height")] = (
+        "relative_to_ground"
+    )
+    height_m: HeightAboveGround = 30.0
+
+
+class AbsoluteAltitude(BaseModel):
+    """Each fix's recorded altitude above sea level (Google's ABSOLUTE). Fixes without one, as is usual for
+    EarthRanger data, are drawn a set height above the ground instead of at sea level."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Recorded altitude (where available)"})
+    mode: Annotated[Literal["absolute"], Field(default="absolute", title="Track height")] = "absolute"
+    fallback_height_m: Annotated[
+        float,
+        Field(
+            default=30.0,
+            ge=0,
+            title="Height without an altitude (m)",
+            description="Metres above the ground for fixes that have no recorded altitude.",
+        ),
+    ] = 30.0
+
+
+class RelativeToMesh(BaseModel):
+    """A set height above the 3D terrain as drawn on the map (Google's RELATIVE_TO_MESH): tracks stay on the
+    rendered surface at every zoom, where elevation-data heights can sit slightly above or below it."""
+
+    model_config = ConfigDict(json_schema_extra={"title": "Above the 3D terrain"})
+    mode: Annotated[Literal["relative_to_mesh"], Field(default="relative_to_mesh", title="Track height")] = (
+        "relative_to_mesh"
+    )
+    height_m: HeightAboveGround = 30.0
+
+
+AltitudeOptions = ClampToGround | RelativeToGround | AbsoluteAltitude | RelativeToMesh
+AltitudeOption = Annotated[AltitudeOptions, Field(discriminator="mode")]
+
+# Column drape_trips_on_terrain adds in relative_to_mesh mode: draw_animated_map then places the
+# tracks this many metres above the rendered terrain (deck.gl TerrainExtension, 'offset').
+MESH_HEIGHT_COL = "mesh_height_m"
+# Most vertices densify_m may add across all tracks; the spacing widens past it.
+MAX_DENSIFIED_VERTICES = 400_000
+
+
+class TerrainSampling(BaseModel):
+    """How drape_trips_on_terrain sets track heights over a TerrainLayer (Google Maps 3D altitude modes).
+
+    Skip that step for flat 2D paths.
     """
 
-    altitude_mode: Literal["clamp_to_ground", "relative_to_ground", "absolute"] = Field(
-        default="relative_to_ground",
-        description="Height of the tracks, as Google Maps 3D altitude modes: on the ground (clamp_to_ground), "
-        "`offset` metres above it (relative_to_ground), or each fix's own recorded altitude above sea level "
-        "(absolute; `offset` metres above sea level where a fix has none).",
-    )
-    offset: float = Field(
-        default=30.0,
-        description="Metres above the ground (relative_to_ground), or above sea level for fixes without an "
-        "altitude (absolute). Ignored by clamp_to_ground.",
+    altitude: AltitudeOption = Field(default_factory=RelativeToGround)
+    densify_m: float = Field(
+        default=100.0,
+        ge=0,
+        description="Add a point every this many metres along each track before setting heights, so lines "
+        "follow the terrain between fixes instead of cutting through hills. 0 = only at the fixes.",
     )
     elevation_data: str = Field(
         default=DEFAULT_TERRAIN_URL,
@@ -711,6 +780,22 @@ class TerrainSampling(BaseModel):
         ),
     )
     ground_elevation: float = Field(default=1000.0, description="Constant ground used only if DEM sampling fails.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_altitude_mode(cls, data):
+        """Settings from before the modes had their own fields: altitude_mode + offset."""
+        if not isinstance(data, dict) or "altitude_mode" not in data:
+            return data
+        data = dict(data)
+        mode, offset = data.pop("altitude_mode"), data.pop("offset", 30.0)
+        if mode == "clamp_to_ground":
+            data.setdefault("altitude", ClampToGround())
+        elif mode == "absolute":
+            data.setdefault("altitude", AbsoluteAltitude(fallback_height_m=offset))
+        else:
+            data.setdefault("altitude", RelativeToGround(height_m=offset))
+        return data
 
 
 @register()
@@ -726,35 +811,60 @@ def create_terrain_sampling(
             "None -> Terrarium default.",
         ),
     ] = None,
-    altitude_mode: Annotated[
-        Literal["clamp_to_ground", "relative_to_ground", "absolute"],
+    altitude: Annotated[
+        AltitudeOptions,
         AdvancedField(
-            default="relative_to_ground",
-            description="Height of the tracks: on the ground (clamp_to_ground; lines can dip into the terrain "
-            "between fixes), `offset` metres above it (relative_to_ground), or each fix's recorded altitude above "
-            "sea level (absolute).",
+            default=RelativeToGround(),
+            discriminator="mode",
+            title="Track height",
+            description="Where the tracks are drawn: on the ground, a set height above it, at each fix's "
+            "recorded altitude, or a set height above the 3D terrain as drawn on the map.",
         ),
-    ] = "relative_to_ground",
-    offset: Annotated[
+    ] = RelativeToGround(),
+    densify_m: Annotated[
         float,
         AdvancedField(
-            default=30,
-            description="Metres above the ground (relative_to_ground), or above sea level for fixes without an "
-            "altitude (absolute). Ignored by clamp_to_ground.",
+            default=100.0,
+            ge=0,
+            title="Follow terrain every (m)",
+            description="Add a point every this many metres along each track, so lines follow the terrain "
+            "between fixes instead of cutting through hills. 0 = only at the fixes.",
         ),
-    ] = 30.0,
-    ground_elevation: Annotated[
-        float, AdvancedField(default=1000.0, description="Constant ground used only if DEM sampling fails.")
-    ] = 1000.0,
+    ] = 100.0,
 ) -> Annotated[TerrainSampling, Field()]:
-    """Creates the elevation sampling config consumed by drape_trips_on_terrain."""
+    """Creates the track-height config consumed by drape_trips_on_terrain."""
     return TerrainSampling(
         elevation_data=elevation_data,
         elevation_decoder=elevation_decoder or dict(TERRARIUM_ELEVATION_DECODER),
-        altitude_mode=altitude_mode,
-        offset=offset,
-        ground_elevation=ground_elevation,
+        altitude=altitude,
+        densify_m=densify_m,
     )
+
+
+def _densify_track(xyz, times, breaks, step_m: float):
+    """Points every ~step_m metres along one track, timestamps and recorded altitude interpolated.
+
+    Steps across a data gap (`breaks`) are left alone, as no line is drawn there. Returns the new
+    coordinates, timestamps (or None) and the gap indices renumbered for them.
+    """
+    n = len(xyz)
+    if n < 2 or step_m <= 0:
+        return xyz, times, breaks
+    lat_mid = np.radians((xyz[:-1, 1] + xyz[1:, 1]) / 2)
+    dx = np.diff(xyz[:, 0]) * 111_320.0 * np.cos(lat_mid)
+    dy = np.diff(xyz[:, 1]) * 110_540.0
+    k = np.maximum(np.ceil(np.hypot(dx, dy) / step_m).astype(np.int64), 1)  # sub-steps per step
+    gaps = [b for b in breaks if 0 <= b < n - 1]
+    k[gaps] = 1
+    seg = np.repeat(np.arange(n - 1), k)
+    starts = np.concatenate([[0], np.cumsum(k)])
+    frac = (np.arange(len(seg)) - starts[seg]) / k[seg]
+    out = np.vstack([xyz[seg] + (xyz[seg + 1] - xyz[seg]) * frac[:, None], xyz[-1:]])
+    new_times = None
+    if times is not None:
+        t = np.asarray(times, dtype=np.float64)
+        new_times = np.append(t[seg] + (t[seg + 1] - t[seg]) * frac, t[-1])
+    return out, new_times, [int(starts[b]) for b in gaps]
 
 
 @register()
@@ -794,11 +904,44 @@ def create_terrain_layer(
             "has nothing that deep, the terrain's own imagery shows. Blank: the terrain's zoom only.",
         ),
     ] = DRAPED_IMAGERY_MAX_ZOOM,
+    imagery_look: Annotated[
+        ImageryLook,
+        Field(
+            default="natural",
+            title="Imagery look",
+            description="Colour grading of the basemap: 'natural' lifts contrast and colour a little and warms "
+            "it slightly, 'vivid' more so, 'warm' gives a golden-hour tone, 'original' leaves it as served. "
+            "Tracks and markers keep their colours.",
+        ),
+    ] = "natural",
+    vignette: Annotated[
+        float,
+        Field(
+            default=DEFAULT_VIGNETTE,
+            ge=0,
+            le=1,
+            title="Vignette",
+            description="Darken the edges of the map and video slightly, drawing the eye to the middle. 0 = off.",
+        ),
+    ] = DEFAULT_VIGNETTE,
+    mesh_max_error: Annotated[
+        float,
+        AdvancedField(
+            default=2.0,
+            gt=0,
+            title="Terrain detail (m)",
+            description="How far the 3D terrain may stray from the elevation data, in metres: lower keeps finer "
+            "ridges and gullies but draws more triangles.",
+        ),
+    ] = 2.0,
 ) -> Annotated[TerrainLayerDefinition, Field()]:
     """Creates a terrain layer definition from elevation tiles (+ optional texture, draped place names)."""
     return TerrainLayerDefinition(
         labels=labels,
         imagery_max_zoom=imagery_max_zoom,
+        imagery_look=imagery_look,
+        vignette=vignette,
+        mesh_max_error=mesh_max_error,
         elevation_data=elevation_data,
         texture=texture,
         min_zoom=min_zoom,
@@ -856,8 +999,7 @@ def create_animal_model(
         bool, AdvancedField(default=True, description="Realistic lighting; uncheck for flat shading (truer colours).")
     ] = True,
 ) -> Annotated[AnimalModelMarker, Field()]:
-    """A ready-tuned 3D animal head marker for create_trips_animation. For your own GLB use
-    create_scenegraph_layer."""
+    """A ready-tuned 3D animal head marker for create_trips_animation."""
     return AnimalModelMarker(animal=animal, size=size, use_track_color=use_track_color, pbr_lighting=pbr_lighting)
 
 
@@ -983,7 +1125,11 @@ def _build_map_deck(
             if draped:  # the terrain is also the surface the draped tiles are fitted onto
                 # a literal: pydeck would otherwise read the "+" as an @@= accessor expression
                 props["operation"] = pdk.types.String("terrain+draw")
-            map_layers.append(pdk.Layer("TerrainLayer", **props))
+            grade = IMAGERY_LOOKS.get(tile_layer.imagery_look)
+            if grade:  # the ground only (its own texture and the imagery draped onto it), by my-deck-widgets
+                map_layers.append(pdk.Layer("GradedTerrainLayer", grade=grade, **props))
+            else:
+                map_layers.append(pdk.Layer("TerrainLayer", **props))
             map_layers.extend(draped)
             if tile_layer.max_zoom < max_zoom:
                 max_zoom = tile_layer.max_zoom
@@ -1086,8 +1232,10 @@ def _draped_layers(pdk, terrain: TerrainLayerDefinition) -> list:
     layers = []
     texture = terrain.texture if isinstance(terrain.texture, str) else None
     if texture and terrain.imagery_max_zoom and terrain.imagery_max_zoom > terrain.max_zoom:
+        grade = IMAGERY_LOOKS.get(terrain.imagery_look)  # same look as the terrain's own texture
+        extra = {"grade": grade} if grade else {}
         layers.append(
-            pdk.Layer("DrapedTileLayer", id="draped-imagery", data=texture, max_zoom=terrain.imagery_max_zoom)
+            pdk.Layer("DrapedTileLayer", id="draped-imagery", data=texture, max_zoom=terrain.imagery_max_zoom, **extra)
         )
     if terrain.labels:
         layers.append(
@@ -1135,6 +1283,65 @@ WIDGET_THEME_CSS = (
     " --menu-item-hover: rgba(255, 255, 255, 0.12);"
     " color-scheme: dark; }"
 )
+
+
+TERRAIN_GRID_N = 96  # samples a side in the camera's line-of-sight grid
+TERRAIN_GRID_PAD_M = 4000.0  # margin around the tracks, for cameras standing back from them
+
+
+def _terrain_grid(tile_layers, geo_layers) -> dict | None:
+    """A coarse elevation grid over the animated data (plus a margin), for the video camera's
+    line-of-sight check (window.__terrainGrid): following cameras rise when a ridge would hide
+    what they follow. Heights use the terrain layer's own decoder (exaggeration included), so they
+    match the drawn terrain and the draped tracks. None without terrain, or if sampling fails.
+    """
+    terrain = next((t for t in (tile_layers or []) if hasattr(t, "elevation_data")), None)
+    if terrain is None:
+        return None
+    bounds = [
+        ld.geodataframe.to_crs("EPSG:4326").total_bounds
+        for ld in geo_layers
+        if getattr(ld, "geodataframe", None) is not None and len(ld.geodataframe)
+    ]
+    if not bounds:
+        return None
+    b = np.array(bounds)
+    w, s, e, n = b[:, 0].min(), b[:, 1].min(), b[:, 2].max(), b[:, 3].max()
+    if not np.isfinite([w, s, e, n]).all():
+        return None
+    lat_mid = (s + n) / 2
+    pad_lat = TERRAIN_GRID_PAD_M / 110_540.0
+    pad_lon = TERRAIN_GRID_PAD_M / (111_320.0 * max(np.cos(np.radians(lat_mid)), 0.1))
+    w, e = max(w - pad_lon, -180.0), min(e + pad_lon, 180.0)
+    s, n = max(s - pad_lat, -85.0), min(n + pad_lat, 85.0)
+    # Tiles about a quarter of the area wide: detail to spare for a 96-sample grid, few downloads.
+    zoom = int(np.clip(np.floor(np.log2(1440.0 / max(e - w, 1e-6))), 5, 13))
+    xs, ys = np.linspace(w, e, TERRAIN_GRID_N), np.linspace(s, n, TERRAIN_GRID_N)
+    gx, gy = np.meshgrid(xs, ys)  # row-major, south to north
+    try:
+        z = np.asarray(
+            sample_elevations(
+                np.column_stack([gx.ravel(), gy.ravel()]),
+                zoom=zoom,
+                url=terrain.elevation_data,
+                decoder=terrain.elevation_decoder,
+            ),
+            dtype=np.float64,
+        )
+    except Exception as exc:
+        logger.warning("draw_animated_map: no terrain grid for the camera's line of sight (%s)", exc)
+        return None
+    if z.shape != (TERRAIN_GRID_N * TERRAIN_GRID_N,) or not np.isfinite(z).all():
+        return None
+    return {
+        "w": float(w),
+        "s": float(s),
+        "e": float(e),
+        "n": float(n),
+        "nx": TERRAIN_GRID_N,
+        "ny": TERRAIN_GRID_N,
+        "z": np.round(z).astype(int).tolist(),
+    }
 
 
 def _has_terrain(tile_layers) -> bool:
@@ -1349,47 +1556,88 @@ def trajectory_to_trips(
 @register()
 def drape_trips_on_terrain(
     trips_gdf: AnyGeoDataFrame,
-    terrain: Annotated[TerrainSampling, Field(description="Elevation sampling config.")] = TerrainSampling(),
+    terrain: Annotated[TerrainSampling, Field(description="Track height config.")] = TerrainSampling(),
 ) -> AnyGeoDataFrame:
-    """Set every LineString vertex's z by terrain.altitude_mode: the sampled ground elevation
-    (clamp_to_ground), plus terrain.offset (relative_to_ground), or the vertex's own recorded
-    altitude (absolute; terrain.offset where it has none).
+    """Set every LineString vertex's z by terrain.altitude (Google Maps 3D altitude modes): the
+    ground from elevation data (clamp_to_ground), plus a height (relative_to_ground and
+    relative_to_mesh), or the vertex's own recorded altitude (absolute; a height above the ground
+    where it has none).
+
+    Tracks first get a point every terrain.densify_m metres (timestamps and `breaks` kept in step),
+    so lines follow the terrain between fixes. relative_to_mesh also tags the rows (MESH_HEIGHT_COL)
+    for draw_animated_map to place them above the rendered terrain; the z set here, ground + height,
+    is what the camera frames.
 
     All vertices across all rows are sampled in one batched call, so each DEM tile is fetched
     once. Falls back to a constant terrain.ground_elevation if sampling fails.
     """
-    coords, row_idx = shapely.get_coordinates(trips_gdf.geometry.values, include_z=True, return_index=True)
-    lonlats = coords[:, :2]
-    if terrain.altitude_mode == "absolute":
-        recorded = coords[:, 2]
-        z = np.where(np.isfinite(recorded), recorded, terrain.offset)
-        draped = shapely.linestrings(np.column_stack([lonlats, z]), indices=row_idx)
-        return cast(
-            AnyGeoDataFrame, trips_gdf.set_geometry(gpd.GeoSeries(draped, index=trips_gdf.index, crs=trips_gdf.crs))
-        )
-    try:
-        ground = np.asarray(
-            sample_elevations(
-                lonlats,
-                zoom=ELEVATION_SAMPLE_ZOOM,
-                url=terrain.elevation_data,
-                decoder=terrain.elevation_decoder,
-            )
-        )
-    except Exception as exc:  # network/tile failure -> safe constant fallback
-        logger.warning(
-            "drape_trips_on_terrain: terrain sampling failed (%s); using constant ground_elevation=%s",
-            exc,
-            terrain.ground_elevation,
-        )
-        ground = np.full(len(lonlats), terrain.ground_elevation)
+    alt = terrain.altitude
+    out = trips_gdf.copy()
+    has_t = "timestamps" in out.columns
+    has_b = "breaks" in out.columns
 
-    lift = terrain.offset if terrain.altitude_mode == "relative_to_ground" else 0.0
-    xyz = np.column_stack([lonlats, ground + lift])
-    draped = shapely.linestrings(xyz, indices=row_idx)
-    return cast(
-        AnyGeoDataFrame, trips_gdf.set_geometry(gpd.GeoSeries(draped, index=trips_gdf.index, crs=trips_gdf.crs))
-    )
+    lines = []
+    for i, geom in enumerate(out.geometry.values):
+        xyz = shapely.get_coordinates(geom, include_z=True)
+        times = out["timestamps"].iloc[i] if has_t else None
+        breaks = list(out["breaks"].iloc[i]) if has_b else []
+        # Not one timestamp per vertex: densifying would break the alignment, so leave the row as is.
+        step = 0.0 if (times is not None and len(times) != len(xyz)) else terrain.densify_m
+        lines.append(_densify_track(xyz, times, breaks, step) if step else (xyz, times, breaks))
+
+    total = sum(len(c) for c, _, _ in lines)
+    if terrain.densify_m and total > MAX_DENSIFIED_VERTICES:  # widen the spacing to stay under the cap
+        wider = terrain.densify_m * total / MAX_DENSIFIED_VERTICES
+        logger.info("drape_trips_on_terrain: %s points at %sm spacing; using %.0fm", total, terrain.densify_m, wider)
+        return drape_trips_on_terrain(trips_gdf, terrain.model_copy(update={"densify_m": wider}))
+
+    coords = np.vstack([c for c, _, _ in lines]) if lines else np.empty((0, 3))
+    row_idx = np.repeat(np.arange(len(lines)), [len(c) for c, _, _ in lines])
+    lonlats, recorded = coords[:, :2], coords[:, 2]
+
+    ground = None
+    if not (isinstance(alt, AbsoluteAltitude) and np.isfinite(recorded).all()):
+        try:
+            ground = np.asarray(
+                sample_elevations(
+                    lonlats,
+                    zoom=ELEVATION_SAMPLE_ZOOM,
+                    url=terrain.elevation_data,
+                    decoder=terrain.elevation_decoder,
+                )
+            )
+        except Exception as exc:  # network/tile failure -> safe constant fallback
+            logger.warning(
+                "drape_trips_on_terrain: terrain sampling failed (%s); using constant ground_elevation=%s",
+                exc,
+                terrain.ground_elevation,
+            )
+            ground = np.full(len(lonlats), terrain.ground_elevation)
+
+    if isinstance(alt, ClampToGround):
+        z = ground
+    elif isinstance(alt, AbsoluteAltitude):
+        fallback = ground + alt.fallback_height_m if ground is not None else np.zeros(len(recorded))
+        z = np.where(np.isfinite(recorded), recorded, fallback)
+        if not np.isfinite(recorded).any():
+            logger.warning(
+                "drape_trips_on_terrain: no fix has a recorded altitude; every track is drawn %sm above the ground",
+                alt.fallback_height_m,
+            )
+    else:  # relative_to_ground, relative_to_mesh
+        z = ground + alt.height_m
+
+    draped = shapely.linestrings(np.column_stack([lonlats, z]), indices=row_idx)
+    out = out.set_geometry(gpd.GeoSeries(draped, index=out.index, crs=out.crs))
+    if has_t:
+        out["timestamps"] = [t.tolist() if isinstance(t, np.ndarray) else t for _, t, _ in lines]
+    if has_b:
+        out["breaks"] = [b for _, _, b in lines]
+    if isinstance(alt, RelativeToMesh):
+        out[MESH_HEIGHT_COL] = float(alt.height_m)
+    elif MESH_HEIGHT_COL in out.columns:
+        out = out.drop(columns=MESH_HEIGHT_COL)
+    return cast(AnyGeoDataFrame, out)
 
 
 def _to_epoch_seconds(values: pd.Series) -> np.ndarray:
@@ -1402,11 +1650,9 @@ def _to_epoch_seconds(values: pd.Series) -> np.ndarray:
     return values.to_numpy(dtype=np.float64)
 
 
-def _head_spec(head: HeadMarker) -> dict:
+def _head_spec(head: HeadMarker | ScenegraphLayerDefinition) -> dict:
     """Head-marker config for the trips animator. The dot style is always included
     because it is also the fallback when a 3D model can't be loaded."""
-    if isinstance(head, NoMarker):
-        return {"kind": "none"}
     if isinstance(head, AnimalModelMarker):
         head = head.to_model()
     dot = head if isinstance(head, DotMarker) else DotMarker()
@@ -1583,6 +1829,10 @@ def draw_animated_map(
                     "hoverInfo": anim.hover_info,
                     # 3D models play their walk / run / idle clips by speed (dots resize slightly).
                     "speedResponse": True,
+                    # relative_to_mesh: drawn this many metres above the rendered terrain (TerrainExtension).
+                    "meshHeight": (
+                        float(gdf[MESH_HEIGHT_COL].iloc[0]) if MESH_HEIGHT_COL in gdf.columns and len(gdf) else None
+                    ),
                 }
             )
         else:
@@ -1661,7 +1911,19 @@ def draw_animated_map(
         # deck.gl's compass shows north (and turns); ecoscope's static north arrow would only repeat it.
         # The video hides the compass and brings the north arrow back (render_animation's _overlay_css).
         page_css += "\n.ecoscope-north-arrow-widget { display: none; }"
-    html_str = html_str.replace("</head>", f"<style>{page_css}</style>\n</head>", 1)
+    vignette = max((getattr(t, "vignette", 0.0) for t in (tile_layers or [])), default=0.0)
+    if vignette > 0:
+        # A soft dark edge over the map (and so the video), under the controls; clicks pass through.
+        a = round(0.55 * vignette, 3)
+        page_css += (
+            "\n#deck-container::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;"
+            f" background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,{a}) 100%); }}"
+        )
+    head = f"<style>{page_css}</style>"
+    grid = _terrain_grid(tile_layers, geo_list)
+    if grid is not None:
+        head += f"<script>window.__terrainGrid = {json.dumps(grid, separators=(',', ':'))};</script>"
+    html_str = html_str.replace("</head>", f"{head}\n</head>", 1)
     # The video camera (window.__cam, in the widget bundle) reads the pydeck spec from window.jsonInput.
     html_str = html_str.replace("const jsonInput =", "window.jsonInput =")
     return html_str
@@ -1777,8 +2039,7 @@ def create_trips_animation(
             default=DotMarker(),
             discriminator="marker",
             title="Marker icon",
-            description="Marker drawn at each subject's current position: a flat dot, a preset 3D animal, "
-            "your own 3D glTF/GLB model, or none.",
+            description="Marker drawn at each subject's current position: a flat dot or a 3D animal.",
         ),
     ] = DotMarker(),
     comet_ratio: Annotated[

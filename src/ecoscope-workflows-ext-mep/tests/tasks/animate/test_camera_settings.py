@@ -10,6 +10,8 @@ from pydantic import ValidationError
 
 from ecoscope_workflows_ext_mep.tasks.animate._animate import (
     CameraKeyframe,
+    CinematicCamera,
+    SubjectTourCamera,
     FixedCamera,
     FlyAroundCamera,
     FollowActionCamera,
@@ -39,13 +41,15 @@ def _field(camera, name):
 
 
 class TestCameraPanelSchema:
-    def test_offers_only_the_five_cameras(self):
+    def test_offers_only_the_seven_cameras(self):
         schema = camera_panel_schema()
         assert [(c["type"], c["title"]) for c in schema] == [
             ("fixed", "Fixed view"),
             ("fly_around", "Fly to & around"),
             ("chase", "Follow a subject"),
+            ("tour", "Subject tour"),
             ("follow", "Follow the action"),
+            ("cinematic", "Cinematic fly-through"),
             ("keyframes", "Keyframes"),
         ]
 
@@ -53,7 +57,7 @@ class TestCameraPanelSchema:
         names = {f["name"] for f in _camera(camera_panel_schema(), "keyframes")["fields"]}
         assert names == {"keyframe_easing", "fov"}
 
-    @pytest.mark.parametrize("type_", ["fixed", "fly_around", "chase", "follow"])
+    @pytest.mark.parametrize("type_", ["fixed", "fly_around", "chase", "tour", "follow", "cinematic"])
     def test_every_moving_camera_is_described_the_google_way(self, type_):
         names = {f["name"] for f in _camera(camera_panel_schema(), type_)["fields"]}
         assert {"tilt", "heading", "fov"} <= names
@@ -107,7 +111,7 @@ class TestParseCameraSettings:
         with pytest.raises(ValidationError):
             parse_camera_settings(settings)
 
-    @pytest.mark.parametrize("type_", ["static", "orbit", "sequence", "tour", "pan"])
+    @pytest.mark.parametrize("type_", ["static", "orbit", "sequence", "pan"])
     def test_removed_cameras_are_rejected(self, type_):
         with pytest.raises(ValidationError):
             parse_camera_settings(json.dumps({"type_": type_}))
@@ -136,6 +140,92 @@ class TestSetVideoCamera:
     def test_the_panel_opens_on_the_pasted_camera(self):
         camera = set_video_camera(camera_settings=CameraFromSettings(settings=self.PASTED))
         assert camera_panel_initial(camera) == {"type_": "fly_around", "fly_frac": 0.25, "rounds": 1.0}
+
+
+class TestSubjectTourCamera:
+    """Each subject in turn, flying between them, with name cards."""
+
+    def test_pasted_settings_become_the_camera(self):
+        camera = set_video_camera(
+            camera_settings=CameraFromSettings(settings='{"type_": "tour", "subjects": ["Kito", "Sopa"]}')
+        )
+        assert camera == SubjectTourCamera(subjects=["Kito", "Sopa"])
+
+    def test_reaches_the_page_as_the_tour_preset(self):
+        opts = _camera_opts(SubjectTourCamera(name_cards=False, transition_frac=0.3), 1280, 720, 25)
+        assert (opts["preset"], opts["name_cards"], opts["transition_frac"], opts["fps"]) == ("tour", False, 0.3, 25)
+        assert (opts["range_m"], opts["tilt"], opts["lead_room"], opts["speed_zoom"]) == (800, 60, 0.15, 0.5)
+
+    def test_settings_saved_before_it_was_removed_still_parse(self):
+        # The earlier Subject tour carried zoom_offset, fit_padding and min_height_m.
+        camera = parse_camera_settings(
+            '{"type_": "tour", "subjects": ["Kito"], "transition_frac": 0.6, "zoom_offset": 1, "fit_padding": 40}'
+        )
+        assert camera == SubjectTourCamera(subjects=["Kito"], transition_frac=0.6)
+
+    def test_panel_offers_its_settings(self):
+        names = {f["name"] for f in _camera(camera_panel_schema(), "tour")["fields"]}
+        assert {"subjects", "name_cards", "transition_frac", "lead_room", "speed_zoom", "keep_in_view"} <= names
+
+
+class TestFollowingCameraOptions:
+    """Lead room, zoom with the action and keeping the subject in view over hills."""
+
+    @pytest.mark.parametrize(
+        "camera, lead, zoom",
+        [
+            (FollowSubjectCamera(), 0.15, 0.5),
+            (SubjectTourCamera(), 0.15, 0.5),
+            (FollowActionCamera(), 0.1, 0.3),
+            (CinematicCamera(), 0.1, 0.3),
+        ],
+    )
+    def test_defaults(self, camera, lead, zoom):
+        assert (camera.lead_room, camera.speed_zoom, camera.keep_in_view) == (lead, zoom, True)
+
+    def test_they_reach_the_page(self):
+        opts = _camera_opts(FollowSubjectCamera(lead_room=0, speed_zoom=1, keep_in_view=False), 1280, 720)
+        assert (opts["lead_room"], opts["speed_zoom"], opts["keep_in_view"]) == (0, 1, False)
+
+    @pytest.mark.parametrize("field, bad", [("lead_room", 0.6), ("speed_zoom", 1.5), ("speed_zoom", -0.1)])
+    def test_limits(self, field, bad):
+        with pytest.raises(ValidationError):
+            FollowSubjectCamera(**{field: bad})
+
+    @pytest.mark.parametrize("type_", ["chase", "tour", "follow", "cinematic"])
+    def test_panel_offers_them_on_every_following_camera(self, type_):
+        names = {f["name"] for f in _camera(camera_panel_schema(), type_)["fields"]}
+        assert {"lead_room", "speed_zoom", "keep_in_view"} <= names
+
+
+class TestCinematicCamera:
+    """Cinematic fly-through, back as a camera choice (Jake's request)."""
+
+    def test_pasted_settings_become_the_camera(self):
+        camera = set_video_camera(
+            camera_settings=CameraFromSettings(settings='{"type_": "cinematic", "rotate_deg": 90, "intro_frac": 0.2}')
+        )
+        assert camera == CinematicCamera(rotate_deg=90, intro_frac=0.2)
+
+    def test_reaches_the_page_as_the_cinematic_preset(self):
+        opts = _camera_opts(CinematicCamera(bearing_mode="heading", subjects=["Kito"]), 1280, 720)
+        assert (opts["preset"], opts["bearing_mode"], opts["subjects"]) == ("cinematic", "heading", ["Kito"])
+        assert (opts["tilt"], opts["rotate_deg"], opts["intro_frac"]) == (55, 45, 0.12)
+
+    def test_settings_saved_before_it_was_removed_still_parse(self):
+        # Pre-Google-style cinematic settings carried zoom_offset and min_height_m.
+        camera = parse_camera_settings('{"type_": "cinematic", "zoom_offset": 1, "min_height_m": 200}')
+        assert camera == CinematicCamera()
+
+    def test_panel_offers_the_turning_choices(self):
+        field = _field(_camera(camera_panel_schema(), "cinematic"), "bearing_mode")
+        assert (field["type"], field["options"], field["default"]) == ("enum", ["rotate", "heading", "fixed"], "rotate")
+
+    def test_the_panel_opens_on_it(self):
+        assert camera_panel_initial(CinematicCamera(rotate_deg=-30)) == {
+            **CinematicCamera().model_dump(mode="json", exclude_none=True),
+            "rotate_deg": -30.0,
+        }
 
 
 class TestCameraPanelInitial:
