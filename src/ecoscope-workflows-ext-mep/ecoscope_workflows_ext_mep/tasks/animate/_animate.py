@@ -666,7 +666,8 @@ def _overlay_css(overlays: VideoOverlays, height: int) -> str:
     size = max(12, round(height * 0.026))  # ~19 px at 720p, ~28 px at 1080p, scaled for vertical video too
     margin = max(10, round(height * 0.02))
     return (
-        ", ".join(hidden) + " { display: none !important; }\n"
+        ", ".join(hidden)
+        + " { display: none !important; }\n"
         + (", ".join(shown) + " { display: block !important; }\n" if shown else "")
         + f"#video-clock {{ position: fixed; {vert}: {margin}px; {horiz}: {margin}px; z-index: 20;"
         f" padding: {round(size * 0.3)}px {round(size * 0.55)}px; border-radius: {round(size * 0.35)}px;"

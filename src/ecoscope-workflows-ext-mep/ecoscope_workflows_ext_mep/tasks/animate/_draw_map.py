@@ -649,7 +649,8 @@ class TerrainLayerDefinition(BaseModel):
     refinement_strategy: Annotated[TerrainStrategy, AdvancedField(default="best-available")] = "best-available"
     # Ground colour where a tile's imagery hasn't arrived yet (deck.gl's default is white).
     color: Annotated[
-        tuple[int, int, int], AdvancedField(default=TERRAIN_LOADING_COLOR, json_schema_extra={"items": {"type": "integer"}})
+        tuple[int, int, int],
+        AdvancedField(default=TERRAIN_LOADING_COLOR, json_schema_extra={"items": {"type": "integer"}}),
     ] = TERRAIN_LOADING_COLOR
     mesh_max_error: Annotated[float, AdvancedField(default=4)] = 4
     material: Annotated[bool, AdvancedField(default=True)] = True
