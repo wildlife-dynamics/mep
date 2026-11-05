@@ -15,12 +15,19 @@ from ecoscope_workflows_ext_mep.tasks.animate._animate import (
     FollowActionCamera,
     FollowSubjectCamera,
     KeyframesCamera,
+    CameraFromSettings,
     KeyframesFromFile,
+    KeyframesFromSubject,
     _camera_opts,
+    _overlay_css,
     _raw_keyframes,
+    VideoOverlays,
+    camera_panel_initial,
     camera_panel_schema,
     parse_camera_settings,
+    set_video_camera,
 )
+from ecoscope_workflows_ext_mep.tasks.animate._draw_map import PlaybackControls, create_playback_controls
 
 
 def _camera(schema, type_):
@@ -104,6 +111,71 @@ class TestParseCameraSettings:
     def test_removed_cameras_are_rejected(self, type_):
         with pytest.raises(ValidationError):
             parse_camera_settings(json.dumps({"type_": type_}))
+
+
+class TestSetVideoCamera:
+    """One camera for the map's Camera panel and the video, so the preview matches the export."""
+
+    # What Jake pasted: the map kept playing in Fixed view while the video flew around.
+    PASTED = '{"type_":"fly_around","fly_frac":0.25,"rounds":1}'
+
+    def test_pasted_settings_become_the_camera(self):
+        camera = set_video_camera(camera_settings=CameraFromSettings(settings=self.PASTED))
+        assert camera == FlyAroundCamera(fly_frac=0.25, rounds=1)
+
+    def test_a_camera_passes_through(self):
+        assert set_video_camera(camera_settings=FixedCamera(tilt=30)) == FixedCamera(tilt=30)
+
+    def test_default_is_a_fixed_view(self):
+        assert set_video_camera() == FixedCamera()
+
+    def test_a_bad_waypoint_file_fails_before_rendering(self):
+        with pytest.raises(ValueError, match="keyframes_file"):
+            set_video_camera(camera_settings=KeyframesCamera(source=KeyframesFromFile()))
+
+    def test_the_panel_opens_on_the_pasted_camera(self):
+        camera = set_video_camera(camera_settings=CameraFromSettings(settings=self.PASTED))
+        assert camera_panel_initial(camera) == {"type_": "fly_around", "fly_frac": 0.25, "rounds": 1.0}
+
+
+class TestCameraPanelInitial:
+    def test_none_leaves_the_panel_on_its_first_camera(self):
+        assert camera_panel_initial(None) is None
+
+    def test_blank_values_are_left_out(self):
+        assert camera_panel_initial(FixedCamera(range_m=900)) == {"type_": "fixed", "range_m": 900}
+
+    def test_panel_settings_round_trip(self):
+        camera = FollowSubjectCamera(subject="Amani", range_m=500, heading=90)
+        assert parse_camera_settings(json.dumps(camera_panel_initial(camera))) == camera
+
+    def test_waypoints_come_sorted_with_times(self):
+        camera = KeyframesCamera(keyframes=[CameraKeyframe(lon=1, lat=1, zoom=9), CameraKeyframe(lon=0, lat=0)])
+        out = camera_panel_initial(camera)
+        assert "source" not in out
+        assert [(k["t"], k["lon"], k["zoom"]) for k in out["keyframes"]] == [(0, 1, 9), (1, 0, 9)]
+
+    def test_a_waypoint_file_is_read_in(self, tmp_path):
+        f = tmp_path / "path.csv"
+        f.write_text("lon,lat\n37.0,-1.0\n37.1,-1.1\n")
+        out = camera_panel_initial(KeyframesCamera(source=KeyframesFromFile(keyframes_file=str(f))))
+        assert [(k["lon"], k["lat"]) for k in out["keyframes"]] == [(37.0, -1.0), (37.1, -1.1)]
+        assert "source" not in out
+
+    def test_no_waypoints_keeps_the_subject_to_follow(self):
+        out = camera_panel_initial(KeyframesCamera(source=KeyframesFromSubject(subject="Amani")))
+        assert out["source"] == {"type_": "subject", "subject": "Amani"} and "keyframes" not in out
+
+
+class TestPlaybackControlDefaults:
+    def test_preview_and_hint_are_on_by_default(self):
+        assert PlaybackControls().preview_camera and PlaybackControls().show_hint
+        controls = create_playback_controls()
+        assert controls.preview_camera and controls.show_hint
+
+    def test_the_video_hides_the_hint_and_the_preview_note(self):
+        css = _overlay_css(VideoOverlays(), 720)
+        assert "#map-hint" in css and "#camera-toast" in css
 
 
 class TestCameraOptions:

@@ -251,3 +251,144 @@ class TestPageSettings:
     def test_widget_bundle_is_registered(self, trips_layer):
         html = _draw(trips_layer, TripsAnimation())
         assert "my-deck-widgets" in html and "<script>\n// === Timeline animation" not in html
+
+
+def _panel_props(html: str) -> dict:
+    start = html.index("window.jsonInput = ") + len("window.jsonInput = ")
+    spec, _ = json.JSONDecoder().raw_decode(html, start)
+    return next(w for w in spec["widgets"] if w["@@type"] == "CameraPanelWidget")
+
+
+class TestCameraPanelGetsTheWorkflowCamera:
+    """The map's Camera panel opens on, and previews, the camera the video uses."""
+
+    def test_panel_opens_on_the_camera_with_the_preview_on(self, trips_layer):
+        from ecoscope_workflows_ext_mep.tasks.animate._animate import FlyAroundCamera
+
+        html = draw_animated_map(
+            geo_layers=animate_layer(layer=trips_layer, animation=TripsAnimation()),
+            camera=FlyAroundCamera(fly_frac=0.25, rounds=1),
+        )
+        props = _panel_props(html)
+        assert props["initial"] == {"type_": "fly_around", "fly_frac": 0.25, "rounds": 1.0}
+        assert props["preview"] is True
+        assert _widget_props(html)["controls"]["show_hint"] is True
+
+    def test_no_camera_and_preview_off(self, trips_layer):
+        html = _draw(trips_layer, TripsAnimation(), controls=create_playback_controls(preview_camera=False))
+        props = _panel_props(html)
+        assert props.get("initial") is None and props["preview"] is False
+
+
+class TestTerrainHasNoWhiteGaps:
+    """Over a 3D terrain the page is dark, not a light base map that shows through as white gaps."""
+
+    def _layer_json(self, html: str) -> dict:
+        start = html.index("window.jsonInput = ") + len("window.jsonInput = ")
+        spec, _ = json.JSONDecoder().raw_decode(html, start)
+        return spec, next(layer for layer in spec["layers"] if layer["@@type"] == "TerrainLayer")
+
+    def test_terrain_page_is_dark_with_no_base_style(self, trips_layer):
+        from ecoscope_workflows_ext_mep.tasks.animate._draw_map import TERRAIN_BACKGROUND, create_terrain_layer
+
+        html = draw_animated_map(
+            geo_layers=animate_layer(layer=trips_layer, animation=TripsAnimation()),
+            tile_layers=[create_terrain_layer()],
+        )
+        spec, terrain = self._layer_json(html)
+        assert not spec.get("mapStyle")
+        assert TERRAIN_BACKGROUND in html
+        # deck.gl's prop names: the old `strategy` was ignored; color replaces the white of unloaded tiles.
+        assert terrain["refinementStrategy"] == "best-available" and "strategy" not in terrain
+        assert terrain["color"] == [58, 56, 48]
+
+    def test_without_terrain_the_light_base_map_stays(self, trips_layer):
+        html = draw_animated_map(geo_layers=animate_layer(layer=trips_layer, animation=TripsAnimation()))
+        start = html.index("window.jsonInput = ") + len("window.jsonInput = ")
+        spec, _ = json.JSONDecoder().raw_decode(html, start)
+        assert spec["mapStyle"]
+
+
+class TestDeckGlMapControls:
+    """deck.gl's own widgets (@deck.gl/widgets) for zoom, tilt/rotate and reset, in its widget theme."""
+
+    def _widget_types(self, html: str) -> list[str]:
+        start = html.index("window.jsonInput = ") + len("window.jsonInput = ")
+        spec, _ = json.JSONDecoder().raw_decode(html, start)
+        return [w["@@type"] for w in spec["widgets"]]
+
+    def test_controls_are_on_by_default_and_before_the_camera_panel(self, trips_layer):
+        html = draw_animated_map(geo_layers=animate_layer(layer=trips_layer, animation=TripsAnimation()))
+        types = self._widget_types(html)
+        for w in ("ZoomWidget", "CompassWidget", "ResetViewWidget", "FullscreenWidget", "LoadingWidget"):
+            assert w in types
+        assert types.index("FullscreenWidget") < types.index("CameraPanelWidget")
+        assert "--button-background" in html  # the dark widget theme
+
+    def test_controls_can_be_switched_off(self, trips_layer):
+        html = _draw(trips_layer, TripsAnimation(), controls=create_playback_controls(show_map_controls=False))
+        assert "ZoomWidget" not in self._widget_types(html)
+
+    def test_the_video_hides_them(self):
+        from ecoscope_workflows_ext_mep.tasks.animate._animate import VideoOverlays, _overlay_css
+
+        css = _overlay_css(VideoOverlays(), 720)
+        for cls in ("zoom", "compass", "reset-view", "fullscreen", "loading"):
+            assert f".deck-widget-{cls}" in css
+
+
+class TestDrapedBasemap:
+    """Basemap tiles draped over the terrain at their own zoom (my-deck-widgets' DrapedTileLayer)."""
+
+    def _spec(self, trips_layer, **terrain_kw):
+        from ecoscope_workflows_ext_mep.tasks.animate._draw_map import create_terrain_layer
+
+        html = draw_animated_map(
+            geo_layers=animate_layer(layer=trips_layer, animation=TripsAnimation()),
+            tile_layers=[create_terrain_layer(**terrain_kw)],
+        )
+        start = html.index("window.jsonInput = ") + len("window.jsonInput = ")
+        spec, _ = json.JSONDecoder().raw_decode(html, start)
+        terrain = next(layer for layer in spec["layers"] if layer["@@type"] == "TerrainLayer")
+        draped = {layer["id"]: layer for layer in spec["layers"] if layer["@@type"] == "DrapedTileLayer"}
+        return spec, terrain, draped
+
+    def test_imagery_is_draped_to_zoom_18_by_default(self, trips_layer):
+        spec, terrain, draped = self._spec(trips_layer)
+        assert draped["draped-imagery"]["maxZoom"] == 18
+        assert draped["draped-imagery"]["data"] == terrain["texture"]
+        assert terrain["operation"] == "terrain+draw"  # a literal, not an @@= expression
+        assert "draped-labels" not in draped
+        assert "imageryMaxZoom" not in terrain and "labels" not in terrain  # not TerrainLayer props
+        # Depth test on over terrain, so tiles don't paint over each other (the cracks between tiles).
+        assert spec["parameters"]["depthTest"] is True
+
+    def test_place_names(self, trips_layer):
+        _, _, draped = self._spec(trips_layer, labels=True)
+        assert "World_Boundaries_and_Places" in draped["draped-labels"]["data"]
+
+    def test_terrain_zoom_only(self, trips_layer):
+        _, terrain, draped = self._spec(trips_layer, imagery_max_zoom=None)
+        assert not draped and "operation" not in terrain
+
+    def test_no_drape_when_not_deeper_than_the_terrain(self, trips_layer):
+        _, _, draped = self._spec(trips_layer, imagery_max_zoom=15)
+        assert not draped
+
+
+class TestCompassReplacesNorthArrow:
+    def test_no_gimbal_and_the_static_north_arrow_hides_behind_the_compass(self, trips_layer):
+        html = draw_animated_map(geo_layers=animate_layer(layer=trips_layer, animation=TripsAnimation()))
+        assert "GimbalWidget" not in html  # OrbitView-only: does nothing on a map
+        assert ".ecoscope-north-arrow-widget { display: none; }" in html
+
+    def test_north_arrow_stays_without_map_controls(self, trips_layer):
+        html = _draw(trips_layer, TripsAnimation(), controls=create_playback_controls(show_map_controls=False))
+        assert ".ecoscope-north-arrow-widget { display: none; }" not in html
+
+    def test_the_video_brings_the_north_arrow_back(self):
+        from ecoscope_workflows_ext_mep.tasks.animate._animate import VideoOverlays, _overlay_css
+
+        assert ".ecoscope-north-arrow-widget { display: block !important; }" in _overlay_css(VideoOverlays(), 720)
+        off = _overlay_css(VideoOverlays(north_arrow=False), 720)
+        assert "display: block" not in off and ".ecoscope-north-arrow-widget" in off

@@ -575,6 +575,21 @@ def camera_panel_schema() -> list[dict]:
     return cameras
 
 
+def camera_panel_initial(camera: CameraOptions | None) -> dict | None:
+    """A camera as the Camera panel's settings object (what it copies), so the panel opens on the
+    workflow's camera. A keyframes camera's waypoint file is read in here; waypoints come back
+    complete except channels no waypoint set, which the panel fills from the map's view."""
+    if camera is None:
+        return None
+    out = camera.model_dump(mode="json", exclude_none=True)
+    if isinstance(camera, KeyframesCamera):
+        raw = _raw_keyframes(camera)
+        if raw:
+            out["keyframes"] = _resolve_keyframes(raw)
+            out.pop("source", None)
+    return out
+
+
 def parse_camera_settings(settings: str) -> CameraOptions:
     """Camera designed in the animated map's Camera panel: the copied settings text, or
     the path of the downloaded settings file."""
@@ -629,14 +644,31 @@ _OVERLAY_SELECTORS = {
 
 def _overlay_css(overlays: VideoOverlays, height: int) -> str:
     """Stylesheet for the video: interactive-only controls and switched-off widgets hidden, the clock placed."""
-    hidden = [".deck-widget-save-image", "#timeline-controls", "#camera-panel", ".camera-panel-widget"]
+    hidden = [
+        ".deck-widget-save-image",
+        "#timeline-controls",
+        "#camera-panel",
+        ".camera-panel-widget",
+        "#map-hint",
+        "#camera-toast",
+        # deck.gl's own map buttons (draw_animated_map's show_map_controls)
+        ".deck-widget-zoom",
+        ".deck-widget-compass",
+        ".deck-widget-reset-view",
+        ".deck-widget-fullscreen",
+        ".deck-widget-loading",
+    ]
     hidden += [sel for name, sel in _OVERLAY_SELECTORS.items() if not getattr(overlays, name)]
+    # The interactive map hides the north arrow behind deck.gl's compass (draw_animated_map); the video,
+    # which hides the compass, shows the north arrow again when it's wanted.
+    shown = [_OVERLAY_SELECTORS["north_arrow"]] if overlays.north_arrow else []
     vert, horiz = overlays.clock_position.split("-")
     size = max(12, round(height * 0.026))  # ~19 px at 720p, ~28 px at 1080p, scaled for vertical video too
     margin = max(10, round(height * 0.02))
     return (
         ", ".join(hidden) + " { display: none !important; }\n"
-        f"#video-clock {{ position: fixed; {vert}: {margin}px; {horiz}: {margin}px; z-index: 20;"
+        + (", ".join(shown) + " { display: block !important; }\n" if shown else "")
+        + f"#video-clock {{ position: fixed; {vert}: {margin}px; {horiz}: {margin}px; z-index: 20;"
         f" padding: {round(size * 0.3)}px {round(size * 0.55)}px; border-radius: {round(size * 0.35)}px;"
         f" background: rgba(20, 20, 20, 0.72); color: #fff; font: 600 {size}px/1.2 system-ui, sans-serif;"
         " font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }"
@@ -1187,6 +1219,29 @@ class CameraFromSettings(BaseModel):
             "settings file (.json).",
         ),
     ]
+
+
+@register()
+def set_video_camera(
+    camera_settings: Annotated[
+        CameraOptions | CameraFromSettings,
+        AdvancedField(
+            default=FixedCamera(),
+            discriminator="type_",
+            title="Camera",
+            description="Camera for the video and the map's camera preview: Fixed view, Fly to & around, Follow a "
+            "subject, Follow the action or Keyframes, or the settings of a camera designed in the map's Camera panel.",
+        ),
+    ] = FixedCamera(),
+) -> Annotated[CameraConfig, Field()]:
+    """The video camera, set once for both draw_animated_map (its Camera panel opens on it and previews it)
+    and render_video_from_settings, so the map and the video always agree."""
+    if isinstance(camera_settings, CameraFromSettings):
+        camera = parse_camera_settings(camera_settings.settings)
+    else:
+        camera = camera_settings
+    _raw_keyframes(camera)  # a missing or bad waypoint file fails here, not halfway through the video
+    return camera
 
 
 @register()
