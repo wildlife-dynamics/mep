@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1079,6 +1080,23 @@ def _assemble_sequence(frame_dir: str, ext: str, n_main: int, n_hold_start: int,
     return seq_dir
 
 
+def _local_path(path: str) -> str:
+    """A ``file:`` URL as a local filesystem path (other strings as given), for ffmpeg and the
+    frames folder, which take paths, not URLs. Handles every form a results URL takes:
+    ``file:///tmp/x``, ``file://localhost/tmp/x``, ``file:///C:/x`` and ``file://C:/x`` -- the last is
+    how a Windows results folder often arrives, and generic URL parsing would read its drive as a
+    host and drop it."""
+    if not path.startswith("file:"):
+        return path
+    from urllib.parse import unquote
+
+    rest = unquote(path[len("file:") :])
+    rest = re.sub(r"^//(localhost(?=/))?", "", rest)  # the authority: none, or localhost
+    if re.match(r"^/[A-Za-z]:", rest):  # /C:/x -> C:/x
+        rest = rest[1:]
+    return str(Path(rest))
+
+
 def _frames_dir(out_path: str, key: str) -> str:
     """Where a resumable render keeps its frames: beside the video, named by the render's settings,
     or in the temp dir if the video's folder isn't writable."""
@@ -1144,11 +1162,13 @@ async def render_animation_async(
         camera = parse_camera_settings(camera_settings)
     keyframes = _raw_keyframes(camera)  # a bad waypoint file fails here, before the browser launches
     width, height = _resolve_resolution(resolution)
-    html_path = Path(html_path).resolve()
+    html_path = Path(_local_path(str(html_path))).resolve()
     if not html_path.exists():
         raise FileNotFoundError(html_path)
+    # ffmpeg and the frames folder need local paths: results folders arrive as file:// URLs.
+    out_path = _local_path(str(out_path))
     if output_dir:
-        out_path = os.path.join(output_dir, os.path.basename(str(out_path)))
+        out_path = os.path.join(_local_path(output_dir), os.path.basename(out_path))
     ext = "jpg" if quality.capture_format == "jpeg" else "png"
     t_wall = time.time()
 

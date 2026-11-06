@@ -185,3 +185,29 @@ class TestRenderVideoFromSettings:
         params = inspect.signature(anim.render_video_from_settings).parameters
         for name in ("camera_settings", "fps", "duration", "overlays", "quality", "capture"):
             assert params[name].annotation.__metadata__[0].json_schema_extra["ecoscope:advanced"] is True
+
+
+class TestVideoLocalPaths:
+    """ffmpeg and the frames folder get local paths, whatever form the results URL takes."""
+
+    @pytest.mark.parametrize(
+        "url, expected",
+        [
+            ("file:///tmp/results/animation.mp4", "/tmp/results/animation.mp4"),
+            ("file://localhost/tmp/results/animation.mp4", "/tmp/results/animation.mp4"),
+            # The Windows CI results folder: two slashes, so a URL parser reads "D:" as the host.
+            (
+                "file://D:/a/_temp/workflow-test-results/animate_tracks/case",
+                str(Path("D:/a/_temp/workflow-test-results/animate_tracks/case")),
+            ),
+            ("file:///C:/Users/me/results", str(Path("C:/Users/me/results"))),
+            ("file:///tmp/my%20results", "/tmp/my results"),
+            ("/already/local/animation.mp4", "/already/local/animation.mp4"),
+            ("animation.mp4", "animation.mp4"),
+        ],
+    )
+    def test_local_path(self, url, expected):
+        assert anim._local_path(url) == expected
+
+    def test_windows_drive_is_kept(self):
+        assert anim._local_path("file://D:/a/_temp/x").startswith("D:")
