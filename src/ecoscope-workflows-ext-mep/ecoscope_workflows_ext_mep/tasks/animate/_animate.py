@@ -1097,6 +1097,71 @@ def _local_path(path: str) -> str:
     return str(Path(rest))
 
 
+GCS_HTTPS_PREFIX = "https://storage.googleapis.com/"
+# Local work folder for maps fetched from, and videos bound for, Cloud Storage. Stable, so an
+# interrupted render with the same settings can still resume on the same machine.
+VIDEO_WORK_DIR = Path(tempfile.gettempdir()) / "ecoscope-animate-video"
+
+
+def _gs_url(path: str) -> str | None:
+    """A Cloud Storage location as ``gs://bucket/key``: given as gs://, or as the
+    ``https://storage.googleapis.com/...`` link the platform's persist tasks return for a gs://
+    results folder (ecoscope-web). None for anything else."""
+    if path.startswith("gs://"):
+        return path
+    if path.startswith(GCS_HTTPS_PREFIX):
+        from urllib.parse import unquote
+
+        return "gs://" + unquote(path[len(GCS_HTTPS_PREFIX) :])
+    return None
+
+
+def _video_io(html_path: str, output_dir: str | None, out_path: str) -> tuple[Path, str, str | None]:
+    """Where render_animation reads the map and writes the video, as local paths, plus the
+    Cloud Storage folder the video goes to afterwards (None when it is written in place).
+
+    The browser and ffmpeg need local files: a map in Cloud Storage is downloaded to
+    VIDEO_WORK_DIR, and a video bound for a gs:// results folder is rendered there first.
+    file:// URLs become local paths (_local_path).
+    """
+    remote_dir, name = None, os.path.basename(str(out_path))
+    if output_dir and (gs := _gs_url(output_dir)):
+        remote_dir = gs.rstrip("/")
+    elif not output_dir and (gs := _gs_url(str(out_path))):
+        remote_dir, name = gs.rsplit("/", 1)
+    if remote_dir:
+        VIDEO_WORK_DIR.mkdir(parents=True, exist_ok=True)
+        local_out = str(VIDEO_WORK_DIR / name)
+    else:
+        local_out = _local_path(str(out_path))
+        if output_dir:
+            local_out = os.path.join(_local_path(output_dir), os.path.basename(local_out))
+
+    gs_html = _gs_url(str(html_path))
+    if gs_html:
+        from cloudpathlib.gs.gspath import GSPath
+
+        VIDEO_WORK_DIR.mkdir(parents=True, exist_ok=True)
+        local_html = VIDEO_WORK_DIR / (gs_html.rsplit("/", 1)[-1] or "animated_map.html")
+        local_html.write_bytes(GSPath(gs_html).read_bytes())
+    else:
+        local_html = Path(_local_path(str(html_path)))
+    return local_html.resolve(), local_out, remote_dir
+
+
+def _deliver_video(local_out: str, remote_dir: str | None) -> str:
+    """The finished video's path: the local file, or, for a Cloud Storage results folder, the
+    uploaded copy (written by the platform's own persist helper, so it gets the same credentials
+    and the same https link form as the map); the local copy is then removed."""
+    if not remote_dir:
+        return local_out
+    from ecoscope.platform.serde import _persist_bytes
+
+    url = _persist_bytes(Path(local_out).read_bytes(), remote_dir, os.path.basename(local_out))
+    Path(local_out).unlink(missing_ok=True)
+    return url
+
+
 def _frames_dir(out_path: str, key: str) -> str:
     """Where a resumable render keeps its frames: beside the video, named by the render's settings,
     or in the temp dir if the video's folder isn't writable."""
@@ -1162,13 +1227,11 @@ async def render_animation_async(
         camera = parse_camera_settings(camera_settings)
     keyframes = _raw_keyframes(camera)  # a bad waypoint file fails here, before the browser launches
     width, height = _resolve_resolution(resolution)
-    html_path = Path(_local_path(str(html_path))).resolve()
+    # The browser and ffmpeg need local files: results arrive as file:// URLs, or in Cloud Storage
+    # (gs://, or the platform's https link to it) on ecoscope-web.
+    html_path, out_path, remote_dir = _video_io(str(html_path), output_dir, str(out_path))
     if not html_path.exists():
         raise FileNotFoundError(html_path)
-    # ffmpeg and the frames folder need local paths: results folders arrive as file:// URLs.
-    out_path = _local_path(str(out_path))
-    if output_dir:
-        out_path = os.path.join(_local_path(output_dir), os.path.basename(out_path))
     ext = "jpg" if quality.capture_format == "jpeg" else "png"
     t_wall = time.time()
 
@@ -1283,6 +1346,7 @@ async def render_animation_async(
         raise
     shutil.rmtree(frame_dir, ignore_errors=True)
 
+    out_path = _deliver_video(out_path, remote_dir)
     log(f"wrote {out_path} ({time.time() - t_wall:.1f}s total)")
     return out_path
 
@@ -1290,7 +1354,10 @@ async def render_animation_async(
 @register()
 def render_animation(
     html_path: Annotated[str, Field(description="Animated map HTML from draw_animated_map.")],
-    output_dir: Annotated[str | SkipJsonSchema[None], Field(description="Directory for the video.")] = None,
+    output_dir: Annotated[
+        str | SkipJsonSchema[None],
+        Field(description="Directory for the video: a local path, file:// URL or gs:// folder."),
+    ] = None,
     out_path: Annotated[
         str, Field(description="Video file name (or path when output_dir is unset).")
     ] = "animation.mp4",
@@ -1481,7 +1548,10 @@ def render_video_from_settings(
     capture: Annotated[
         CaptureOptions, AdvancedField(default=CaptureOptions(), description="Headless-browser capture settings.")
     ] = CaptureOptions(),
-    output_dir: Annotated[str | SkipJsonSchema[None], Field(description="Directory for the video.")] = None,
+    output_dir: Annotated[
+        str | SkipJsonSchema[None],
+        Field(description="Directory for the video: a local path, file:// URL or gs:// folder."),
+    ] = None,
     out_path: Annotated[
         str, Field(description="Video file name (or path when output_dir is unset).")
     ] = "animation.mp4",

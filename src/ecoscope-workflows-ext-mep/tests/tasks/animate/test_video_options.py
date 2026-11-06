@@ -211,3 +211,68 @@ class TestVideoLocalPaths:
 
     def test_windows_drive_is_kept(self):
         assert anim._local_path("file://D:/a/_temp/x").startswith("D:")
+
+
+class TestVideoCloudStorage:
+    """On ecoscope-web the results folder is in Cloud Storage: the map is fetched to a local file,
+    and the video is rendered locally then uploaded with the platform's persist helper."""
+
+    @pytest.fixture
+    def bucket(self, monkeypatch, tmp_path):
+        """A stand-in bucket: GSPath reads from `store`; _persist_bytes writes to it."""
+        store = {"gs://bkt/results/animated_map.html": b"<html>map</html>"}
+
+        class FakeGSPath:
+            def __init__(self, url):
+                self.url = url
+
+            def read_bytes(self):
+                return store[self.url]
+
+        import cloudpathlib.gs.gspath as gspath
+        import ecoscope.platform.serde as serde
+
+        def fake_persist_bytes(data, root_path, filename):
+            store[f"{root_path}/{filename}"] = data
+            return anim.GCS_HTTPS_PREFIX + f"{root_path[len('gs://'):]}/{filename}"
+
+        monkeypatch.setattr(gspath, "GSPath", FakeGSPath)
+        monkeypatch.setattr(serde, "_persist_bytes", fake_persist_bytes)
+        monkeypatch.setattr(anim, "VIDEO_WORK_DIR", tmp_path / "work")
+        return store
+
+    @pytest.mark.parametrize(
+        "html",
+        [
+            "gs://bkt/results/animated_map.html",
+            # what persist_text returns for a gs:// results folder
+            "https://storage.googleapis.com/bkt/results/animated_map.html",
+        ],
+    )
+    def test_map_in_cloud_storage_is_fetched(self, bucket, html):
+        local_html, _, _ = anim._video_io(html, "gs://bkt/results", "animation.mp4")
+        assert local_html.read_bytes() == b"<html>map</html>"
+        assert local_html.parent == anim.VIDEO_WORK_DIR.resolve()
+
+    def test_video_for_a_gs_folder_is_rendered_locally_then_uploaded(self, bucket):
+        _, local_out, remote = anim._video_io(
+            "gs://bkt/results/animated_map.html", "gs://bkt/results/", "animation.mp4"
+        )
+        assert remote == "gs://bkt/results" and local_out == str(anim.VIDEO_WORK_DIR / "animation.mp4")
+        Path(local_out).write_bytes(b"mp4")
+        url = anim._deliver_video(local_out, remote)
+        assert url == "https://storage.googleapis.com/bkt/results/animation.mp4"
+        assert bucket["gs://bkt/results/animation.mp4"] == b"mp4"
+        assert not Path(local_out).exists()  # the local copy is cleaned up
+
+    def test_gs_out_path_without_output_dir(self, bucket):
+        _, local_out, remote = anim._video_io("gs://bkt/results/animated_map.html", None, "gs://bkt/videos/clip.mp4")
+        assert remote == "gs://bkt/videos" and local_out.endswith("clip.mp4")
+
+    def test_local_results_are_written_in_place(self, tmp_path):
+        (tmp_path / "animated_map.html").write_text("<html/>")
+        local_html, local_out, remote = anim._video_io(
+            (tmp_path / "animated_map.html").as_uri(), tmp_path.as_uri(), "animation.mp4"
+        )
+        assert remote is None and local_out == str(tmp_path / "animation.mp4")
+        assert anim._deliver_video(local_out, None) == local_out
