@@ -1533,6 +1533,16 @@ def render_video_from_settings(
             description="Video duration. 'auto' uses the animation's own playback length (duration_s).",
         ),
     ] = DurationConfig(),
+    resolution: Annotated[
+        ResolutionOptions,
+        AdvancedField(
+            default=PresetResolution(),
+            discriminator="preset",
+            title="Resolution",
+            description="Output video resolution: a landscape preset (720p/1080p/4K), vertical 9:16 or square "
+            "1:1 for social media, or 'custom' width/height.",
+        ),
+    ] = PresetResolution(),
     overlays: Annotated[
         VideoOverlays,
         AdvancedField(
@@ -1571,6 +1581,7 @@ def render_video_from_settings(
             camera=camera,
             fps=fps,
             duration=duration,
+            resolution=resolution,
             overlays=overlays,
             quality=quality,
             capture=capture,

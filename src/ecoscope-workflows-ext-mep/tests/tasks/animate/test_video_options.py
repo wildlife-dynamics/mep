@@ -154,6 +154,26 @@ class TestRenderVideoFromSettings:
         assert call["fps"] == 24 and call["duration"].seconds == 20 and not call["overlays"].legend
         assert call["quality"].crf == 20 and call["capture"].resume is False
 
+    @pytest.mark.parametrize(
+        "resolution, size",
+        [
+            (anim.PresetResolution(preset="1080p"), (1920, 1080)),
+            (anim.PresetResolution(preset="1080p-vertical"), (1080, 1920)),
+            (anim.CustomResolution(width=800, height=600), (800, 600)),
+        ],
+    )
+    def test_resolution_is_passed_through(self, rendered, resolution, size):
+        anim.render_video_from_settings("map.html", resolution=resolution)
+        assert anim._resolve_resolution(rendered[0]["resolution"]) == size
+
+    def test_resolution_defaults_to_720p(self, rendered):
+        anim.render_video_from_settings("map.html")
+        assert anim._resolve_resolution(rendered[0]["resolution"]) == (1280, 720)
+
+    def test_resolution_is_an_advanced_field(self):
+        param = inspect.signature(anim.render_video_from_settings).parameters["resolution"]
+        assert param.annotation.__metadata__[0].json_schema_extra["ecoscope:advanced"] is True
+
     def test_camera_panel_file(self, rendered, tmp_path):
         f = tmp_path / "camera-settings.json"
         f.write_text('{"type_": "fly_around", "rounds": 2}')
