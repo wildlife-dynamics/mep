@@ -35,6 +35,16 @@ requirements:
     - numpy
     - setuptools <=81.0.0
     - docxcompose
+tests:
+  # Non-Python files the package reads at import time. The wheel build (hatch, only-packages) silently
+  # drops files outside a Python package, which shipped 1.11.1 without the widgets bundle and broke
+  # `import ecoscope_workflows_ext_mep.tasks`; fail the build instead.
+  - package_contents:
+      site_packages:
+        - ecoscope_workflows_ext_mep/tasks/animate/assets/__init__.py
+      files:
+        - site-packages/ecoscope_workflows_ext_mep/tasks/animate/assets/my-deck-widgets.js
+
 about:
   license: BSD-3-Clause
 
