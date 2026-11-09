@@ -17,11 +17,11 @@
 
 context:
   name: playwright-chromium-headless-shell
-  version: "1.62.0"
-  # from playwright-core/browsers.json of driver 1.62.x
-  revision: "1234"
-  browser_version: "151.0.7922.34"
-  cft_platform: ${{ "linux64" if linux else ("mac-arm64" if (osx and arm64) else ("mac-x64" if osx else "win64")) }}
+  version: "1.65.0"
+  # from playwright-core/browsers.json of driver 1.65.0 (chromium-headless-shell)
+  revision: "1254"
+  browser_version: "158.0.8127.18"
+  cft_platform: ${{ ("linux-arm64" if aarch64 else "linux64") if linux else ("mac-arm64" if (osx and arm64) else ("mac-x64" if osx else "win64")) }}
   # same relative path on every platform (incl. Windows) so the runtime can use <prefix>/share/ms-playwright
   install_dir: share/ms-playwright
 
@@ -29,39 +29,48 @@ package:
   name: ${{ name }}
   version: ${{ version }}
 
+# sha256s are of Google's Chrome for Testing zips: each was verified byte-identical between
+# cdn.playwright.dev and storage.googleapis.com/chrome-for-testing-public/<browser_version>/.
 source:
   - if: target_platform == "linux-64"
     then:
       url: https://cdn.playwright.dev/builds/cft/${{ browser_version }}/linux64/chrome-headless-shell-linux64.zip
-      sha256: 3cfc2bd00d1bafcf8a68dc74c9c92bb7150ddc8d26ade948a776316e1cec4f14
+      sha256: 18352d22cb0cdf520cbff2ad8c41391f0e02a72886cb53b0fde4bdfc4bd075d6
       # keep the zip as-is; build.sh unzips it so the top-level dir name is preserved
+      file_name: chrome-headless-shell.zip
+  - if: target_platform == "linux-aarch64"
+    then:
+      url: https://cdn.playwright.dev/builds/cft/${{ browser_version }}/linux-arm64/chrome-headless-shell-linux-arm64.zip
+      sha256: b136462898353d94c7fab50f9cdaa6d8f0d4c190153916936aa0a03353a26bf2
       file_name: chrome-headless-shell.zip
   - if: osx and arm64
     then:
       url: https://cdn.playwright.dev/builds/cft/${{ browser_version }}/mac-arm64/chrome-headless-shell-mac-arm64.zip
-      sha256: cb46a336dbe3d6f1339c5039c3083e4e5dd8e4379710790e34f8f4a865e2452d
+      sha256: f34261d2aad94fb71b336597acabf20166ee5a2f14926c731f33d04c5da6cd3f
       file_name: chrome-headless-shell.zip
   - if: osx and x86_64
     then:
       url: https://cdn.playwright.dev/builds/cft/${{ browser_version }}/mac-x64/chrome-headless-shell-mac-x64.zip
-      sha256: 608e2b5b1815b45e8bf59c9a381412b62df3ce36f2c182bc04e22fcf04ad53ea
+      sha256: 81d6496c4e9b7c6a9f8d9cb18beef47d7da8eb235d1d5089f7385d19c1e378be
       file_name: chrome-headless-shell.zip
   - if: target_platform == "win-64"
     then:
       url: https://cdn.playwright.dev/builds/cft/${{ browser_version }}/win64/chrome-headless-shell-win64.zip
-      sha256: 46cc69ef55ba29268ffe32dda4192a9d2165be42c3f4e923241153d519493aea
+      sha256: fdd3721ad0299ddd419d170ce8ab89aecf8631d157b85215474b4a70c8dcd061
       file_name: chrome-headless-shell.zip
 
 build:
   number: 0
   skip:
-    - not (target_platform in ["linux-64", "osx-arm64", "osx-64", "win-64"])
+    - not (target_platform in ["linux-64", "linux-aarch64", "osx-arm64", "osx-64", "win-64"])
   script:
     env:
       PW_REVISION: ${{ revision }}
       PW_CFT_PLATFORM: ${{ cft_platform }}
       PW_INSTALL_DIR: ${{ install_dir }}
-    file: ${{ "bld.bat" if win else "build.sh" }}
+    # By the machine building it, not the target: release CI cross-builds every platform on Linux,
+    # and build.sh lays out the Windows package the same way bld.bat does.
+    file: ${{ "bld.bat" if build_platform == "win-64" else "build.sh" }}
   # Chrome binaries are prebuilt; nothing to fix up via prefix replacement.
   prefix_detection:
     ignore: true
@@ -80,10 +89,11 @@ build:
       - "**/libpthread.so.0"
       - "**/librt.so.1"
       - "**/ld-linux-x86-64.so.2"
+      - "**/ld-linux-aarch64.so.1"
 
 requirements:
   build:
-    - if: unix
+    - if: build_platform != "win-64"
       then:
         - unzip
     # rattler-build uses patchelf to rewrite the ELF RPATHs (also when cross-building from macOS)
@@ -148,7 +158,7 @@ requirements:
         - fonts-conda-ecosystem
   run_constraints:
     # browser revision ${{ revision }} is the one pinned by Playwright driver ${{ version }}
-    - playwright >=1.62.0,<1.63.0a0
+    - playwright >=1.65.0,<1.66.0a0
   ignore_run_exports:
     by_name:
       - unzip

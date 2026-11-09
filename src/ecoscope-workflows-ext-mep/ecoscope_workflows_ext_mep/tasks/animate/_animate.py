@@ -11,15 +11,14 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Annotated, Literal, get_args
+from urllib.parse import urlparse
 import imageio_ffmpeg
 from wt_registry import register
 from ecoscope.platform.annotations import AdvancedField
 from ecoscope_workflows_ext_custom.tasks.io._path_utils import remove_file_scheme
 from playwright.async_api import async_playwright
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from pydantic.json_schema import SkipJsonSchema
-
-_browsers_ensured = False
 
 
 def _use_bundled_chromium() -> None:
@@ -37,22 +36,11 @@ def _use_bundled_chromium() -> None:
             os.environ.setdefault("FONTCONFIG_FILE", str(fonts_conf))
 
 
-def _ensure_playwright_browsers(force: bool = False) -> None:
-    """Install Playwright Chromium binaries if not already present (once per process)."""
-    global _browsers_ensured
-    if _browsers_ensured and not force:
-        return
-    logger = logging.getLogger(__name__)
-    logger.info("Ensuring Playwright Chromium browser is installed...")
-    result = subprocess.run(
-        [sys.executable, "-m", "playwright", "install", "chromium"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        logger.warning("playwright install returned non-zero: %s", result.stderr)
-    else:
-        _browsers_ensured = True
+# Longest video render_animation will make, and its largest frame. Frames scale with duration x fps and
+# each one is a full-page screenshot, so these bound the job's time and disk.
+MAX_VIDEO_SECONDS = 600
+MAX_VIDEO_FRAMES = 18_000  # 10 min at 30 fps
+MAX_VIDEO_SIDE_PX = 3840
 
 
 class DurationConfig(BaseModel):
@@ -68,6 +56,7 @@ class DurationConfig(BaseModel):
         Field(
             default=30.0,
             gt=0,
+            le=MAX_VIDEO_SECONDS,
             title="Duration (seconds)",
             description="Video duration in seconds. Only used when 'Auto' is unchecked.",
         ),
@@ -106,11 +95,11 @@ class CustomResolution(BaseModel):
     preset: Annotated[Literal["custom"], Field(default="custom", title="Resolution")] = "custom"
     width: Annotated[
         int,
-        Field(default=1280, gt=0, title="Width", description="Custom video width in pixels."),
+        Field(default=1280, gt=0, le=MAX_VIDEO_SIDE_PX, title="Width", description="Custom video width in pixels."),
     ] = 1280
     height: Annotated[
         int,
-        Field(default=720, gt=0, title="Height", description="Custom video height in pixels."),
+        Field(default=720, gt=0, le=MAX_VIDEO_SIDE_PX, title="Height", description="Custom video height in pixels."),
     ] = 720
 
 
@@ -517,12 +506,40 @@ class CameraKeyframe(BaseModel):
 _KF_CHANNELS = ("zoom", "pitch", "bearing")
 
 
+_SETTINGS_FILE_SUFFIXES = {".json", ".geojson", ".csv", ".tsv"}
+_MAX_SETTINGS_FILE_BYTES = 1_000_000
+
+
+def _settings_file(path: str) -> Path:
+    """A camera-settings or waypoint file the user named, confined to the workflow's results folder.
+
+    These names come from a free-text form field, so without this any file the worker can read could be
+    opened (and its contents surface in parse errors). Only local files under ECOSCOPE_WORKFLOWS_RESULTS
+    are accepted; on a Cloud Storage results folder that means none, and the settings must be pasted.
+    """
+    root = os.environ.get("ECOSCOPE_WORKFLOWS_RESULTS", "")
+    if not root or _gs_url(root):
+        raise ValueError(
+            "Camera settings must be pasted as text here; reading them from a file is only available when "
+            "the workflow runs with a local results folder."
+        )
+    root_dir = Path(_local_path(root)).resolve()
+    p = Path(_local_path(remove_file_scheme(path))).resolve()
+    if not p.is_relative_to(root_dir):
+        raise ValueError("Camera settings and waypoint files must be inside the workflow's results folder.")
+    if p.suffix.lower() not in _SETTINGS_FILE_SUFFIXES:
+        raise ValueError("Camera settings and waypoint files must be .json, .geojson, .csv or .tsv.")
+    if not p.is_file() or p.stat().st_size > _MAX_SETTINGS_FILE_BYTES:
+        raise ValueError("Camera settings or waypoint file not found, or larger than 1 MB.")
+    return p
+
+
 def _load_keyframes_file(path: str) -> list[dict]:
     """Load camera keyframes from a .json (list of objects), .geojson (Point features; t/zoom/pitch/
     bearing read from properties), or .csv/.tsv (lon/lat columns, optional t/zoom/pitch/bearing) file."""
     import csv
 
-    p = Path(remove_file_scheme(path))
+    p = _settings_file(path)
     suffix = p.suffix.lower()
 
     def norm(d: dict) -> dict:
@@ -537,7 +554,10 @@ def _load_keyframes_file(path: str) -> list[dict]:
         ):
             for a in aliases:
                 if a in d and d[a] not in (None, ""):
-                    out[key] = float(d[a])
+                    try:
+                        out[key] = float(d[a])
+                    except (TypeError, ValueError):
+                        raise ValueError(f"Waypoint '{a}' is not a number.") from None
                     break
         return out
 
@@ -555,7 +575,7 @@ def _load_keyframes_file(path: str) -> list[dict]:
             return rows
         if isinstance(data, list):
             return [norm({str(k).lower(): v for k, v in d.items()}) for d in data]
-        raise ValueError(f"Unsupported keyframe JSON structure in {path}")
+        raise ValueError("Unsupported keyframe JSON structure (expected a list or a FeatureCollection).")
     if suffix in (".csv", ".tsv"):
         with open(p, newline="") as fh:
             reader = csv.DictReader(fh, delimiter="\t" if suffix == ".tsv" else ",")
@@ -772,11 +792,18 @@ def parse_camera_settings(settings: str) -> CameraOptions:
     the path of the downloaded settings file."""
     text = settings.strip()
     if not text.startswith("{"):
-        text = Path(remove_file_scheme(text)).read_text(encoding="utf-8")
+        text = _settings_file(text).read_text(encoding="utf-8")
     try:
         return _CAMERA_ADAPTER.validate_python(json.loads(text))
     except json.JSONDecodeError as e:
-        raise ValueError(f"Camera settings are not valid JSON: {e}") from e
+        raise ValueError(f"Camera settings are not valid JSON: {e.msg} (line {e.lineno})") from None
+    except ValidationError as e:
+        # Without the input: the error would otherwise quote whatever the text (or file) contained.
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc']) or 'settings'}: {err['msg']}"
+            for err in e.errors(include_input=False, include_url=False)
+        )
+        raise ValueError(f"Camera settings are not a valid camera: {problems}") from None
 
 
 def _launch_args(gl: str):
@@ -853,8 +880,44 @@ def _overlay_css(overlays: VideoOverlays, height: int) -> str:
     )
 
 
+# What the capture browser may fetch: the map page's own libraries (pydeck's template and deck.gl modules,
+# the fleet's deck.gl extensions), the default basemap and elevation tiles, and the preset 3D animals.
+# Prefixes rather than hosts, so an allowed host can't carry data out to an arbitrary bucket or repo.
+# Everything else is refused: the browser runs without its sandbox (it is the only way it starts in the
+# runner's container), so the page gets no reach beyond what it needs to draw.
+DEFAULT_ALLOWED_URL_PREFIXES = (
+    "https://server.arcgisonline.com/ArcGIS/rest/services/",
+    "https://server.arcgisonline.com/arcgis/rest/services/",
+    "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/",
+    "https://cdn.jsdelivr.net/npm/@deck.gl/",
+    "https://cdn.jsdelivr.net/npm/@ecoscope/",
+    "https://unpkg.com/@deck.gl/",
+    "https://unpkg.com/@loaders.gl/",
+    "https://unpkg.com/maplibre-gl@",
+    "https://api.tiles.mapbox.com/mapbox-gl-js/",
+    "https://maxcdn.bootstrapcdn.com/",
+    "https://raw.githubusercontent.com/wildlife-dynamics/animate-subject-tracks/",
+)
+
+
+def _request_allowed(url: str, prefixes) -> bool:
+    scheme = urlparse(url).scheme
+    if scheme in ("file", "data", "blob", "about"):
+        return True
+    return any(url.startswith(p) for p in prefixes)
+
+
 async def _prepare_page(
-    browser, html_uri, *, width, height, device_scale_factor, head_ready_timeout_ms, overlays, map_timeout_ms
+    browser,
+    html_uri,
+    *,
+    width,
+    height,
+    device_scale_factor,
+    head_ready_timeout_ms,
+    overlays,
+    map_timeout_ms,
+    allowed_url_prefixes=DEFAULT_ALLOWED_URL_PREFIXES,
 ):
     """Open a page, load the scene, take control of the autoplay loop, inject helper and the
     video overlays, and wait for the base map. Returns (page, pending_counter_dict)."""
@@ -862,6 +925,21 @@ async def _prepare_page(
         viewport={"width": width, "height": height},
         device_scale_factor=device_scale_factor,
     )
+    log = logging.getLogger(__name__)
+    blocked: set[str] = set()
+
+    async def _guard(route):
+        url = route.request.url
+        if _request_allowed(url, allowed_url_prefixes):
+            await route.continue_()
+            return
+        host = urlparse(url).netloc
+        if host not in blocked:
+            blocked.add(host)
+            log.warning("render_animation: blocked a request to %s (not an allowed map source)", host)
+        await route.abort()
+
+    await page.route("**/*", _guard)
     # Count in-flight tile requests so we can wait for the basemap to paint. Tiles arrive as images
     # or, for deck's tile/terrain layers and vector base maps, through fetch/XHR.
     pending = {"n": 0}
@@ -1013,6 +1091,11 @@ class CaptureOptions(BaseModel):
         description="Keep captured frames next to the video until it is written, so a failed or interrupted "
         "render with the same settings picks up where it stopped instead of starting over.",
     )
+    allowed_url_prefixes: SkipJsonSchema[tuple[str, ...]] = Field(
+        default=DEFAULT_ALLOWED_URL_PREFIXES,
+        description="URL prefixes the capture browser may fetch. Extend in the workflow spec for a custom "
+        "basemap; not a form field.",
+    )
 
 
 def _camera_opts(camera: CameraOptions, width: int, height: int, fps: int = 30) -> dict:
@@ -1055,13 +1138,17 @@ def _auto_workers(n_frames: int, gl: str) -> int:
 
 
 async def _launch_browser(p, gl: str):
+    """Launch the environment's own Chromium. Never downloads one: a browser fetched at run time is
+    outside the lock file and the dependency scan."""
     try:
         return await p.chromium.launch(headless=True, args=_launch_args(gl))
     except Exception as e:
         if "Executable doesn't exist" not in str(e):
             raise
-        _ensure_playwright_browsers(force=True)
-        return await p.chromium.launch(headless=True, args=_launch_args(gl))
+        raise RuntimeError(
+            "No Chromium in this environment. Add the playwright-chromium-headless-shell package to the "
+            "workflow's requirements (it installs the browser under <env>/share/ms-playwright)."
+        ) from e
 
 
 def _assemble_sequence(frame_dir: str, ext: str, n_main: int, n_hold_start: int, n_hold_end: int) -> str:
@@ -1249,6 +1336,7 @@ async def render_animation_async(
             head_ready_timeout_ms=capture.head_ready_timeout_ms,
             overlays=overlays,
             map_timeout_ms=capture.map_timeout_ms,
+            allowed_url_prefixes=capture.allowed_url_prefixes,
         )
 
     # Everything that changes a captured frame; a resumed render must match it exactly.
@@ -1278,6 +1366,11 @@ async def render_animation_async(
             natural = await page0.evaluate("() => window.__tripsAnim.durationSec || 0")
             seconds = float(natural) if duration.auto and natural > 0 else float(duration.seconds)
             n_frames = max(1, int(round(fps * seconds)))
+            if n_frames > MAX_VIDEO_FRAMES:
+                raise ValueError(
+                    f"The video would need {n_frames} frames ({seconds:.0f} s at {fps} fps); the limit is "
+                    f"{MAX_VIDEO_FRAMES}. Shorten the duration or lower the frame rate."
+                )
 
             t_lo, t_hi = span * start_frac, span * end_frac
             # Frames are evenly spaced in playback time. With adaptive speed the widget maps playback

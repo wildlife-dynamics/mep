@@ -2,6 +2,7 @@ import os
 import json
 import io
 import base64
+import hashlib
 import pathlib
 import logging
 import requests
@@ -52,15 +53,22 @@ TERRARIUM_ELEVATION_DECODER = {"rScaler": 256, "gScaler": 1, "bScaler": 1 / 256,
 DEFAULT_TERRAIN_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
 SURFACE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 
-# TimelineAnimationWidget's bundle, built+attached to the git tag by .github/workflows/release.yml
-# in https://github.com/ttemu34/my-deck-widgets (bump the tag after each release). Set
-# MY_DECK_WIDGETS_URI to try a local build, e.g. http://localhost:8080/dist/bundle.js (npm run dev).
-MY_DECK_WIDGETS = {
-    "libraryName": "myDeckWidgets",
-    "resourceUri": os.environ.get(
-        "MY_DECK_WIDGETS_URI", "https://cdn.jsdelivr.net/gh/ttemu34/my-deck-widgets@v0.21.0/dist/bundle.js"
-    ),
-}
+# TimelineAnimationWidget's bundle (my-deck-widgets), shipped in this package and embedded in each map as a
+# data: URI, so the page runs no widget code fetched from a CDN at view time and the bytes are pinned by
+# this package's own hash. To update: build my-deck-widgets at a release tag (npm run build), copy
+# dist/bundle.js to assets/my-deck-widgets.js, and update the version and sha256 below.
+MY_DECK_WIDGETS_VERSION = "v0.22.0"  # == the v0.22.0 GitHub release asset (sha256 below)
+MY_DECK_WIDGETS_SHA256 = "e071099cb43b2e46b49d35b104814afc1be95a8eadfbae6ff2d680cf912d1222"
+
+
+def _widgets_bundle_uri() -> str:
+    raw = (pathlib.Path(__file__).parent / "assets" / "my-deck-widgets.js").read_bytes()
+    if hashlib.sha256(raw).hexdigest() != MY_DECK_WIDGETS_SHA256:
+        raise RuntimeError("assets/my-deck-widgets.js does not match MY_DECK_WIDGETS_SHA256.")
+    return "data:text/javascript;base64," + base64.b64encode(raw).decode()
+
+
+MY_DECK_WIDGETS = {"libraryName": "myDeckWidgets", "resourceUri": _widgets_bundle_uri()}
 
 TerrainStrategy = Annotated[Literal["best-available", "no-overlap", "never"], PydeckAnnotation]
 # Behind and under a 3D terrain map: a dark, earthy neutral close to savanna imagery, so tiles still loading
@@ -325,7 +333,12 @@ class ScenegraphLayerDefinition(BaseModel):
         return self
 
 
-_ANIMAL_MODEL_URL = "https://raw.githubusercontent.com/wildlife-dynamics/animate_subject_tracks/main/models/{}.glb"
+# Pinned to a commit (animate-subject-tracks v15.2.0), not a branch, so the models can't change under a
+# released package. Bump the commit when the models change.
+_ANIMAL_MODEL_URL = (
+    "https://raw.githubusercontent.com/wildlife-dynamics/animate-subject-tracks/"
+    "b58226e232dbf7a11276c355086993c7f7d7b6cc/models/{}.glb"
+)
 # Tuned per model in custom-tripslayer/test_trips_layer.ipynb. Shared by all of them: roll 90 to
 # stand the models upright, heading smoothing and an 8 m move threshold against GPS jitter, level
 # on slopes, PBR shading, neutral tint, coloured by track.
@@ -1926,7 +1939,24 @@ def draw_animated_map(
     html_str = html_str.replace("</head>", f"{head}\n</head>", 1)
     # The video camera (window.__cam, in the widget bundle) reads the pydeck spec from window.jsonInput.
     html_str = html_str.replace("const jsonInput =", "window.jsonInput =")
-    return html_str
+    return _escape_json_input(html_str)
+
+
+def _escape_json_input(html_str: str) -> str:
+    """Make the inline pydeck spec safe to sit in a <script>: pydeck writes plain json.dumps there with
+    autoescaping off, so a data string such as a subject name containing "</script>" would end the script
+    and inject markup. Within the spec, "</" becomes the equivalent JSON escape "<\\/" (and "<!--" is
+    defused too); nothing outside the `window.jsonInput = ...;` statement is touched."""
+    marker = "window.jsonInput ="
+    at = html_str.find(marker)
+    if at < 0:
+        raise RuntimeError("draw_animated_map: pydeck page has no jsonInput to escape")
+    start = at + len(marker)
+    # The JSON's exact extent, found by decoding it -- not by searching for "</script>", which is the very
+    # string an injected value would contain.
+    _, end = json.JSONDecoder().raw_decode(html_str, start + len(html_str[start:]) - len(html_str[start:].lstrip()))
+    spec = html_str[start:end].replace("</", "<\\/").replace("<!--", "<\\!--")
+    return html_str[:start] + spec + html_str[end:]
 
 
 @register()
@@ -1935,6 +1965,7 @@ def create_timeline_animation(
         float,
         AdvancedField(
             gt=0,
+            le=600,
             default=30.0,
             description="Playback length in seconds (e.g. 30 = the whole timeline plays in 30 seconds).",
         ),

@@ -8,7 +8,10 @@ unzip -q -o "${SRC_DIR}/chrome-headless-shell.zip" -d "${SRC_DIR}"
 dest="${PREFIX}/${PW_INSTALL_DIR}/chromium_headless_shell-${PW_REVISION}"
 mkdir -p "${dest}"
 cp -R "${SRC_DIR}/chrome-headless-shell-${PW_CFT_PLATFORM}" "${dest}/"
-chmod +x "${dest}/chrome-headless-shell-${PW_CFT_PLATFORM}/chrome-headless-shell"
+# Unix only: the Windows build (cross-built here on Linux) ships chrome-headless-shell.exe instead.
+if [ "${PW_CFT_PLATFORM}" != "win64" ]; then
+    chmod +x "${dest}/chrome-headless-shell-${PW_CFT_PLATFORM}/chrome-headless-shell"
+fi
 
 # Marker Playwright writes after a successful download; with it present
 # `playwright install chromium-headless-shell` treats the browser as installed.
