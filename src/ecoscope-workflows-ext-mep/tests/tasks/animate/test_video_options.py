@@ -296,3 +296,63 @@ class TestVideoCloudStorage:
         )
         assert remote is None and local_out == str(tmp_path / "animation.mp4")
         assert anim._deliver_video(local_out, None) == local_out
+
+
+class TestCaptureBrowserLimits:
+    """The capture browser runs without its sandbox, so it only fetches the map's own sources, never
+    downloads itself, and renders a bounded number of frames."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "file:///tmp/animated_map.html",
+            "data:text/javascript;base64,AAAA",
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/1",
+            "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/3/1/2.png",
+            "https://cdn.jsdelivr.net/npm/@deck.gl/jupyter-widget@9.2.11/dist/index.js",
+            "https://unpkg.com/@loaders.gl/gltf@4.3.4/dist/dist.min.js",
+            "https://raw.githubusercontent.com/wildlife-dynamics/animate-subject-tracks/abc/models/lion.glb",
+        ],
+    )
+    def test_map_sources_are_allowed(self, url):
+        assert anim._request_allowed(url, anim.DEFAULT_ALLOWED_URL_PREFIXES)
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://169.254.169.254/computeMetadata/v1/",
+            "https://s3.amazonaws.com/attacker-bucket/x.png",
+            "https://raw.githubusercontent.com/someone-else/repo/main/x.glb",
+            "https://cdn.jsdelivr.net/gh/someone/widgets@v1/dist/bundle.js",
+            "https://evil.example.com/tile/1/2/3",
+            "https://server.arcgisonline.com.evil.example/ArcGIS/rest/services/x",
+        ],
+    )
+    def test_everything_else_is_refused(self, url):
+        assert not anim._request_allowed(url, anim.DEFAULT_ALLOWED_URL_PREFIXES)
+
+    def test_no_runtime_browser_download(self):
+        src = inspect.getsource(anim)
+        assert '"playwright", "install"' not in src and "_ensure_playwright_browsers" not in src
+
+    def test_missing_browser_fails_closed(self):
+        import asyncio
+
+        class _Chromium:
+            async def launch(self, **kw):
+                raise Exception("Executable doesn't exist at /nowhere/chrome")
+
+        class _P:
+            chromium = _Chromium()
+
+        with pytest.raises(RuntimeError, match="playwright-chromium-headless-shell"):
+            asyncio.run(anim._launch_browser(_P(), "auto"))
+
+    def test_duration_and_resolution_are_bounded(self):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            anim.DurationConfig(auto=False, seconds=anim.MAX_VIDEO_SECONDS + 1)
+        with pytest.raises(ValidationError):
+            anim.CustomResolution(width=anim.MAX_VIDEO_SIDE_PX + 1, height=720)
+        anim.DurationConfig(auto=False, seconds=anim.MAX_VIDEO_SECONDS)  # the limit itself is fine

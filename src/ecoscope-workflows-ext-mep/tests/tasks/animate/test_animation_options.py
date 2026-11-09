@@ -248,9 +248,24 @@ class TestPageSettings:
         html = _draw(trips_layer, TripsAnimation(), controls=create_playback_controls(show_camera=False))
         assert "CameraPanelWidget" not in html
 
-    def test_widget_bundle_is_registered(self, trips_layer):
+    def test_widget_bundle_is_embedded_not_fetched(self, trips_layer):
         html = _draw(trips_layer, TripsAnimation())
-        assert "my-deck-widgets" in html and "<script>\n// === Timeline animation" not in html
+        # pydeck renders customLibraries as a Python repr, one line.
+        libs_line = next(line for line in html.splitlines() if "const customLibraries = " in line)
+        assert "'libraryName': 'myDeckWidgets', 'resourceUri': 'data:text/javascript;base64," in libs_line
+        assert "ttemu34" not in html and "cdn.jsdelivr.net/gh/" not in html
+        assert "<script>\n// === Timeline animation" not in html
+
+    def test_script_breakout_in_data_is_escaped(self, trips_layer):
+        evil = "</script><script>window.pwned=1</script>"
+        trips_layer.geodataframe.loc[0, "subject_name"] = evil
+        html = _draw(trips_layer, TripsAnimation())
+        start = html.index("window.jsonInput = ")
+        script_end = html.index("</script>", start)
+        assert evil not in html
+        assert "window.pwned=1" in html[start:script_end]  # still there, as data inside the same script
+        spec, _ = json.JSONDecoder().raw_decode(html, start + len("window.jsonInput = "))
+        assert evil in json.dumps(spec)  # and it decodes back to the original string
 
 
 def _panel_props(html: str) -> dict:

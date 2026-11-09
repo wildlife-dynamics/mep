@@ -108,12 +108,12 @@ class TestParseCameraSettings:
         ],
     )
     def test_out_of_range_values_are_rejected(self, settings):
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValueError, match="not a valid camera"):
             parse_camera_settings(settings)
 
     @pytest.mark.parametrize("type_", ["static", "orbit", "sequence", "pan"])
     def test_removed_cameras_are_rejected(self, type_):
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValueError, match="not a valid camera"):
             parse_camera_settings(json.dumps({"type_": type_}))
 
 
@@ -359,5 +359,54 @@ class TestKeyframesCamera:
     def test_unsupported_file_type(self, tmp_path):
         f = tmp_path / "path.kml"
         f.write_text("<kml/>")
-        with pytest.raises(ValueError, match="Unsupported keyframe file type"):
+        with pytest.raises(ValueError, match=r"must be \.json, \.geojson, \.csv or \.tsv"):
             _raw_keyframes(KeyframesCamera(source=KeyframesFromFile(keyframes_file=str(f))))
+
+
+class TestSettingsFilesStayInTheResultsFolder:
+    """The settings field is free text, so a path in it must not open arbitrary files on the worker."""
+
+    def test_a_file_outside_the_results_folder_is_refused(self, tmp_path, monkeypatch):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        secret = outside / "service-account.json"
+        secret.write_text('{"type": "service_account", "private_key": "SECRET-KEY-MATERIAL"}')
+        monkeypatch.setenv("ECOSCOPE_WORKFLOWS_RESULTS", str(tmp_path / "results"))
+        (tmp_path / "results").mkdir()
+        with pytest.raises(ValueError, match="inside the workflow's results folder") as e:
+            parse_camera_settings(str(secret))
+        assert "SECRET" not in str(e.value)
+
+    def test_traversal_out_of_the_results_folder_is_refused(self, tmp_path):
+        (tmp_path.parent / "elsewhere.json").write_text('{"type_": "fixed"}')
+        with pytest.raises(ValueError, match="inside the workflow's results folder"):
+            parse_camera_settings(str(tmp_path / ".." / "elsewhere.json"))
+
+    def test_waypoint_files_are_confined_too(self, tmp_path, monkeypatch):
+        f = tmp_path / "path.csv"
+        f.write_text("lon,lat\n37,-1\n38,-2\n")
+        monkeypatch.setenv("ECOSCOPE_WORKFLOWS_RESULTS", str(tmp_path / "results"))
+        with pytest.raises(ValueError, match="inside the workflow's results folder"):
+            _raw_keyframes(KeyframesCamera(source=KeyframesFromFile(keyframes_file=str(f))))
+
+    def test_no_file_reads_with_a_cloud_results_folder(self, tmp_path, monkeypatch):
+        f = tmp_path / "camera-settings.json"
+        f.write_text('{"type_": "fixed"}')
+        monkeypatch.setenv("ECOSCOPE_WORKFLOWS_RESULTS", "gs://bucket/results")
+        with pytest.raises(ValueError, match="pasted as text"):
+            parse_camera_settings(str(f))
+        assert parse_camera_settings('{"type_": "fixed"}') == FixedCamera()  # pasting still works
+
+    def test_validation_errors_do_not_echo_the_input(self, tmp_path):
+        f = tmp_path / "not-a-camera.json"
+        f.write_text('{"type": "service_account", "private_key": "SECRET-KEY-MATERIAL"}')
+        with pytest.raises(ValueError, match="not a valid camera") as e:
+            parse_camera_settings(str(f))
+        assert "SECRET" not in str(e.value) and "service_account" not in str(e.value)
+
+    def test_csv_number_errors_do_not_echo_the_cell(self, tmp_path):
+        f = tmp_path / "path.csv"
+        f.write_text("lon,lat\nroot:x:0:0,-1\n38,-2\n")
+        with pytest.raises(ValueError, match="'lon' is not a number") as e:
+            _raw_keyframes(KeyframesCamera(source=KeyframesFromFile(keyframes_file=str(f))))
+        assert "root:x" not in str(e.value)
