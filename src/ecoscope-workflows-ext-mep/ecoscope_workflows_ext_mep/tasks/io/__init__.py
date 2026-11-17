@@ -7,9 +7,6 @@ from ._earthranger import (
     get_features_by_id,
     get_features_by_set,
     get_features_by_type,
-    get_sources,
-    get_subjects,
-    get_subjectsources,
 )
 
 __all__ = [
@@ -21,7 +18,4 @@ __all__ = [
     "get_features_by_id",
     "get_features_by_set",
     "get_features_by_type",
-    "get_sources",
-    "get_subjects",
-    "get_subjectsources",
 ]

@@ -3,15 +3,14 @@ from typing import Annotated
 
 import pandas as pd
 from ecoscope.platform.annotations import AnyDataFrame
-from pydantic import Field
-from wt_registry import register
-
-from ..results._subject_source import (
+from ecoscope_workflows_ext_custom.tasks.results._subject_source import (
     _first,
     _source_label,
     assignment_bounds,
     format_assignment_range,
 )
+from pydantic import Field
+from wt_registry import register
 
 ISSUE_COLUMNS = ["Issue", "Record type", "Name", "ID", "Detail"]
 
